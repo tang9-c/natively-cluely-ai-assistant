@@ -161,6 +161,7 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
                 drafts.clear(); failedOperation = undefined; saved = project(latest); status = 'idle'; notify(); return true;
             } catch { status = 'error'; notify(); return false; }
         },
+        reportSaveFailure() { status = 'error'; notify(); },
         dispose: cancelTimer,
     };
 }
@@ -172,6 +173,11 @@ export function useMeetingAutosave(initial: Meeting) {
     const [snapshot, setSnapshot] = useState(controller.snapshot);
     useEffect(() => controller.subscribe(() => setSnapshot(controller.snapshot())), [controller]);
     useEffect(() => { controller.refresh(initial); }, [initial, controller]);
+    useEffect(() => window.electronAPI?.onMeetingCloseRequest?.(async timedOut => {
+        if (timedOut) { controller.reportSaveFailure(); return false; }
+        (document.activeElement as HTMLElement | null)?.blur();
+        return controller.flush();
+    }), [controller]);
     useEffect(() => {
         const remove = window.electronAPI?.onMeetingsUpdated?.(() => {
             void window.electronAPI.getMeetingDetails(initial.id).then(meeting => {

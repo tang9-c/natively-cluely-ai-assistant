@@ -948,6 +948,7 @@ export interface ElectronAPI {
     cancelled?: boolean
   }>
   // @ipc-channel update-meeting-title
+  onMeetingCloseRequest: (callback: (timedOut: boolean) => Promise<boolean>) => () => void;
   applyMeetingEdit: (request: MeetingEditRequest) => Promise<MeetingEditResult>;
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>
   // @ipc-channel update-meeting-summary

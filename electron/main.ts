@@ -4775,6 +4775,7 @@ async function initializeApp() {
     appState.setQuitting(true);
     quitCleanupPromise = (async () => {
       try {
+        if (!await appState.getWindowHelper().flushLauncherEdits()) throw new Error('meeting_edit_save_incomplete');
         await appState.finishMeetingBeforeQuit();
       } catch {
         // Keep credentials and capture resources available for an explicit retry.

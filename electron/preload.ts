@@ -44,6 +44,17 @@ type RAGStreamErrorPayload =
   | MeetingSearchErrorEvent
   | { meetingId?: string; global?: boolean; live?: boolean; error: string };
 
+// Every preload answers even when no meeting editor is mounted.
+const meetingCloseHandlers = new Set<(timedOut: boolean) => Promise<boolean>>();
+ipcRenderer.on('meeting-edits-flush', async (_event, requestId: number, timedOut: boolean) => {
+  try {
+    const results = await Promise.all([...meetingCloseHandlers].map(handler => handler(timedOut)));
+    if (!timedOut) ipcRenderer.send('meeting-edits-flushed', requestId, results.every(ok => ok));
+  } catch {
+    if (!timedOut) ipcRenderer.send('meeting-edits-flushed', requestId, false);
+  }
+});
+
 // Types for the exposed Electron API
 type ResearchProgressStage =
   | 'cache-check'
@@ -511,6 +522,7 @@ interface ElectronAPI {
     includeTranscript: boolean | { profile: 'minutes' | 'archive'; expectedRevision: number },
   ) => Promise<{ success: boolean; filePath?: string; error?: string; cancelled?: boolean }>;
   copyMeetingMinutes: (meetingId: string, expectedRevision: number) => Promise<{ success: boolean; error?: string }>;
+  onMeetingCloseRequest: (callback: (timedOut: boolean) => Promise<boolean>) => () => void;
   applyMeetingEdit: (request: MeetingEditRequest) => Promise<MeetingEditResult>;
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>;
   updateMeetingSummary: (
@@ -1722,6 +1734,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportMeetingDocx: (meetingId: string, includeTranscript: boolean | { profile: 'minutes' | 'archive'; expectedRevision: number }) =>
     ipcRenderer.invoke('export-meeting-docx', meetingId, includeTranscript),
   copyMeetingMinutes: (meetingId: string, expectedRevision: number) => ipcRenderer.invoke('copy-meeting-minutes', meetingId, expectedRevision),
+  onMeetingCloseRequest: (callback: (timedOut: boolean) => Promise<boolean>) => {
+    meetingCloseHandlers.add(callback);
+    return () => { meetingCloseHandlers.delete(callback); };
+  },
   applyMeetingEdit: (request: MeetingEditRequest) => ipcRenderer.invoke('meeting-apply-edit', request),
   updateMeetingTitle: (id: string, title: string) =>
     ipcRenderer.invoke('update-meeting-title', { id, title }),

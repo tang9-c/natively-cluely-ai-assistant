@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen } from 'electron';
 import path from 'node:path';
 import {
   resolveOverlayMouseInteractionPolicy,
@@ -25,6 +25,9 @@ const startUrl = isDev
 
 export class WindowHelper {
   private launcherWindow: BrowserWindow | null = null;
+  private launcherEditFlush: Promise<boolean> | null = null;
+  private closingLauncher: BrowserWindow | null = null;
+  private editFlushRequest = 0;
   private overlayWindow: BrowserWindow | null = null;
   private isWindowVisible: boolean = false;
   // Position/Size tracking for Launcher
@@ -56,6 +59,34 @@ export class WindowHelper {
 
   constructor(appState: AppState) {
     this.appState = appState;
+  }
+
+  public flushLauncherEdits(): Promise<boolean> {
+    if (this.launcherEditFlush) return this.launcherEditFlush;
+    const window = this.launcherWindow;
+    if (!window || window.isDestroyed() || this.closingLauncher === window) return Promise.resolve(true);
+    const requestId = ++this.editFlushRequest;
+    this.launcherEditFlush = new Promise<boolean>(resolve => {
+      const finish = (ok: boolean) => {
+        clearTimeout(timeout);
+        ipcMain.removeListener('meeting-edits-flushed', reply);
+        window.removeListener('closed', destroyed);
+        resolve(ok);
+      };
+      const reply = (event: Electron.IpcMainEvent, id: unknown, ok: unknown) => {
+        if (event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && id === requestId) finish(ok === true);
+      };
+      const destroyed = () => finish(false);
+      const timeout = setTimeout(() => {
+        if (!window.isDestroyed()) window.webContents.send('meeting-edits-flush', requestId, true);
+        finish(false);
+      }, 10_000);
+      ipcMain.on('meeting-edits-flushed', reply);
+      window.once('closed', destroyed);
+      try { window.webContents.send('meeting-edits-flush', requestId, false); }
+      catch { finish(false); }
+    }).finally(() => { this.launcherEditFlush = null; });
+    return this.launcherEditFlush;
   }
 
   private logOverlayState(label: string): void {
@@ -587,17 +618,24 @@ export class WindowHelper {
       }
     });
 
-    // On Windows/Linux: intercept close and hide to tray instead of quitting,
-    // unless the app is actually quitting (e.g. from tray "Quit" menu).
-    if (process.platform !== 'darwin') {
-      this.launcherWindow.on('close', (e) => {
-        if (!this.appState.isQuitting()) {
-          e.preventDefault();
-          this.launcherWindow?.hide();
-          this.isWindowVisible = false;
-        }
+    // Native close must cross the same save barrier as in-app navigation.
+    const launcher = this.launcherWindow;
+    let closeAfterSave = false;
+    launcher.on('close', (event) => {
+      if (process.platform !== 'darwin' && !this.appState.isQuitting()) {
+        event.preventDefault(); launcher.hide(); this.isWindowVisible = false; return;
+      }
+      if (closeAfterSave) return;
+      event.preventDefault();
+      void this.flushLauncherEdits().then(ok => {
+        if (!ok || launcher.isDestroyed()) return;
+        this.closingLauncher = launcher;
+        closeAfterSave = true;
+        if (this.appState.isQuitting()) app.quit();
+        else launcher.close();
       });
-
+    });
+    if (process.platform !== 'darwin') {
       // Sync maximize state to renderer so WindowControls stays in sync (Windows/Linux only)
       this.launcherWindow.on('maximize', () => {
         this.launcherWindow?.webContents.send('window-maximized-changed', true);
@@ -608,6 +646,7 @@ export class WindowHelper {
     }
 
     this.launcherWindow.on('closed', () => {
+      this.closingLauncher = null;
       this.launcherWindow = null;
       // If launcher closes, we should probably quit app or close overlay
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {

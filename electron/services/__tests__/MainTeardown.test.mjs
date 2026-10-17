@@ -263,3 +263,22 @@ test('A2-fix2-Q7 Start is blocked while post-save quit cleanup remains pending',
   finally {cleanup.resolve(); await tick();}
   assert.equal(quit.quits(), 1);
 });
+
+test('T7 renderer save failure blocks quit before meeting or resource teardown and explicit Quit retries', async () => {
+  const {state} = lifecycleHarness(); let flushes = 0; let saves = 0;
+  state.getWindowHelper = () => ({ getOverlayWindow: () => null, flushLauncherEdits: async () => ++flushes > 1 });
+  state.intelligenceManager.stopMeeting = async () => { saves++; return 'A'; };
+  const quit = quitHarness(state); quit.trigger(); await tick();
+  assert.equal(flushes, 1); assert.equal(saves, 0); assert.equal(quit.cleanups(), 0); assert.equal(quit.quits(), 0); assert.equal(state._isQuitting, false);
+  quit.trigger(); await tick();
+  assert.equal(flushes, 2); assert.equal(saves, 1); assert.equal(quit.cleanups(), 1); assert.equal(quit.quits(), 1);
+});
+
+test('T7 repeated Quit joins the pending renderer barrier and does not permit a new meeting', async () => {
+  const {state} = lifecycleHarness(); const flush = deferred(); let flushes = 0; let resets = 0;
+  state.getWindowHelper = () => ({ getOverlayWindow: () => null, flushLauncherEdits: () => { flushes++; return flush.promise; } });
+  state.resetMeetingEchoDiagnostics = () => { resets++; throw new Error('new meeting must remain blocked'); };
+  const quit = quitHarness(state); quit.trigger(); quit.trigger(); await tick();
+  await state.startMeeting(); assert.equal(flushes, 1); assert.equal(resets, 0); assert.equal(quit.cleanups(), 0);
+  flush.resolve(false); await tick(); assert.equal(quit.quits(), 0); assert.equal(state._isQuitting, false);
+});

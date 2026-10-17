@@ -1,4 +1,8 @@
 import { test, expect } from './fixtures';
+import fs from 'node:fs/promises';
+
+const electronChildren = new WeakMap<object, any>();
+test.beforeEach(async({electronApp})=>{electronChildren.set(electronApp,electronApp.process());});
 
 async function seed(electronApp: any, transcriptCount = 1) {
  await electronApp.evaluate(({ app, clipboard, dialog }: any, transcriptCount: number) => {
@@ -8,8 +12,8 @@ async function seed(electronApp: any, transcriptCount = 1) {
   dialog.showSaveDialog=async()=>({canceled:true});
   const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'edit-e2e.cjs'));
   const blocked=()=>{throw new Error('E2E external boundary disabled');};
-  require('node:http').request=blocked;require('node:https').request=blocked;globalThis.fetch=blocked;
-  require('node:child_process').spawn=blocked;
+  for(const protocol of ['node:http','node:https']){require(protocol).request=blocked;require(protocol).get=blocked;}globalThis.fetch=blocked;
+  for(const method of ['spawn','spawnSync','exec','execSync','execFile','execFileSync','fork'])require('node:child_process')[method]=blocked;
   const db=new (require('better-sqlite3'))(require('node:path').join(app.getPath('userData'),'natively.db'));
   const summary={overview:'**原始摘要**',actionItems:['字符串任务'],keyPoints:['原始要点'],decisions:['原始结论'],openQuestions:['待确认问题'],sections:[{title:'会议结论',bullets:['分区结论']}],followUpDraft:'原有跟进草稿',actionItemsStructured:[{id:'owned',text:'结构任务',owner:'甲',deadline:'周五'}]};
   db.prepare('INSERT INTO meetings(id,title,start_time,duration_ms,summary_json,created_at,source,is_processed) VALUES(?,?,?,?,?,?,?,1)').run('editing-fixture','编辑测试会议',Date.now(),1000,JSON.stringify({legacySummary:'summary',detailedSummary:summary}),new Date().toISOString(),'e2e');
@@ -338,7 +342,7 @@ test('T6 IPC snapshots reject conflicts and preserve the selected saved version 
 
 test.afterEach(async({electronApp},testInfo)=>{
  if(!testInfo.title.startsWith('T6 '))return;
- const child=electronApp.process();
+ const child=electronChildren.get(electronApp);
  let timeout: ReturnType<typeof setTimeout>;
  const exited=new Promise<{code:number|null;signal:string|null}>((resolve,reject)=>{
   timeout=setTimeout(()=>reject(new Error('T6 Electron did not quit naturally')),15000);
@@ -441,4 +445,158 @@ test('T6 fix1 stored legacy actions and authoritative v3 empty lists reach actua
    expect(paragraphs).toEqual(writes[0].text.split('\n').map((text:string)=>text.replace(/^• /,'')));
   }
  }
+});
+
+test('T7 native window close flushes a pending autosave before destroying the renderer',async({electronApp,page})=>{
+ await seed(electronApp);await open(page);
+ await edit(page,'摘要正文','关闭窗口前的最后草稿');
+ // Invoke the actual native window close while the 600ms debounce is pending.
+ await electronApp.evaluate(({BrowserWindow}:any)=>{
+  const win=BrowserWindow.getAllWindows().find((window:any)=>new URL(window.webContents.getURL()).searchParams.get('window') === 'launcher' || !new URL(window.webContents.getURL()).searchParams.has('window'));
+  if(!win)throw new Error('launcher missing');win.close();
+ });
+ await expect.poll(()=>electronApp.evaluate(({app}:any)=>{
+  const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'close-fixture.cjs'));
+  const db=new (require('better-sqlite3'))(require('node:path').join(app.getPath('userData'),'natively.db'));
+  try{return JSON.parse(db.prepare('SELECT summary_json FROM meetings WHERE id=?').get('editing-fixture').summary_json).detailedSummary.overview;}finally{db.close();}
+ })).toBe('关闭窗口前的最后草稿');
+});
+
+for(const closing of ['close','quit'] as const){
+ test(`T7 ${closing} waits for slow inflight writes and blocks failed saves until retry`,async({electronApp,page})=>{
+  await seed(electronApp);await open(page);
+  await electronApp.evaluate(({ipcMain}:any)=>{
+   const original=(ipcMain as any)._invokeHandlers.get('meeting-apply-edit');
+   (globalThis as any).__releaseCloseEdit=null;(globalThis as any).__closeWrites=0;
+   ipcMain.removeHandler('meeting-apply-edit');ipcMain.handle('meeting-apply-edit',async(event:any,request:any)=>{
+    (globalThis as any).__closeWrites++;
+    await new Promise(resolve=>{(globalThis as any).__releaseCloseEdit=resolve;});return original(event,request);
+   });
+  });
+  await edit(page,'摘要正文','缓慢保存的关闭草稿');
+  await expect.poll(()=>electronApp.evaluate(()=>(globalThis as any).__closeWrites)).toBe(1);
+  const requestClose=()=>electronApp.evaluate(({app,BrowserWindow}:any,closing:string)=>{
+   const win=BrowserWindow.getAllWindows().find((window:any)=>new URL(window.webContents.getURL()).searchParams.get('window')==='launcher');
+   if(closing==='quit')app.quit();else win.close();
+  },closing).catch(()=>{});
+  await requestClose();await requestClose();
+  expect(page.isClosed()).toBe(false);
+  await database(electronApp,"CREATE TRIGGER fail_close BEFORE UPDATE OF summary_json ON meetings BEGIN SELECT RAISE(ABORT,'fixture_close_write_failure'); END;");
+  await electronApp.evaluate(()=>(globalThis as any).__releaseCloseEdit());
+  await expect(page.getByText('保存失败，输入已保留。请重试后再离开或复制导出。')).toBeVisible();
+  await expect(page.getByLabel('摘要正文',{exact:true})).toHaveText('缓慢保存的关闭草稿');
+  expect(electronApp.process().exitCode).toBeNull();expect((await readMeeting(page)).detailedSummary.overview).toBe('**原始摘要**');
+  await database(electronApp,'DROP TRIGGER fail_close');
+  await page.getByRole('button',{name:'重试保存',exact:true}).click();
+  await expect.poll(()=>electronApp.evaluate(()=>(globalThis as any).__closeWrites)).toBe(2);
+  await electronApp.evaluate(()=>(globalThis as any).__releaseCloseEdit());
+  await expect(page.getByText('已保存',{exact:true})).toBeVisible();
+  expect((await readMeeting(page)).detailedSummary.overview).toBe('缓慢保存的关闭草稿');
+  const closed=page.waitForEvent('close');await requestClose();await closed;
+ });
+}
+
+test('T7 joined synthetic meeting corrects identity and words, remembers a pair, edits actions, shares and reopens',async({electronApp,page})=>{
+ await seed(electronApp); // Installs offline boundaries and an unrelated control meeting.
+ await electronApp.evaluate(()=>{process.env.CUEUP_LONG_MEETING_BENCHMARK='1';});
+ expect((await page.evaluate(()=>window.electronAPI.setSttProvider('none'))).success).toBe(true);
+ const started=await page.evaluate(()=>window.electronAPI.startMeeting({title:'T7虚构联合会议'}));expect(started.success).toBe(true);
+ const payload={speaker:'user' as const,text:'虚构星州接口需要确认',timestamp:Date.now(),final:true,confidence:0.99,segmentId:'t7-joined',rawSegmentIds:['t7-joined']};
+ await page.evaluate(payload=>window.electronAPI.benchmarkInjectTranscript(payload),payload);
+ await page.evaluate(payload=>window.electronAPI.benchmarkInjectTranscript(payload),payload); // Duplicate final must stay one record.
+ expect((await page.evaluate(()=>window.electronAPI.endMeeting())).success).toBe(true);
+ const meetingId=await electronApp.evaluate(({app}:any)=>{
+  const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'joined.cjs'));
+  const db=new (require('better-sqlite3'))(require('node:path').join(app.getPath('userData'),'natively.db'));
+  try{const row=db.prepare("SELECT meeting_id FROM transcripts WHERE content=?").get('虚构星州接口需要确认');
+   if(!row)throw new Error('synthetic transcript was not persisted');
+   const summary={legacySummary:'',detailedSummary:{overview:'虚构自动摘要',actionItems:['确认接口'],keyPoints:[],decisions:[]}};
+   // Freeze a deterministic generated result; no provider or CLI is invoked.
+   db.prepare('UPDATE meetings SET title=?,summary_json=?,is_processed=1 WHERE id=?').run('T7虚构联合会议',JSON.stringify(summary),row.meeting_id);return row.meeting_id;
+  }finally{db.close();}
+ });
+ await page.reload();await page.getByText('T7虚构联合会议',{exact:true}).click();await page.getByRole('button',{name:'转录',exact:true}).click();
+ const row=page.locator('[data-transcript-row-key]').first();
+ await row.getByRole('button',{name:'身份未确认',exact:true}).click();await page.getByRole('menuitem',{name:'标记为其他参会者',exact:true}).click();
+ await row.locator('p').click();const input=row.getByRole('textbox',{name:'编辑转录'});await input.fill('虚构星州接口已确认');
+ await input.focus();await input.evaluate((element:HTMLTextAreaElement)=>element.setSelectionRange(2,2));
+ await page.keyboard.press('Shift+ArrowRight');await page.keyboard.press('Shift+ArrowRight');
+ await row.getByRole('textbox',{name:'正确词'}).fill('星舟');await row.getByRole('button',{name:'替换所选词',exact:true}).click();
+ await row.getByRole('button',{name:'确认记住：星州 → 星舟（仅 SenseVoice）'}).click();
+ await expect(page.getByText('已保存',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'摘要',exact:true}).click();
+ await edit(page,'行动项 1 内容','交付星舟接口说明');await edit(page,'行动项 1 负责人','虚构负责人');await edit(page,'行动项 1 期限','下周五');
+ await edit(page,'摘要正文','虚构联合验收最终摘要');await share(page,'复制纪要');
+ const copied=(await copiedMinutes(electronApp))[0];expect(copied.text).toContain('虚构联合验收最终摘要');expect(copied.text).toContain('交付星舟接口说明');expect(copied.text).toContain('虚构负责人');
+ await electronApp.evaluate(({dialog,app}:any)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:process.getBuiltinModule('node:path').join(app.getPath('userData'),'joined.docx')});});
+ await share(page,'导出 Word');await expect(page.getByText('已导出',{exact:true})).toBeVisible();
+ const paragraphs=await electronApp.evaluate(async({app}:any)=>{
+  const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'joined-word.cjs'));
+  const zip=await require('jszip').loadAsync(require('node:fs').readFileSync(require('node:path').join(app.getPath('userData'),'joined.docx')));const xml=await zip.file('word/document.xml').async('string');
+  return [...xml.matchAll(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g)].map(([p]:any)=>[...p.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(([,t]:any)=>t).join('')).filter(Boolean);
+ });
+ expect(paragraphs).toEqual(copied.text.split('\n').filter(Boolean).map((line:string)=>line.replace(/^• /,'')));
+ const archive=await page.evaluate(id=>window.electronAPI.exportMeetingDocx(id,true),meetingId);expect(archive.success).toBe(true);
+ const archiveXml=await electronApp.evaluate(async(_:any,file:string)=>{const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'joined-archive.cjs'));return (await require('jszip').loadAsync(require('node:fs').readFileSync(file))).file('word/document.xml').async('string');},archive.filePath);
+ expect(archiveXml).toContain('虚构星舟接口已确认');expect(archiveXml).toContain('其他参会者');expect(archiveXml).not.toContain('虚构星州接口需要确认');
+ await page.reload();await page.getByText('T7虚构联合会议',{exact:true}).click();await expect(page.getByLabel('摘要正文',{exact:true})).toHaveText('虚构联合验收最终摘要');
+ const saved=await page.evaluate(id=>window.electronAPI.getMeetingDetails(id),meetingId);
+ expect(saved?.transcript).toHaveLength(1);expect(saved?.transcript?.[0]).toMatchObject({text:'虚构星舟接口已确认',originalContent:'虚构星州接口需要确认',speakerIdentityCorrection:{identity:'other'}});
+ expect(saved?.detailedSummary?.actionItemsStructured).toHaveLength(1);
+ expect((await page.evaluate(()=>window.electronAPI.localSenseVoiceGetTerms())).terms.find(term=>term.canonical==='星舟')?.variants).toContain('星州');
+ await page.screenshot({path:'.tmp/v28-t7/joined-reopen.png',animations:'disabled'});
+});
+
+
+test('T7 normal app quit flushes the pending debounce and exits naturally with the saved SQLite version',async({electronApp,page})=>{
+ await seed(electronApp);await open(page);
+ const snapshot=await electronApp.evaluate(({app}:any)=>{
+  const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'quit-snapshot.cjs'));
+  const file=require('node:path').join(app.getPath('userData'),'quit-snapshot.json');
+  app.once('will-quit',()=>{
+   const db=new (require('better-sqlite3'))(require('node:path').join(app.getPath('userData'),'natively.db'));
+   try{require('node:fs').writeFileSync(file,db.prepare('SELECT summary_json FROM meetings WHERE id=?').get('editing-fixture').summary_json);}finally{db.close();}
+  });return file;
+ });
+ await edit(page,'摘要正文','正常退出前的最后草稿');
+ const exited=new Promise(resolve=>electronApp.process().once('exit',(code,signal)=>resolve({code,signal})));
+ await electronApp.evaluate(({app}:any)=>app.quit()).catch(()=>{});
+ expect(await exited).toEqual({code:0,signal:null});
+ expect(JSON.parse(await fs.readFile(snapshot,'utf8')).detailedSummary.overview).toBe('正常退出前的最后草稿');
+});
+
+test('T7 close timeout retains the window and draft until the slow save can be retried',async({electronApp,page})=>{
+ await seed(electronApp);await open(page);
+ await electronApp.evaluate(({ipcMain}:any)=>{
+  const original=(ipcMain as any)._invokeHandlers.get('meeting-apply-edit');
+  (globalThis as any).__timeoutRelease=null;
+  ipcMain.removeHandler('meeting-apply-edit');ipcMain.handle('meeting-apply-edit',async(event:any,request:any)=>{
+   await new Promise(resolve=>{(globalThis as any).__timeoutRelease=resolve;});return original(event,request);
+  });
+ });
+ await edit(page,'摘要正文','超时后仍保留的草稿');
+ await expect.poll(()=>electronApp.evaluate(()=>typeof(globalThis as any).__timeoutRelease)).toBe('function');
+ await electronApp.evaluate(({BrowserWindow}:any)=>BrowserWindow.getAllWindows().find((window:any)=>new URL(window.webContents.getURL()).searchParams.get('window')==='launcher')?.close());
+ await expect(page.getByText('保存失败，输入已保留。请重试后再离开或复制导出。')).toBeVisible({timeout:15_000});
+ expect(page.isClosed()).toBe(false);await expect(page.getByLabel('摘要正文',{exact:true})).toHaveText('超时后仍保留的草稿');
+ await electronApp.evaluate(()=>(globalThis as any).__timeoutRelease());
+ await expect(page.getByText('已保存',{exact:true})).toBeVisible();
+ // The timed-out request's late ACK must not destroy this still-open window.
+ expect(page.isClosed()).toBe(false);expect((await readMeeting(page)).detailedSummary.overview).toBe('超时后仍保留的草稿');
+});
+
+test.afterEach(async({electronApp},testInfo)=>{
+ if(!testInfo.title.startsWith('T7 '))return;
+ const child=electronChildren.get(electronApp);if(!child||child.exitCode!==null||child.signalCode!==null)return;
+ let timeout: ReturnType<typeof setTimeout>;
+ const exited=new Promise((resolve,reject)=>{timeout=setTimeout(()=>reject(new Error('T7 natural quit timed out')),20000);child.once('exit',(code,signal)=>resolve({code,signal}));});
+ try{await electronApp.evaluate(({app}:any)=>app.quit()).catch(()=>{});expect(await exited).toEqual({code:0,signal:null});}
+ finally{clearTimeout(timeout!);}
+});
+
+test('T7 launcher with no meeting editor quits naturally without a save request owner',async({electronApp,page})=>{
+ await seed(electronApp);
+ const exited=new Promise(resolve=>electronApp.process().once('exit',(code,signal)=>resolve({code,signal})));
+ await electronApp.evaluate(({app}:any)=>app.quit()).catch(()=>{});
+ expect(await exited).toEqual({code:0,signal:null});
 });
