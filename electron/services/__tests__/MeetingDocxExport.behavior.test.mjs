@@ -76,14 +76,11 @@ test('summary DOCX contains detailed summary sections without transcript or AI u
     '准备接口清单',
     '负责人：张三',
     '截止日期：2026-08-30',
-    '待确认事项',
-    '销售推进',
-    '跟进草稿',
-    '辅导建议',
   ]) {
     assert.match(xml, new RegExp(expected));
   }
 
+  assert.doesNotMatch(xml, /待确认事项|销售推进|跟进草稿|辅导建议|感谢今天的沟通/);
   assert.doesNotMatch(xml, /See detailed summary|来源：12:35/);
   assert.doesNotMatch(xml, /这段转录只应出现在完整档案中/);
   assert.doesNotMatch(xml, /隐藏问题|隐藏回答|AI 使用记录/);

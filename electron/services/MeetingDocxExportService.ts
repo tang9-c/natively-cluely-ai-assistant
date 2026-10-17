@@ -10,10 +10,12 @@ import {
   TextRun,
 } from 'docx';
 import type { Meeting } from '../db/DatabaseManager';
+import { buildMeetingMinutes } from './MeetingShareService';
 import { resolveSpeakerIdentity } from '../../shared/speakerIdentity';
 
 export interface MeetingDocxExportOptions {
-  includeTranscript: boolean;
+  includeTranscript?: boolean;
+  profile?: 'minutes' | 'archive';
 }
 
 export function resolveDocxFont(platform: NodeJS.Platform | string): string {
@@ -121,9 +123,13 @@ function formatMeetingDate(date: string): string {
 }
 
 function buildDocumentChildren(meeting: Meeting, options: MeetingDocxExportOptions): Paragraph[] {
-  if (!hasExportableMeetingSummary(meeting)) {
-    throw new Error('summary_not_ready');
+  if ((options.profile || (options.includeTranscript ? 'archive' : 'minutes')) === 'minutes') {
+    return buildMeetingMinutes(meeting).blocks.map(block => block.kind === 'title'
+      ? new Paragraph({ text: block.text, heading: HeadingLevel.TITLE })
+      : block.kind === 'heading' ? heading(block.text, HeadingLevel.HEADING_1)
+      : block.kind === 'bullet' ? bulletParagraph(block.text) : bodyParagraph(block.text));
   }
+  if (!hasExportableMeetingSummary(meeting)) throw new Error('summary_not_ready');
 
   const summary = meeting.detailedSummary ? normalizeMeetingActionItems(meeting.detailedSummary) : undefined;
   const children: Paragraph[] = [
@@ -193,7 +199,7 @@ function buildDocumentChildren(meeting: Meeting, options: MeetingDocxExportOptio
     const speaker = cleanText(entry?.speaker).toLowerCase();
     return cleanText(entry?.text) && !['system', 'ai', 'assistant', 'model'].includes(speaker);
   });
-  if (options.includeTranscript && transcript.length) {
+  if ((options.profile === 'archive' || options.includeTranscript) && transcript.length) {
     children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(heading('完整转录', HeadingLevel.HEADING_1));
     transcript.forEach(entry => {
