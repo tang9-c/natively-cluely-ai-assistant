@@ -100,6 +100,14 @@ test('failed atomic term persistence rolls back config and revision for a later 
  const {createRequire}=await import('node:module');const require=createRequire(import.meta.url);const {SettingsManager}=require('../../../dist-electron/electron/services/SettingsManager.js');
  const dir=fs.mkdtempSync(path.join((await import('node:os')).tmpdir(),'t5-term-fail-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const sm=Object.create(SettingsManager.prototype);sm.settings={};sm.settingsPath=path.join(dir,'missing','settings.json');
- assert.equal(sm.addLocalSenseVoiceTermPair('星州','星舟').success,false);assert.equal(sm.getLocalSenseVoiceTermSettings().revision,0);assert.equal(sm.get('localSenseVoiceTerms'),undefined);
+ const errors=[];const original=console.error;
+ const logger=t.mock.method(console,'error',(...args)=>{
+  if(args[0]==='[SettingsManager] Failed to save settings:'&&args[1]?.code==='ENOENT'&&args[1]?.path===sm.settingsPath+'.tmp')errors.push(args);
+  else original(...args);
+ });
+ try {
+  assert.equal(sm.addLocalSenseVoiceTermPair('星州','星舟').success,false);assert.equal(sm.getLocalSenseVoiceTermSettings().revision,0);assert.equal(sm.get('localSenseVoiceTerms'),undefined);
+  assert.equal(errors.length,1);assert.equal(errors[0][1].syscall,'open');
+ } finally {logger.mock.restore();}
  sm.settingsPath=path.join(dir,'settings.json');assert.equal(sm.addLocalSenseVoiceTermPair('星州','星舟').success,true);assert.equal(sm.get('localSenseVoiceTerms').length,1);
 });

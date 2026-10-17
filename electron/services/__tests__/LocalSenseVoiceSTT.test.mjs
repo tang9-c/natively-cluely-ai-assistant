@@ -29,22 +29,27 @@ class FakeSenseVoiceWorker extends EventEmitter {
     this.text = text;
     this.delayMs = delayMs;
     this.messages = [];
+    this.timers = new Set();
     queueMicrotask(() => this.emit('message', readyMessage));
   }
 
   postMessage(message) {
     this.messages.push(message);
     if (message.type !== 'transcribe') return;
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
       this.emit('message', {
         type: 'result',
         taskId: message.taskId,
         text: this.text,
       });
     }, this.delayMs);
+    this.timers.add(timer);
   }
 
   terminate() {
+    for (const timer of this.timers) clearTimeout(timer);
+    this.timers.clear();
     this.emit('exit', 0);
     return Promise.resolve(0);
   }
@@ -659,17 +664,18 @@ test('identity annotation failure preserves SenseVoice text', async () => {
   stt.stop();
 });
 
-test('term config is read at actual emission after asynchronous identity annotation', async () => {
+test('term config is read at actual emission after asynchronous identity annotation', async t => {
  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
  let config={enabled:true,terms:[{id:'fixture',canonical:'旧项目',variants:['星州'],enabled:true}]};
  let release;const gate=new Promise(resolve=>release=resolve);
  const worker=new ControlledSenseVoiceWorker();
  const stt=new LocalSenseVoiceSTT({workerFactory:()=>worker,getTermCorrectionConfig:()=>config});
+ t.after(()=>{release();stt.stop();});
  stt.setSpeakerVerificationAnnotator({annotate:async()=>{await gate;return undefined;}});
  const events=[];stt.on('transcript',event=>events.push(event));stt.start();await sleep(0);
  stt.dispatchFinal(new Float32Array(1600).fill(.1));worker.completeNext('讨论星州接口。');await sleep(0);
  config={enabled:true,terms:[{id:'fixture',canonical:'星舟',variants:['星州'],enabled:true}]};release();await stt.drainFinals(1000);
  assert.equal(events[0].text,'讨论星舟接口。');
  config={...config,enabled:false};stt.dispatchFinal(new Float32Array(1600).fill(.1));worker.completeNext('讨论星州接口。');await stt.drainFinals(1000);
- assert.equal(events[1].text,'讨论星州接口。');assert.equal(events[0].text,'讨论星舟接口。');stt.stop();
+ assert.equal(events[1].text,'讨论星州接口。');assert.equal(events[0].text,'讨论星舟接口。');
 });
