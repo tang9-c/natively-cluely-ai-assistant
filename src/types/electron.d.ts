@@ -1,3 +1,4 @@
+import type { MeetingEditRequest, MeetingEditResult } from '../../shared/meetingEdits';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 import type { DynamicActionAvailabilityEvent } from '../../shared/dynamicActionAvailability'
 import type { DynamicActionUiStageReport } from '../../shared/dynamicActionUiStage'
@@ -352,12 +353,7 @@ export interface SpeakerVerificationMetadata {
 
 export type SpeakerVerificationSessionOverrideAction = 'force_me' | 'force_not_me' | 'clear'
 
-export interface SpeakerVerificationSessionOverride {
-  speaker: string
-  timestamp: number
-  text: string
-  action: SpeakerVerificationSessionOverrideAction
-}
+export type SpeakerVerificationSessionOverride = import('../../shared/transcriptIpc').SpeakerVerificationSessionOverride
 
 export type SpeakerVerificationMode = 'off' | 'local'
 
@@ -945,6 +941,7 @@ export interface ElectronAPI {
     cancelled?: boolean
   }>
   // @ipc-channel update-meeting-title
+  applyMeetingEdit: (request: MeetingEditRequest) => Promise<MeetingEditResult>;
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>
   // @ipc-channel update-meeting-summary
   updateMeetingSummary: (id: string, updates: { overview?: string, actionItems?: string[], keyPoints?: string[], actionItemsTitle?: string, keyPointsTitle?: string }) => Promise<boolean>

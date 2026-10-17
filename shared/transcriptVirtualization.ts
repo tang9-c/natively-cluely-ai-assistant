@@ -1,6 +1,7 @@
 import type { SpeakerIdentityCorrection } from './speakerIdentity';
 
 export interface MeetingTranscriptEntry {
+  segmentId?: string;
   speaker: string;
   text: string;
   timestamp: number;
@@ -20,6 +21,7 @@ export function getTranscriptRowKey(
   entry: MeetingTranscriptEntry,
   sourceIndex: number,
 ): string {
+  if (entry.segmentId) return `segment:${entry.segmentId}`;
   if (entry.rawSegmentIds?.length) return `raw:${entry.rawSegmentIds.join('|')}`;
   return `segment:${entry.speaker}:${entry.timestamp}:${sourceIndex}`;
 }

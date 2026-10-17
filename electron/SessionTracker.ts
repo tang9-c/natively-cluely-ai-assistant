@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 // SessionTracker.ts
 // Manages session state, transcript arrays, context windows, and epoch compaction.
 // Extracted from IntelligenceManager to decouple state management from LLM orchestration.
@@ -10,6 +11,9 @@ import type { TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared
 import type { SpeakerIdentityCorrection } from '../shared/speakerIdentity';
 
 export interface TranscriptSegment {
+    segmentId?: string;
+    sessionGeneration?: string;
+    editRevision?: number;
     marker?: string;
     speaker: string;
     speakerId?: string;
@@ -42,6 +46,7 @@ export interface SuggestionTrigger {
 
 // Context item matching Swift ContextManager structure
 export interface ContextItem {
+    segmentId?: string;
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
@@ -55,12 +60,7 @@ export interface ContextItem {
 
 export type SpeakerVerificationSessionOverrideAction = 'force_me' | 'force_not_me' | 'clear';
 
-export interface SpeakerVerificationSessionOverride {
-    speaker: string;
-    timestamp: number;
-    text: string;
-    action: SpeakerVerificationSessionOverrideAction;
-}
+export type SpeakerVerificationSessionOverride = import('../shared/transcriptIpc').SpeakerVerificationSessionOverride;
 
 export interface AssistantResponse {
     text: string;
@@ -90,6 +90,10 @@ export class SessionTracker {
     // Full Session Tracking (Persisted)
     private fullTranscript: TranscriptSegment[] = [];
     private fullUsage: any[] = []; // UsageInteraction
+    private sessionGeneration = randomUUID();
+
+    getSessionGeneration(): string { return this.sessionGeneration; }
+
     private sessionStartTime: number = Date.now();
     private readonly transcriptCoalescer = new TranscriptSegmentCoalescer();
 
@@ -252,7 +256,11 @@ export class SessionTracker {
     addTranscript(segment: TranscriptSegment): { role: 'interviewer' | 'user' | 'assistant'; segment: TranscriptSegment; mergedIntoPrevious?: boolean } | null {
         if (!segment.final) return null;
 
-        const incomingSegmentKey = SessionTracker.speakerVerificationSegmentKey(segment);
+        const legacyKey = SessionTracker.speakerVerificationSegmentKey({ speaker: segment.speaker, timestamp: segment.timestamp, text: segment.text });
+        segment.segmentId ??= randomUUID();
+        segment.sessionGeneration = this.sessionGeneration;
+        const incomingSegmentKey = segment.segmentId;
+        this.speakerVerificationOverrideAliases.set(legacyKey, incomingSegmentKey);
         const role = this.mapSpeakerToRole(segment.speaker);
         const text = segment.text.trim();
 
@@ -280,7 +288,7 @@ export class SessionTracker {
                 const mergedSegment = merged.segment;
                 const mergedSegmentKey = SessionTracker.speakerVerificationSegmentKey(mergedSegment);
                 this.remapSpeakerVerificationOverrideKey(previousSegmentKey, mergedSegmentKey);
-                this.speakerVerificationOverrideAliases.set(incomingSegmentKey, mergedSegmentKey);
+                this.remapSpeakerVerificationOverrideKey(incomingSegmentKey, mergedSegmentKey);
                 this.fullTranscript[this.fullTranscript.length - 1] = mergedSegment;
                 if (lastItem && lastItem.role === role) {
                     lastItem.text = mergedSegment.text;
@@ -302,6 +310,7 @@ export class SessionTracker {
 
             this.contextItems.push({
                 role,
+                segmentId: segment.segmentId,
                 text,
                 timestamp: segment.timestamp,
                 speakerId: segment.speakerId,
@@ -323,6 +332,7 @@ export class SessionTracker {
         } else {
             this.contextItems.push({
                 role,
+                segmentId: segment.segmentId,
                 text,
                 timestamp: segment.timestamp,
                 speakerId: segment.speakerId,
@@ -451,8 +461,8 @@ export class SessionTracker {
     // Context Accessors
     // ============================================
 
-    static speakerVerificationSegmentKey(input: { speaker: string; timestamp: number; text: string }): string {
-        return `${input.speaker}:${input.timestamp}:${input.text.slice(0, 32)}`;
+    static speakerVerificationSegmentKey(input: { segmentId?: string; speaker?: string; timestamp?: number; text?: string }): string {
+        return input.segmentId || `${input.speaker}:${input.timestamp}:${input.text?.slice(0, 32) ?? ''}`;
     }
 
     private resolveSpeakerVerificationOverrideKey(key: string): string {
@@ -479,7 +489,10 @@ export class SessionTracker {
         if (action !== 'force_me' && action !== 'force_not_me' && action !== 'clear') {
             return false;
         }
-        if (!input.text || !Number.isFinite(input.timestamp) || !input.speaker) {
+        if (input.sessionGeneration !== undefined && input.sessionGeneration !== this.sessionGeneration) return false;
+        if (input.segmentId !== undefined && (typeof input.segmentId !== 'string' || !input.segmentId
+            || input.sessionGeneration !== this.sessionGeneration)) return false;
+        if (!input.segmentId && (!input.text || !Number.isFinite(input.timestamp) || !input.speaker)) {
             return false;
         }
 
@@ -505,6 +518,7 @@ export class SessionTracker {
         this.speakerVerificationOverrides.set(key, action);
         this.updateSpeakerIdentityCorrection(key, {
             isMe: action === 'force_me',
+            identity: action === 'force_me' ? 'me' : 'other',
             source: 'user',
             correctedAt: Date.now(),
         });
@@ -518,11 +532,13 @@ export class SessionTracker {
         const update = <T extends TranscriptSegment | ContextItem>(segment: T): void => {
             const speaker = 'speaker' in segment ? segment.speaker : segment.role;
             const segmentKey = this.resolveSpeakerVerificationOverrideKey(SessionTracker.speakerVerificationSegmentKey({
+                segmentId: segment.segmentId,
                 speaker,
                 timestamp: segment.timestamp,
                 text: segment.text,
             }));
             if (segmentKey !== targetKey) return;
+            if ('final' in segment) segment.editRevision = (segment.editRevision ?? 0) + 1;
             if (correction) {
                 segment.speakerIdentityCorrection = correction;
             } else {
@@ -539,12 +555,13 @@ export class SessionTracker {
     applySpeakerVerificationOverride<T extends TranscriptSegment | ContextItem>(segment: T): T {
         const speaker = 'speaker' in segment ? segment.speaker : segment.role;
         const key = SessionTracker.speakerVerificationSegmentKey({
+            segmentId: segment.segmentId,
             speaker,
             timestamp: segment.timestamp,
             text: segment.text,
         });
         const override = this.speakerVerificationOverrides.get(this.resolveSpeakerVerificationOverrideKey(key))
-            ?? (segment.speakerIdentityCorrection
+            ?? (segment.speakerIdentityCorrection && typeof segment.speakerIdentityCorrection.isMe === 'boolean'
                 ? (segment.speakerIdentityCorrection.isMe ? 'force_me' : 'force_not_me')
                 : undefined);
         if (!override) {
@@ -562,16 +579,7 @@ export class SessionTracker {
             return rest as T;
         }
 
-        const forcedMeSegment = {
-            ...segment,
-            speakerVerification: {
-                provider: 'local-speaker-verification',
-                profileId: 'me',
-                isMe: true,
-                confidence: 1,
-                threshold: 0.72,
-            },
-        };
+        const forcedMeSegment = segment;
         if ('speaker' in forcedMeSegment && forcedMeSegment.speaker !== 'user') {
             return { ...forcedMeSegment, speaker: 'user' } as T;
         }
@@ -585,7 +593,7 @@ export class SessionTracker {
         this.speakerVerificationOverrides.clear();
     }
 
-    findEffectiveSpeakerVerificationSegment(input: { speaker: string; timestamp: number; text: string }): TranscriptSegment | null {
+    findEffectiveSpeakerVerificationSegment(input: { segmentId?: string; speaker?: string; timestamp?: number; text?: string }): TranscriptSegment | null {
         const key = this.resolveSpeakerVerificationOverrideKey(SessionTracker.speakerVerificationSegmentKey(input));
         const segment = this.fullTranscript.find(item => SessionTracker.speakerVerificationSegmentKey(item) === key)
             ?? (this.lastInterimInterviewer && SessionTracker.speakerVerificationSegmentKey(this.lastInterimInterviewer) === key
@@ -767,6 +775,7 @@ export class SessionTracker {
     // ============================================
 
     reset(): void {
+        this.sessionGeneration = randomUUID();
         this.contextItems = [];
         this.fullTranscript = [];
         this.fullUsage = [];

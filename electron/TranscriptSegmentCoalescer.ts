@@ -6,6 +6,8 @@ export interface TranscriptCoalescingOptions {
 }
 
 export interface CoalescableTranscriptSegment {
+    segmentId?: string;
+    editRevision?: number;
     marker?: string;
     speaker: string;
     speakerId?: string;
@@ -143,8 +145,10 @@ function joinTranscriptText(a: string, b: string): string {
 function rawSegmentIdsFor(a: CoalescableTranscriptSegment, b: CoalescableTranscriptSegment): string[] | undefined {
     const ids = [
         ...(Array.isArray(a.rawSegmentIds) ? a.rawSegmentIds : []),
+        a.segmentId,
         a.marker,
         ...(Array.isArray(b.rawSegmentIds) ? b.rawSegmentIds : []),
+        b.segmentId,
         b.marker,
     ].filter((id): id is string => Boolean(id));
     return ids.length > 0 ? Array.from(new Set(ids)) : undefined;
@@ -168,6 +172,7 @@ export class TranscriptSegmentCoalescer {
         next: T,
     ): TranscriptCoalescingResult<T> {
         if (!this.enabled || !previous) return { merged: false, segment: next, reason: 'disabled_or_missing_previous' };
+        if (previous.editRevision || next.editRevision || previous.speakerIdentityCorrection || next.speakerIdentityCorrection) return { merged: false, segment: next, reason: 'manual_edit' };
         if (!previous.final || !next.final) return { merged: false, segment: next, reason: 'non_final' };
         if (!normalizeText(previous.text) || !normalizeText(next.text)) return { merged: false, segment: next, reason: 'empty_text' };
 

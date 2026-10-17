@@ -1301,6 +1301,8 @@ export class AppState {
     const speaker = transcriptPayload.speaker === 'user' ? 'user' : 'interviewer';
     const routedPayload = {
       ...transcriptPayload,
+      ...(transcriptPayload.final ? { segmentId: transcriptPayload.segmentId || crypto.randomUUID(),
+        sessionGeneration: this.intelligenceManager.getSessionGeneration() } : {}),
       speaker,
       timestamp: receivedAt,
     };

@@ -160,7 +160,9 @@ export class MeetingPersistence {
             detailedSummary: { actionItems: [], keyPoints: [] },
             transcript: snapshot.transcript,
             usage: snapshot.usage,
-            isProcessed: false
+            isProcessed: false,
+            calendarEventId: metadataSnapshot?.calendarEventId,
+            source: metadataSnapshot?.source ?? 'manual',
         };
 
         // The placeholder is the durable recovery copy. Never clear the only
@@ -201,6 +203,16 @@ export class MeetingPersistence {
         // active when meeting stopped, not whatever mode is active when async processing runs.
         modeSnapshot?: { id: string; name: string; templateType: string } | null
     ): Promise<void> {
+        const saved = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+        if (!saved) return;
+        const sourceRevision = saved.editState?.transcriptRevision ?? 0;
+        const latestTranscript = (saved.transcript ?? []) as TranscriptSegment[];
+        const latestEffective = latestTranscript.map(segment => ({ ...segment, speaker: resolveEffectiveSpeaker(segment) }));
+        data = { ...data, transcript: latestTranscript, effectiveTranscript: latestEffective,
+            context: latestEffective.map(segment => {
+                const label = segment.speaker === 'user' ? 'ME' : segment.speaker === 'interviewer' ? 'INTERVIEWER' : 'ASSISTANT';
+                return `[${label}]: ${segment.text}`;
+            }).join('\n') };
         let title = "Untitled Session";
         let titleGeneration: Promise<string> | null = null;
         let summaryData: PostCallSummaryData = { actionItems: [], keyPoints: [], decisions: [], openQuestions: [] };
@@ -413,7 +425,7 @@ export class MeetingPersistence {
                 isProcessed: true
             };
 
-            DatabaseManager.getInstance().saveMeeting(meetingData, data.startTime, data.durationMs);
+            if (!DatabaseManager.getInstance().mergeGeneratedMeetingResult(meetingData, sourceRevision)) return;
 
             // Metadata was already snapshotted before session.reset() — nothing to clear here.
 

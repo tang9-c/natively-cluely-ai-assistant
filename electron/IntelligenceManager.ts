@@ -141,6 +141,8 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.handleTranscript(segment);
     }
 
+    getSessionGeneration(): string { return this.session.getSessionGeneration(); }
+
     setSpeakerVerificationSessionOverride(input: import('./SessionTracker').SpeakerVerificationSessionOverride): boolean {
         const applied = this.session.setSpeakerVerificationOverride(input);
         if (!applied) return false;

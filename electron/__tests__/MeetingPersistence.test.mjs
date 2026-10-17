@@ -260,6 +260,13 @@ describe('MeetingPersistence.stopMeeting', () => {
   });
 });
 
+async function processSavedMeeting(mp, snapshot, id, ...rest) {
+ const db=DatabaseManager.getInstance();
+ db.saveMeeting({id,title:'Processing...',date:new Date().toISOString(),duration:'1:00',summary:'Generating summary...',
+  calendarEventId:rest[0]?.calendarEventId,source:rest[0]?.source,detailedSummary:{actionItems:[],keyPoints:[]},transcript:snapshot.transcript.map((s,i)=>({...s,timestamp:s.timestamp ?? i})),usage:snapshot.usage,isProcessed:false},snapshot.startTime,snapshot.durationMs);
+ return mp.processAndSaveMeeting(snapshot,id,...rest);
+}
+
 describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
   let restoreMode;
 
@@ -301,7 +308,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     const mp = new MeetingPersistence(session, llm);
 
     const snap = buildSnapshot({ transcript: [{ speaker: 'user', text: 'a' }, { speaker: 'assistant', text: 'b' }] });
-    await mp.processAndSaveMeeting(snap, 'm-short');
+    await processSavedMeeting(mp, snap, 'm-short');
 
     const final = db.getMeetingDetails('m-short');
     assert.ok(final, 'meeting should be saved');
@@ -318,7 +325,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     const mp = new MeetingPersistence(session, llm);
 
     const snap = buildSnapshot();
-    await mp.processAndSaveMeeting(snap, 'm-meta', { title: 'Standup Notes', source: 'manual' });
+    await processSavedMeeting(mp, snap, 'm-meta', { title: 'Standup Notes', source: 'manual' });
 
     const final = db.getMeetingDetails('m-meta');
     assert.ok(final);
@@ -333,7 +340,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     const mp = new MeetingPersistence(session, llm);
 
     const snap = buildSnapshot();
-    await mp.processAndSaveMeeting(snap, 'm-cal', {
+    await processSavedMeeting(mp, snap, 'm-cal', {
       title: 'Cal Meeting',
       calendarEventId: 'evt-123',
       source: 'calendar',
@@ -363,7 +370,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     const mp = new MeetingPersistence(session, llm);
 
     const snap = buildSnapshot();
-    await mp.processAndSaveMeeting(snap, 'm-summary');
+    await processSavedMeeting(mp, snap, 'm-summary');
 
     const final = db.getMeetingDetails('m-summary');
     assert.ok(final, 'meeting should be saved');
@@ -386,7 +393,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     };
     const mp = new MeetingPersistence(session, llm);
 
-    await mp.processAndSaveMeeting(buildSnapshot(), 'm-title-budget');
+    await processSavedMeeting(mp, buildSnapshot(), 'm-title-budget');
 
     const final = db.getMeetingDetails('m-title-budget');
     assert.equal(final.title, '预算调用标题');
@@ -419,7 +426,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     };
     const mp = new MeetingPersistence(session, llm);
 
-    const processing = mp.processAndSaveMeeting(buildSnapshot(), 'm-parallel-title-summary');
+    const processing = processSavedMeeting(mp, buildSnapshot(), 'm-parallel-title-summary');
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.ok(calls.length >= 2, 'summary should start while title generation is still pending');
@@ -444,7 +451,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     };
     const mp = new MeetingPersistence(session, llm);
 
-    await mp.processAndSaveMeeting(buildSnapshot(), 'm-title-failure');
+    await processSavedMeeting(mp, buildSnapshot(), 'm-title-failure');
 
     const final = db.getMeetingDetails('m-title-failure');
     assert.ok(final, 'meeting should still be saved');
@@ -465,8 +472,12 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     const mp = new MeetingPersistence(session, llm);
     const context = `${'甲'.repeat(50000)}尾部应进入摘要`;
 
-    await mp.processAndSaveMeeting(
-      buildSnapshot({ context }),
+    await processSavedMeeting(mp,
+      buildSnapshot({ context, transcript: [
+        {speaker:'user',text:context.slice(0,25000),timestamp:1},
+        {speaker:'interviewer',text:context.slice(25000,45000),timestamp:2},
+        {speaker:'user',text:context.slice(45000),timestamp:3},
+      ] }),
       'm-summary-context-limit',
       { title: '已有标题' },
     );
@@ -498,7 +509,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     };
     const mp = new MeetingPersistence(session, llm);
 
-    await mp.processAndSaveMeeting(buildSnapshot(), 'm-groq-summary-field');
+    await processSavedMeeting(mp, buildSnapshot(), 'm-groq-summary-field');
 
     const final = db.getMeetingDetails('m-groq-summary-field');
     assert.ok(final, 'meeting should be saved');
@@ -522,7 +533,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     };
     const mp = new MeetingPersistence(session, llm);
 
-    await mp.processAndSaveMeeting(buildSnapshot({
+    await processSavedMeeting(mp, buildSnapshot({
       context: '本次会议围绕企业质量管理流程中的风险管理展开，确认风险分类、责任人和交付 artifact。',
     }), 'm-long-title-prose');
 
@@ -554,7 +565,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     };
     const mp = new MeetingPersistence(session, llm);
 
-    await mp.processAndSaveMeeting(buildSnapshot({
+    await processSavedMeeting(mp, buildSnapshot({
       context: '讨论非ERP产线数据量号提取落地方案，重点是天健数据质量、路径输入自动提取和场景重置。',
     }), 'm-long-title-markdown');
 
@@ -577,7 +588,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     };
     const mp = new MeetingPersistence(session, llm);
 
-    await mp.processAndSaveMeeting(buildSnapshot(), 'm-fence');
+    await processSavedMeeting(mp, buildSnapshot(), 'm-fence');
     const final = db.getMeetingDetails('m-fence');
     assert.ok(final);
     assert.equal(final.detailedSummary.overview, 'hi');
@@ -591,7 +602,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     };
     const mp = new MeetingPersistence(session, llm);
 
-    await mp.processAndSaveMeeting(buildSnapshot(), 'm-bad-json');
+    await processSavedMeeting(mp, buildSnapshot(), 'm-bad-json');
 
     const final = db.getMeetingDetails('m-bad-json');
     assert.ok(final, 'meeting should still be saved when LLM summary is malformed');
@@ -618,7 +629,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
         },
       },
     ];
-    await mp.processAndSaveMeeting(buildSnapshot({ usage }), 'm-da');
+    await processSavedMeeting(mp, buildSnapshot({ usage }), 'm-da');
 
     const final = db.getMeetingDetails('m-da');
     assert.ok(final, 'meeting should be saved despite dynamic action usage');
@@ -830,4 +841,51 @@ describe('MeetingPersistence.recoverUnprocessedMeetings', () => {
     assert.equal(unprocessed.find(m => m.id === 'm-recover-good'), undefined,
       'recovered meeting should no longer be in unprocessed list');
   });
+});
+
+
+describe('T1 generation races', () => {
+ test('delayed generation preserves human title, text, actions and usage', async () => {
+  setRetention('forever');
+  const db=DatabaseManager.getInstance();
+  let release;
+  const gate=new Promise(resolve=>{release=resolve});
+  const mp=new MeetingPersistence(buildMockSession(), {generateMeetingSummary: async()=>{await gate;return JSON.stringify({overview:'generated',keyPoints:[],actionItems:['stale']});}});
+  const id=await mp.stopMeeting();
+  const before=db.getMeetingDetails(id);
+  assert.equal(db.updateMeetingTitle(id,'human title'),true);
+  const edit=db.applyMeetingEdit({meetingId:id,expectedRevision:1,operation:{type:'text',segmentId:before.transcript[0].segmentId,text:'human text'}});
+  assert.equal(edit.ok,true);
+  assert.equal(db.updateMeetingSummary(id,{actionItems:['human task']}),true);
+  release();
+  const final=await waitFor(()=>db.getUnprocessedMeetings().some(m=>m.id===id)?null:db.getMeetingDetails(id));
+  assert.equal(final.title,'human title');
+  assert.equal(final.transcript[0].text,'human text');
+  assert.deepEqual(final.detailedSummary.actionItems,['human task']);
+  assert.deepEqual(final.usage,before.usage);
+ });
+ test('deleting durable placeholder while generation runs never recreates meeting', async () => {
+  setRetention('forever');
+  const db=DatabaseManager.getInstance();
+  let release;const gate=new Promise(resolve=>{release=resolve});
+  let finished;const done=new Promise(resolve=>{finished=resolve});
+  const mp=new MeetingPersistence(buildMockSession(),{generateMeetingSummary:async()=>{await gate;return null;}});
+  const original=mp.processAndSaveMeeting.bind(mp);
+  mp.processAndSaveMeeting=async(...args)=>{try{return await original(...args);}finally{finished();}};
+  const id=await mp.stopMeeting();db.deleteMeeting(id);release();await done;
+  assert.equal(db.getMeetingDetails(id),null);
+ });
+});
+
+test('generation rereads saved transcript and reconstructs context before invoking model',async()=>{
+ const db=DatabaseManager.getInstance();const id='t1-latest-transcript';
+ const transcript=[1,2,3].map(n=>({segmentId:`latest-${n}`,speaker:'user',text:`stale-${n}`,timestamp:n}));
+ db.saveMeeting({id,title:'Processing...',date:new Date().toISOString(),summary:'',transcript,isProcessed:false},1,1000);
+ db.applyMeetingEdit({meetingId:id,expectedRevision:0,operation:{type:'text',segmentId:'latest-1',text:'fresh corrected fictional'}});
+ const contexts=[];
+ const mp=new MeetingPersistence(buildMockSession(),{generateMeetingSummary:async(_p,context)=>{contexts.push(context);return null;}});
+ await mp.processAndSaveMeeting({transcript,usage:[],startTime:1,durationMs:1000,context:'old snapshot context'},id);
+ assert.ok(contexts.some(context=>context.includes('fresh corrected fictional')));
+ assert.ok(contexts.every(context=>!context.includes('stale-1')&&!context.includes('old snapshot context')));
+ assert.equal(db.getMeetingDetails(id).editState.summarySourceRevision,1);
 });

@@ -85,7 +85,8 @@ function runSalesIntentKeywordMigration() {
       UNIQUE(mode_id, intent)
     );
     CREATE TABLE speaker_profile_stats (profile_id TEXT PRIMARY KEY);
-    CREATE TABLE transcripts (id INTEGER PRIMARY KEY);
+    CREATE TABLE meetings (id TEXT PRIMARY KEY);
+    CREATE TABLE transcripts (id INTEGER PRIMARY KEY, meeting_id TEXT);
   `);
   db.pragma('user_version = 36');
   db.prepare('INSERT INTO modes (id, name, template_type) VALUES (?, ?, ?)').run('sales-default', 'Sales', 'sales');
@@ -184,7 +185,7 @@ describe('Mode database migrations', () => {
     assert.match(value('sales-default', 'sales_technical_requirements'), /实施周期通常多久/);
     assert.match(value('sales-default', 'sales_technical_requirements'), /上线和数据迁移有什么风险/);
     assert.equal(value('sales-custom', 'sales_pricing_objection'), '客户自定义价格词');
-    assert.equal(db.pragma('user_version', { simple: true }), 37);
+    assert.equal(db.pragma('user_version', { simple: true }), 38);
   });
 
   test('v21 -> v22 migration is registered for FDE seed backfill', () => {

@@ -261,6 +261,14 @@ describe('MeetingPersistence.deep — stopMeeting metadata.scenario + doNotPersi
   });
 });
 
+async function processSavedMeeting(mp, snapshot, id, ...rest) {
+ const db=DatabaseManager.getInstance();
+ db.saveMeeting({id,title:'Processing...',date:new Date().toISOString(),duration:'1:00',summary:'Generating summary...',
+  calendarEventId:rest[0]?.calendarEventId,source:rest[0]?.source,detailedSummary:{actionItems:[],keyPoints:[]},
+  transcript:snapshot.transcript.map((s,i)=>({...s,timestamp:s.timestamp ?? i})),usage:snapshot.usage,isProcessed:false},snapshot.startTime,snapshot.durationMs);
+ return mp.processAndSaveMeeting(snapshot,id,...rest);
+}
+
 describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', () => {
   let restoreRetention;
   beforeEach(() => { restoreRetention = setRetention('forever'); mockWindows.length = 0; });
@@ -288,7 +296,7 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     const mp = new MeetingPersistence(session, llm);
 
     const snap = buildSnapshot();
-    await mp.processAndSaveMeeting(snap, 'm-llm-fail');
+    await processSavedMeeting(mp, snap, 'm-llm-fail');
 
     const final = db.getMeetingDetails('m-llm-fail');
     assert.ok(final, 'meeting must still be saved when LLM throws');
@@ -320,7 +328,7 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
       },
     ];
     const snap = buildSnapshot({ usage });
-    await mp.processAndSaveMeeting(snap, 'm-artifact');
+    await processSavedMeeting(mp, snap, 'm-artifact');
 
     const final = db.getMeetingDetails('m-artifact');
     assert.ok(final, 'meeting must be saved');
@@ -333,7 +341,7 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     const llm = buildMockLLMHelper();
     const mp = new MeetingPersistence(session, llm);
     const snap = buildSnapshot();
-    await mp.processAndSaveMeeting(
+    await processSavedMeeting(mp,
       snap,
       'm-mode',
       { title: 'Mode-Test' },
@@ -350,7 +358,7 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     const llm = buildMockLLMHelper({ titleResponse: 'LLM-title-should-not-be-used' });
     const mp = new MeetingPersistence(session, llm);
     const snap = buildSnapshot();
-    await mp.processAndSaveMeeting(snap, 'm-title-precedence', { title: 'meta-title' });
+    await processSavedMeeting(mp, snap, 'm-title-precedence', { title: 'meta-title' });
     const final = db.getMeetingDetails('m-title-precedence');
     assert.equal(final.title, 'meta-title');
   });
@@ -371,7 +379,7 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     };
     const mp = new MeetingPersistence(session, llm);
     const snap = buildSnapshot();
-    await mp.processAndSaveMeeting(
+    await processSavedMeeting(mp,
       snap,
       'm-sections',
       null,
@@ -393,7 +401,7 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     const mp = new MeetingPersistence(session, llm);
     const snap = buildSnapshot();
 
-    await mp.processAndSaveMeeting(
+    await processSavedMeeting(mp,
       snap,
       'm-bad-json-sections',
       null,
@@ -440,12 +448,12 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     const mp = new MeetingPersistence(session, llm);
     const context = `头部事项\n${'中间填充。'.repeat(12000)}\n尾部确认下周提供测试数据`;
 
-    await mp.processAndSaveMeeting(
+    await processSavedMeeting(mp,
       buildSnapshot({
         context,
         transcript: [
           { speaker: '客户', text: '头部事项', timestamp: 1 },
-          { speaker: '客户', text: '中间内容', timestamp: 2 },
+          { speaker: '客户', text: '中间填充。'.repeat(12000), timestamp: 2 },
           { speaker: '客户', text: '尾部确认下周提供测试数据', timestamp: 3 },
         ],
       }),
@@ -491,7 +499,7 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     };
     const mp = new MeetingPersistence(session, llm);
 
-    await mp.processAndSaveMeeting(
+    await processSavedMeeting(mp,
       buildSnapshot({
         context: '客户下周提供测试数据。第一阶段只读接入 PLM。',
         transcript: [
@@ -704,7 +712,7 @@ describe('A2 background persistence scheduling', () => {
   test('A2-P4 final-write transaction failure preserves recoverable placeholder transcript', async () => {
     const db = DatabaseManager.getInstance();
     const session = buildMockSession({transcript: [{speaker: 'user', text: 'durable fixture', timestamp: Date.now()}]});
-    db.db.exec("CREATE TRIGGER a2_fail_final BEFORE INSERT ON meetings WHEN NEW.is_processed = 1 BEGIN SELECT RAISE(ABORT, 'A2 final-write failure'); END");
+    db.db.exec("CREATE TRIGGER a2_fail_final BEFORE UPDATE OF summary_json ON meetings WHEN NEW.is_processed = 1 BEGIN SELECT RAISE(ABORT, 'A2 final-write failure'); END");
     try {
       const id = await new MeetingPersistence(session, buildMockLLMHelper()).stopMeeting();
       await new Promise(resolve => setImmediate(resolve));

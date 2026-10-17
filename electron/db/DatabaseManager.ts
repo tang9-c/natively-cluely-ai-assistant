@@ -1,3 +1,5 @@
+import { readMeetingEditState, type Meeting, type MeetingEditRequest, type MeetingEditResult } from '../../shared/meetingEdits';
+import { redactForLog } from '../utils/redactForLog';
 
 import Database from 'better-sqlite3';
 import path from 'path';
@@ -16,14 +18,19 @@ import {
     isLegacyDefaultModeCustomContext,
 } from '../services/ModeDefaultContexts';
 import type { ResumeNode, ResumeParsed, UserProfileRecord } from '../services/profile/types';
-import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
-import type { SpeakerIdentityCorrection } from '../../shared/speakerIdentity';
 import type {
     MeetingPreparationRecord,
     MeetingPreparationResult,
     MeetingPreparationSaveInput,
     PreparationQuestion,
 } from '../../shared/meetingPreparation';
+
+function readTranscriptAliases(value: string | null): string[] | undefined {
+    try {
+        const ids: unknown = value ? JSON.parse(value) : null;
+        return Array.isArray(ids) && ids.every(id => typeof id === 'string') ? ids : undefined;
+    } catch { return undefined; }
+}
 
 // Interfaces for our data objects
 export interface CompanyResearchCacheRow {
@@ -32,51 +39,7 @@ export interface CompanyResearchCacheRow {
     schema_version: string;
 }
 
-export interface Meeting {
-    id: string;
-    title: string;
-    date: string; // ISO string
-    duration: string;
-    summary: string;
-    detailedSummary?: {
-        overview?: string;
-        actionItems: string[];
-        keyPoints: string[];
-        generationStatus?: 'success' | 'failed';
-        decisions?: string[];
-        openQuestions?: string[];
-        actionItemsTitle?: string;
-        keyPointsTitle?: string;
-        sections?: Array<{ title: string; bullets: string[] }>;
-        schemaVersion?: number;
-        actionItemsStructured?: Array<{ id: string; text: string; owner?: string; deadline?: string; sourceTimestamp?: number }>;
-        followUpDraft?: string;
-        coachingInsights?: Array<{ id: string; type: string; title: string; detail: string; severity: 'info' | 'opportunity' | 'warning'; evidence?: string }>;
-    };
-    transcript?: Array<{
-        speaker: string;
-        speakerId?: string;
-        speakerLabel?: string;
-        providerSpeakerId?: string;
-        diarizationProvider?: 'doubao-auc' | 'qcloud';
-        text: string;
-        timestamp: number;
-        startTimestampMs?: number;
-        endTimestampMs?: number;
-        speakerVerification?: SpeakerVerificationMetadata;
-        speakerIdentityCorrection?: SpeakerIdentityCorrection;
-    }>;
-    usage?: Array<{
-        type: 'assist' | 'followup' | 'chat' | 'followup_questions';
-        timestamp: number;
-        question?: string;
-        answer?: string;
-        items?: string[];
-    }>;
-    calendarEventId?: string;
-    source?: 'manual' | 'calendar';
-    isProcessed?: boolean;
-}
+export type { Meeting } from '../../shared/meetingEdits';
 
 export type AnswerQualityEventType = 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated';
 
@@ -1724,7 +1687,35 @@ export class DatabaseManager {
             })();
         }
 
+        this.migrateMeetingEdits();
         console.log('[DatabaseManager] Migrations completed.');
+    }
+
+    public migrateMeetingEdits(): void {
+        const db = this.db;
+        if (!db || Number(db.pragma('user_version', { simple: true })) >= 38) return;
+        // VACUUM INTO takes a consistent SQLite snapshot, including committed WAL pages.
+        if (db.name !== ':memory:' && db.name) {
+            const backupPath = `${db.name}.pre-v38.bak`;
+            const temporaryBackup = `${backupPath}.${crypto.randomUUID()}.tmp`;
+            try {
+                db.prepare('VACUUM INTO ?').run(temporaryBackup);
+                fs.chmodSync(temporaryBackup, 0o600);
+                fs.renameSync(temporaryBackup, backupPath);
+            } finally {
+                if (fs.existsSync(temporaryBackup)) fs.unlinkSync(temporaryBackup);
+            }
+        }
+        db.transaction(() => {
+            db.exec(`ALTER TABLE transcripts ADD COLUMN segment_id TEXT;
+                ALTER TABLE transcripts ADD COLUMN original_content TEXT;
+                ALTER TABLE transcripts ADD COLUMN raw_segment_ids_json TEXT;
+                ALTER TABLE transcripts ADD COLUMN edit_revision INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE meetings ADD COLUMN edit_state_json TEXT NOT NULL DEFAULT '{}';
+                UPDATE transcripts SET segment_id = 'legacy:' || meeting_id || ':' || id;
+                CREATE UNIQUE INDEX transcripts_meeting_segment ON transcripts(meeting_id, segment_id);`);
+            db.pragma('user_version = 38');
+        })();
     }
 
     public migrateLegacyProfileToMaster(targetVersion: number): void {
@@ -3351,7 +3342,7 @@ export class DatabaseManager {
         }
 
         const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed)
+            INSERT INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
@@ -3359,9 +3350,9 @@ export class DatabaseManager {
             INSERT INTO transcripts (
                 meeting_id, speaker, speaker_id, speaker_label, provider_speaker_id,
                 diarization_provider, content, timestamp_ms, start_timestamp_ms, end_timestamp_ms,
-                speaker_verification_json, speaker_identity_correction_json
+                speaker_verification_json, speaker_identity_correction_json, segment_id, raw_segment_ids_json, edit_revision
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         const insertInteraction = this.db.prepare(`
@@ -3403,7 +3394,10 @@ export class DatabaseManager {
                         segment.startTimestampMs ?? null,
                         segment.endTimestampMs ?? null,
                         segment.speakerVerification ? JSON.stringify(segment.speakerVerification) : null,
-                        segment.speakerIdentityCorrection ? JSON.stringify(segment.speakerIdentityCorrection) : null
+                        segment.speakerIdentityCorrection ? JSON.stringify(segment.speakerIdentityCorrection) : null,
+                        segment.segmentId || crypto.randomUUID(),
+                        segment.rawSegmentIds ? JSON.stringify(segment.rawSegmentIds) : null,
+                        segment.editRevision ?? 0
                     );
                 }
             }
@@ -3448,58 +3442,116 @@ export class DatabaseManager {
         }
     }
 
-    public updateMeetingTitle(id: string, title: string): boolean {
-        if (!this.db) return false;
+    public applyMeetingEdit(request: MeetingEditRequest, legacySummary = false): MeetingEditResult {
+        if (!this.db) return { ok: false, error: 'save_failed' };
         try {
-            const stmt = this.db.prepare('UPDATE meetings SET title = ? WHERE id = ?');
-            const info = stmt.run(title, id);
-            return info.changes > 0;
+            return this.db.transaction((): MeetingEditResult => {
+                if (!request || typeof request.meetingId !== 'string' || !Number.isSafeInteger(request.expectedRevision)
+                    || request.expectedRevision < 0 || !request.operation) return { ok: false, error: 'invalid_input' };
+                const row = this.db!.prepare('SELECT * FROM meetings WHERE id = ?').get(request.meetingId) as any;
+                if (!row) return { ok: false, error: 'not_found' };
+                const state = readMeetingEditState(row.edit_state_json);
+                if (state.meetingRevision !== request.expectedRevision) return { ok: false, error: 'conflict' };
+                const op = request.operation;
+                if (op.type === 'summary') {
+                    const patch = op.patch as Record<string, unknown>;
+                    const allowed = ['title', 'overview', 'keyPoints', 'decisions', 'openQuestions', 'sections',
+                        'actionItemsTitle', 'keyPointsTitle', 'actionItemsStructured', ...(legacySummary ? ['actionItems'] : [])];
+                    if (!patch || typeof patch !== 'object' || Array.isArray(patch) || !Object.keys(patch).length
+                        || Object.entries(patch).some(([key, value]) => !allowed.includes(key)
+                            || (['title', 'overview', 'actionItemsTitle', 'keyPointsTitle'].includes(key)
+                                ? typeof value !== 'string' : !Array.isArray(value)))) return { ok: false, error: 'invalid_input' };
+                    for (const key of ['keyPoints', 'decisions', 'openQuestions', 'actionItems']) {
+                        if (patch[key] && (patch[key] as unknown[]).some(value => typeof value !== 'string')) return { ok: false, error: 'invalid_input' };
+                    }
+                    if (patch.sections && (patch.sections as any[]).some(value => !value || typeof value.title !== 'string'
+                        || !Array.isArray(value.bullets) || value.bullets.some((v: unknown) => typeof v !== 'string'))) return { ok: false, error: 'invalid_input' };
+                    if (patch.actionItemsStructured && (patch.actionItemsStructured as any[]).some(value => !value || typeof value.id !== 'string'
+                        || typeof value.text !== 'string' || (value.sourceTimestamp !== undefined && !Number.isFinite(value.sourceTimestamp))
+                        || ['owner', 'deadline'].some(key => value[key] !== undefined && typeof value[key] !== 'string'))) return { ok: false, error: 'invalid_input' };
+                    const summary = JSON.parse(row.summary_json || '{}');
+                    summary.detailedSummary = summary.detailedSummary || {};
+                    for (const [key, value] of Object.entries(patch)) {
+                        if (key !== 'title') summary.detailedSummary[key] = value;
+                        if (!state.editedSummaryFields.includes(key)) state.editedSummaryFields.push(key);
+                    }
+                    const updated = this.db!.prepare('UPDATE meetings SET title = ?, summary_json = ? WHERE id = ?')
+                        .run(patch.title ?? row.title, JSON.stringify(summary), request.meetingId);
+                    if (updated.changes !== 1) throw new Error('Meeting summary was not saved');
+                } else if (op.type === 'text' || op.type === 'identity') {
+                    const ids = op.type === 'text' ? [op.segmentId] : op.segmentIds;
+                    if (!Array.isArray(ids) || !ids.length || ids.length > 10000 || ids.some(id => typeof id !== 'string' || !id)
+                        || (op.type === 'text' && (typeof op.text !== 'string' || !op.text.trim()))
+                        || (op.type === 'identity' && ![null, 'me', 'other', 'unknown'].includes(op.identity))) return { ok: false, error: 'invalid_input' };
+                    const targets = new Map<string, string | null>();
+                    const segments = this.db!.prepare('SELECT segment_id, raw_segment_ids_json FROM transcripts WHERE meeting_id = ?')
+                        .all(request.meetingId) as Array<{ segment_id: string; raw_segment_ids_json: string | null }>;
+                    for (const segment of segments) {
+                        for (const alias of [segment.segment_id, ...(readTranscriptAliases(segment.raw_segment_ids_json) ?? [])]) {
+                            targets.set(alias, targets.has(alias) && targets.get(alias) !== segment.segment_id ? null : segment.segment_id);
+                        }
+                    }
+                    const canonicalIds = ids.map(id => targets.get(id));
+                    if (canonicalIds.some(id => !id)) return { ok: false, error: 'invalid_input' };
+                    for (const id of new Set(canonicalIds)) {
+                        if (op.type === 'text') {
+                            const updated = this.db!.prepare(`UPDATE transcripts SET original_content = COALESCE(original_content, content),
+                            content = ?, edit_revision = edit_revision + 1 WHERE meeting_id = ? AND segment_id = ?`).run(op.text, request.meetingId, id);
+                            if (updated.changes !== 1) throw new Error('Transcript text was not saved');
+                        } else {
+                            const correction = op.identity === null ? null : JSON.stringify({ identity: op.identity,
+                                ...(op.identity === 'unknown' ? {} : { isMe: op.identity === 'me' }), source: 'user', correctedAt: Date.now() });
+                            const updated = this.db!.prepare(`UPDATE transcripts SET speaker_identity_correction_json = ?, edit_revision = edit_revision + 1
+                                WHERE meeting_id = ? AND segment_id = ?`).run(correction, request.meetingId, id);
+                            if (updated.changes !== 1) throw new Error('Transcript identity was not saved');
+                        }
+                    }
+                    state.transcriptRevision++;
+                } else return { ok: false, error: 'invalid_input' };
+                state.meetingRevision++;
+                state.indexDirty = true;
+                const updated = this.db!.prepare('UPDATE meetings SET edit_state_json = ? WHERE id = ?').run(JSON.stringify(state), request.meetingId);
+                if (updated.changes !== 1) throw new Error('Meeting revision was not saved');
+                return { ok: true, revision: state.meetingRevision, meeting: this.getMeetingDetails(request.meetingId)! };
+            })();
         } catch (error) {
-            console.error(`[DatabaseManager] Failed to update title for meeting ${id}:`, error);
-            return false;
+            console.error('[DatabaseManager] Meeting edit failed', redactForLog([error]));
+            return { ok: false, error: 'save_failed' };
         }
     }
 
+    public updateMeetingTitle(id: string, title: string): boolean {
+        return this.updateMeetingSummary(id, { title } as any);
+    }
+
     public updateMeetingSummary(id: string, updates: { overview?: string, actionItems?: string[], keyPoints?: string[], actionItemsTitle?: string, keyPointsTitle?: string }): boolean {
+        const meeting = this.getMeetingDetails(id);
+        if (!meeting) return false;
+        return this.applyMeetingEdit({ meetingId: id, expectedRevision: meeting.editState!.meetingRevision,
+            operation: { type: 'summary', patch: updates } }, true).ok;
+    }
+
+    public mergeGeneratedMeetingResult(meeting: Meeting, sourceRevision: number): boolean {
         if (!this.db) return false;
-
-        try {
-            // 1. Get current summary_json
-            const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as any;
+        return this.db.transaction(() => {
+            const row = this.db!.prepare('SELECT * FROM meetings WHERE id = ?').get(meeting.id) as any;
             if (!row) return false;
-
-            const existingData = JSON.parse(row.summary_json || '{}');
-            const currentDetailed = existingData.detailedSummary || {};
-
-            // 2. Merge updates
-            const newDetailed = {
-                ...currentDetailed,
-                ...updates
-            };
-
-            // Should likely filter out undefined updates if spread doesn't handle them how we want,
-            // but spread over undefined is fine. We want to overwrite if provided.
-            // If updates.overview is empty string, it overwrites.
-            // If updates.overview is undefined, we use ...updates trick:
-            // Actually spread only includes own enumerable properties. If I pass { overview: "new" }, it works.
-
-            // However, we need to be careful not to wipe legacySummary if it exists
-            const newData = {
-                ...existingData,
-                detailedSummary: newDetailed
-            };
-
-            const jsonStr = JSON.stringify(newData);
-
-            // 3. Write back
-            const stmt = this.db.prepare('UPDATE meetings SET summary_json = ? WHERE id = ?');
-            const info = stmt.run(jsonStr, id);
-            return info.changes > 0;
-
-        } catch (error) {
-            console.error(`[DatabaseManager] Failed to update summary for meeting ${id}:`, error);
-            return false;
-        }
+            const state = readMeetingEditState(row.edit_state_json);
+            const summary = JSON.parse(row.summary_json || '{}');
+            const detailed = summary.detailedSummary || {};
+            for (const [key, value] of Object.entries(meeting.detailedSummary || {})) {
+                if (state.editedSummaryFields.includes(key)) continue;
+                if (['actionItems', 'actionItemsStructured'].includes(key)
+                    && state.editedSummaryFields.some(field => ['actionItems', 'actionItemsStructured'].includes(field))) continue;
+                detailed[key] = value;
+            }
+            state.summarySourceRevision = sourceRevision;
+            state.meetingRevision++;
+            const updated = this.db!.prepare('UPDATE meetings SET title = ?, summary_json = ?, edit_state_json = ?, is_processed = 1 WHERE id = ?')
+                .run(state.editedSummaryFields.includes('title') ? row.title : meeting.title,
+                    JSON.stringify({ ...summary, legacySummary: meeting.summary, detailedSummary: detailed }), JSON.stringify(state), meeting.id);
+            return updated.changes === 1;
+        })();
     }
 
     private replaceMeetingPreparationQuestions(preparationId: string, questions: PreparationQuestion[]): void {
@@ -3743,6 +3795,10 @@ export class DatabaseManager {
         const durationStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
         const transcript = transcriptRows.map(row => ({
+            segmentId: row.segment_id,
+            rawSegmentIds: readTranscriptAliases(row.raw_segment_ids_json),
+            originalContent: row.original_content ?? undefined,
+            editRevision: row.edit_revision ?? 0,
             speaker: row.speaker,
             speakerId: row.speaker_id || undefined,
             speakerLabel: row.speaker_label || undefined,
@@ -3785,6 +3841,7 @@ export class DatabaseManager {
         });
 
         return {
+            editState: readMeetingEditState(meetingRow.edit_state_json),
             id: meetingRow.id,
             title: meetingRow.title,
             date: meetingRow.created_at,

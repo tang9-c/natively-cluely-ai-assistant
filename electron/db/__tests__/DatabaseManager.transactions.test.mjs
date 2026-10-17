@@ -20,6 +20,7 @@ function createMultiTableSchema(db) {
     CREATE TABLE meetings (
       id TEXT PRIMARY KEY,
       title TEXT,
+      edit_state_json TEXT NOT NULL DEFAULT '{}',
       start_time INTEGER,
       duration_ms INTEGER,
       summary_json TEXT,
@@ -42,6 +43,10 @@ function createMultiTableSchema(db) {
       end_timestamp_ms INTEGER,
       speaker_verification_json TEXT,
       speaker_identity_correction_json TEXT,
+      segment_id TEXT,
+      raw_segment_ids_json TEXT,
+      original_content TEXT,
+      edit_revision INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
     );
     CREATE TABLE ai_interactions (

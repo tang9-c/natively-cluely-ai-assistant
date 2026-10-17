@@ -1,5 +1,6 @@
 export interface SpeakerIdentityCorrection {
-  isMe: boolean;
+  isMe?: boolean;
+  identity?: 'me' | 'other' | 'unknown';
   source: 'user';
   correctedAt: number;
 }

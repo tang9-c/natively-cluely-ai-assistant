@@ -1564,13 +1564,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'invalid_action' };
       }
       const timestamp = Number(input?.timestamp);
-      if (typeof input?.speaker !== 'string'
+      if (!input?.segmentId && (typeof input?.speaker !== 'string'
         || !Number.isFinite(timestamp)
         || typeof input?.text !== 'string'
-        || input.text.trim().length === 0) {
+        || input.text.trim().length === 0)) {
         return { success: false, error: 'invalid_segment' };
       }
       const applied = appState.getIntelligenceManager().setSpeakerVerificationSessionOverride({
+        segmentId: input?.segmentId,
+        sessionGeneration: input?.sessionGeneration,
         speaker: input.speaker,
         timestamp,
         text: input.text,
@@ -3538,6 +3540,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
       return { success: false, error: 'export_failed' };
     }
+  });
+
+  safeHandle('meeting-apply-edit', async (_, request) => {
+    const result = DatabaseManager.getInstance().applyMeetingEdit(request);
+    if (result.ok) broadcast('meetings-updated');
+    return result;
   });
 
   safeHandle('update-meeting-title', async (_, { id, title }: { id: string; title: string }) => {

@@ -1,3 +1,4 @@
+import type { MeetingEditRequest, MeetingEditResult } from '../shared/meetingEdits';
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ModeEventContext } from './llm';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
@@ -252,12 +253,7 @@ interface ElectronAPI {
   speakerVerificationGetHealth: (options?: { smokeTest?: boolean }) => Promise<import('../src/types/electron').SpeakerVerificationHealth>;
   speakerVerificationEnroll: (samples: Array<{ samples?: number[]; pcm16?: ArrayBuffer; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: import('../src/types/electron').SpeakerVerificationStatus; error?: string }>;
   speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>;
-  speakerVerificationSetSessionOverride: (input: {
-    speaker: string;
-    timestamp: number;
-    text: string;
-    action: 'force_me' | 'force_not_me' | 'clear';
-  }) => Promise<{ success: boolean; error?: string }>;
+  speakerVerificationSetSessionOverride: (input: import('../shared/transcriptIpc').SpeakerVerificationSessionOverride) => Promise<{ success: boolean; error?: string }>;
   confirmDynamicActionSpeaker: (input: import('../src/types/electron').DynamicActionSpeakerConfirmation) => Promise<{ success: boolean; actionIds?: string[]; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   getStorageUsage: () => Promise<StorageUsageSummary>;
@@ -508,6 +504,7 @@ interface ElectronAPI {
     meetingId: string,
     includeTranscript: boolean,
   ) => Promise<{ success: boolean; filePath?: string; error?: string; cancelled?: boolean }>;
+  applyMeetingEdit: (request: MeetingEditRequest) => Promise<MeetingEditResult>;
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>;
   updateMeetingSummary: (
     id: string,
@@ -1367,12 +1364,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   speakerVerificationEnroll: (samples: Array<{ samples?: number[]; pcm16?: ArrayBuffer; sampleRate: number; deviceFingerprint?: string }>) =>
     ipcRenderer.invoke('speaker-verification:enroll', samples),
   speakerVerificationDeleteProfile: () => ipcRenderer.invoke('speaker-verification:delete-profile'),
-  speakerVerificationSetSessionOverride: (input: {
-    speaker: string;
-    timestamp: number;
-    text: string;
-    action: 'force_me' | 'force_not_me' | 'clear';
-  }) => ipcRenderer.invoke('speaker-verification:set-session-override', input),
+  speakerVerificationSetSessionOverride: (input: import('../shared/transcriptIpc').SpeakerVerificationSessionOverride) => ipcRenderer.invoke('speaker-verification:set-session-override', input),
   confirmDynamicActionSpeaker: (input: import('../src/types/electron').DynamicActionSpeakerConfirmation) =>
     ipcRenderer.invoke('speaker-confirmation:confirm-dynamic-actions', input),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
@@ -1713,6 +1705,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
   exportMeetingDocx: (meetingId: string, includeTranscript: boolean) =>
     ipcRenderer.invoke('export-meeting-docx', meetingId, includeTranscript),
+  applyMeetingEdit: (request: MeetingEditRequest) => ipcRenderer.invoke('meeting-apply-edit', request),
   updateMeetingTitle: (id: string, title: string) =>
     ipcRenderer.invoke('update-meeting-title', { id, title }),
   updateMeetingSummary: (id: string, updates: any) =>

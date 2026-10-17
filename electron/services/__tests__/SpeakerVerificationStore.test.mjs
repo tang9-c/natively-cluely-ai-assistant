@@ -101,8 +101,10 @@ test('DatabaseManager backfills missing timeout stats for the branch v33 interme
   const db = new Database(path.join(dir, 'test.db'));
   try {
     db.exec(`
+      CREATE TABLE meetings (id TEXT PRIMARY KEY);
       CREATE TABLE transcripts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        meeting_id TEXT
       );
       CREATE TABLE speaker_profile_stats (
         profile_id TEXT PRIMARY KEY,
@@ -130,7 +132,7 @@ test('DatabaseManager backfills missing timeout stats for the branch v33 interme
     ]) {
       assert.ok(columns.includes(column), `speaker_profile_stats must include ${column}`);
     }
-    assert.equal(db.pragma('user_version', { simple: true }), 37);
+    assert.equal(db.pragma('user_version', { simple: true }), 38);
   } finally {
     db.close();
     fs.rmSync(dir, { recursive: true, force: true });

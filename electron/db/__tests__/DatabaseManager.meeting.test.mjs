@@ -19,6 +19,7 @@ function createMeetingSchema(db) {
     CREATE TABLE meetings (
       id TEXT PRIMARY KEY,
       title TEXT,
+      edit_state_json TEXT NOT NULL DEFAULT '{}',
       start_time INTEGER,
       duration_ms INTEGER,
       summary_json TEXT,
@@ -45,6 +46,10 @@ function createMeetingSchema(db) {
       end_timestamp_ms INTEGER,
       speaker_verification_json TEXT,
       speaker_identity_correction_json TEXT,
+      segment_id TEXT,
+      raw_segment_ids_json TEXT,
+      original_content TEXT,
+      edit_revision INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
     );
 
@@ -196,13 +201,13 @@ describe('DatabaseManager — saveMeeting / getMeetingDetails', () => {
     assert.equal(rows[1].type, 'followup_questions');
   });
 
-  it('saveMeeting is idempotent (INSERT OR REPLACE) on the same id', () => {
+  it('saveMeeting refuses to overwrite an existing durable meeting', () => {
     manager.saveMeeting({ id: 'mx', title: 'first', date: '2025-01-01T00:00:00Z' }, 1, 1);
-    manager.saveMeeting({ id: 'mx', title: 'second', date: '2025-01-01T00:00:00Z' }, 1, 1);
+    assert.throws(() => manager.saveMeeting({ id: 'mx', title: 'second', date: '2025-01-01T00:00:00Z' }, 1, 1));
     const count = db.prepare('SELECT COUNT(*) AS c FROM meetings WHERE id = ?').get('mx').c;
     assert.equal(count, 1);
     const row = db.prepare('SELECT title FROM meetings WHERE id = ?').get('mx');
-    assert.equal(row.title, 'second');
+    assert.equal(row.title, 'first');
   });
 
   it('getMeetingDetails returns summary + transcript + usage', () => {
@@ -230,7 +235,8 @@ describe('DatabaseManager — speaker identity correction migration', () => {
     it(`adds the correction column when upgrading from schema version ${startingVersion}`, () => {
       const { db, manager } = makeManager();
       db.exec(`
-        CREATE TABLE transcripts (id INTEGER PRIMARY KEY AUTOINCREMENT);
+        CREATE TABLE meetings (id TEXT PRIMARY KEY);
+        CREATE TABLE transcripts (id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_id TEXT);
         CREATE TABLE speaker_profile_stats (profile_id TEXT PRIMARY KEY);
       `);
       db.pragma(`user_version = ${startingVersion}`);
@@ -239,7 +245,7 @@ describe('DatabaseManager — speaker identity correction migration', () => {
 
       const columns = db.prepare('PRAGMA table_info(transcripts)').all().map(row => row.name);
       assert.ok(columns.includes('speaker_identity_correction_json'));
-      assert.equal(db.pragma('user_version', { simple: true }), 37);
+      assert.equal(db.pragma('user_version', { simple: true }), 38);
     });
   }
 });

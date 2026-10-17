@@ -232,3 +232,53 @@ describe('TranscriptSegmentCoalescer', () => {
     assert.equal(context[0].text, transcript[0].text);
   });
 });
+
+test('stable IDs retain first segment and aliases while manual edits stop coalescing', async () => {
+  const { TranscriptSegmentCoalescer } = await loadCoalescer();
+  const c = new TranscriptSegmentCoalescer();
+  const a = segment({ segmentId: 'a' });
+  const b = segment({ segmentId: 'b', text: '接口', timestamp: 1100 });
+  const merged = c.tryMerge(a,b);
+  assert.equal(merged.segment.segmentId,'a');
+  assert.ok(merged.segment.rawSegmentIds.includes('b'));
+  assert.equal(c.tryMerge({...a,editRevision:1},b).merged,false);
+  assert.equal(c.tryMerge({...a,speakerIdentityCorrection:{isMe:true,source:'user',correctedAt:1}},b).merged,false);
+});
+
+test('stable-ID corrections reject old generation and block later merge', async () => {
+  const { SessionTracker } = await loadSessionTracker();
+  const tracker = new SessionTracker();
+  tracker.addTranscript(segment({segmentId:'a'}));
+  const generation = tracker.getSessionGeneration();
+  assert.equal(tracker.setSpeakerVerificationOverride({segmentId:'a',sessionGeneration:generation,action:'force_not_me'}),true);
+  tracker.addTranscript(segment({segmentId:'b',text:'接口',timestamp:1100}));
+  assert.equal(tracker.getFullTranscript().length,2);
+  tracker.reset();
+  tracker.addTranscript(segment({segmentId:'a'}));
+  assert.equal(tracker.setSpeakerVerificationOverride({segmentId:'a',sessionGeneration:generation,action:'force_me'}),false);
+  assert.equal(tracker.setSpeakerVerificationOverride({segmentId:'a',action:'force_me'}),false);
+});
+
+test('restoring automatic identity still keeps manually touched segment boundary', async () => {
+ const {SessionTracker}=await loadSessionTracker();const tracker=new SessionTracker();
+ tracker.addTranscript(segment({segmentId:'a'}));
+ const request={segmentId:'a',sessionGeneration:tracker.getSessionGeneration()};
+ assert.equal(tracker.setSpeakerVerificationOverride({...request,action:'force_me'}),true);
+ assert.equal(tracker.getFullTranscript()[0].speakerVerification,undefined);
+ assert.equal(tracker.getEffectiveFullTranscript()[0].speakerVerification,undefined);
+ assert.equal(tracker.setSpeakerVerificationOverride({...request,action:'clear'}),true);
+ tracker.addTranscript(segment({segmentId:'b',text:'接口',timestamp:1100}));
+ assert.equal(tracker.getFullTranscript().length,2);
+});
+test('multiple merges keep stable alias resolution and original time',async()=>{
+ const {SessionTracker}=await loadSessionTracker();const tracker=new SessionTracker();
+ tracker.addTranscript(segment({segmentId:'a'}));
+ tracker.addTranscript(segment({segmentId:'b',text:'接口',timestamp:1100}));
+ tracker.addTranscript(segment({segmentId:'c',text:'设计',timestamp:1200}));
+ assert.equal(tracker.getFullTranscript().length,1);
+ const before=tracker.getFullTranscript()[0];
+ assert.deepEqual(before.rawSegmentIds,['a','b','c']);
+ assert.equal(tracker.setSpeakerVerificationOverride({segmentId:'b',sessionGeneration:tracker.getSessionGeneration(),action:'force_not_me'}),true);
+ const after=tracker.getFullTranscript()[0];
+ assert.equal(after.segmentId,'a');assert.equal(after.timestamp,1000);assert.equal(after.text,before.text);
+});

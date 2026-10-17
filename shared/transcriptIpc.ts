@@ -13,6 +13,8 @@ export interface TranscriptSpeakerVerificationMetadata {
 }
 
 export interface NativeAudioTranscriptPayload {
+  segmentId?: string;
+  sessionGeneration?: string;
   speaker: string;
   speakerId?: string;
   speakerLabel?: string;
@@ -42,3 +44,19 @@ export interface TranscriptBatchPayload {
   emittedAt: number;
   items: NativeAudioTranscriptPayload[];
 }
+
+export type SpeakerVerificationSessionOverride = {
+  action: 'force_me' | 'force_not_me' | 'clear';
+} & ({
+  segmentId: string;
+  sessionGeneration: string;
+  speaker?: string;
+  timestamp?: number;
+  text?: string;
+} | {
+  segmentId?: undefined;
+  sessionGeneration?: string;
+  speaker: string;
+  timestamp: number;
+  text: string;
+});
