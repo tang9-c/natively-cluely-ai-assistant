@@ -57,6 +57,7 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
         if (sectionTitleEditing && drafts.has('sections')) return Promise.resolve(false);
         if (flushPromise) return flushPromise.then(ok => ok && drafts.size ? flush() : ok);
         flushPromise = enqueue(async () => {
+            if (failedOperation) return false;
             while (drafts.size) {
                 if (status === 'conflict') return false;
                 const textEntry = [...drafts].find(([field]) => field.startsWith('text:'));

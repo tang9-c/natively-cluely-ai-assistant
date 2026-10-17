@@ -41,3 +41,10 @@ test('action text validity exactly matches canonical keep/drop without broadenin
   assert.equal(normalization.isValidMeetingActionText?.(text),kept,JSON.stringify(text));
  }
 });
+
+test('final I2: Markdown normalization reuses safe private boundaries and keeps structured metadata',()=>{
+ const item={id:'existing',text:'公开任务',owner:'甲',deadline:'周五',sourceTimestamp:22};
+ const result=normalize({overview:'## 行动项\n- 公开任务\n- 新任务\n## 私人问答（仅自己可见）\n### 行动项\n- PRIVATE',actionItemsStructured:[item]});
+ assert.deepEqual(result.actionItems,['公开任务','新任务']);assert.deepEqual(result.actionItemsStructured[0],item);
+ assert.deepEqual(normalize({...result,actionItemsStructured:[]}).actionItemsStructured,[]);
+});

@@ -233,3 +233,40 @@ test('legacy text-only update cannot choose between conflicting existing owners'
  assert.equal(manager.updateMeetingSummary('m',{actionItems:['任务']}),true);
  assert.deepEqual(manager.getMeetingDetails('m').detailedSummary.actionItemsStructured.map(item=>[item.id,item.owner]),[['a','甲'],['b','乙']]);
 });
+
+for(const source of ['overview','legacySummary'])for(const patch of [{title:'renamed'},{keyPoints:['new point']}])
+test(`final I2: first summary edit preserves ${source} Markdown tasks (${Object.keys(patch)[0]})`,t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ const markdown='## 会议概要\n公开事实\n## 行动项\n- 第一项\n- 第二项\n## 私人问答（仅自己可见）\n### 行动项\n- 私人任务';
+ const summary=source==='overview'?{detailedSummary:{overview:markdown}}:{legacySummary:markdown};
+ db.prepare('UPDATE meetings SET summary_json=? WHERE id=?').run(JSON.stringify(summary),'m');
+ assert.equal(manager.applyMeetingEdit({meetingId:'m',expectedRevision:0,operation:{type:'summary',patch}}).ok,true);
+ const stored=JSON.parse(db.prepare('SELECT summary_json FROM meetings WHERE id=?').get('m').summary_json).detailedSummary;
+ assert.equal(stored.schemaVersion,3);assert.deepEqual(stored.actionItemsStructured.map(item=>item.text),['第一项','第二项']);
+ const reopened=manager.getMeetingDetails('m');assert.deepEqual(reopened.detailedSummary.actionItems,['第一项','第二项']);
+ assert.equal(manager.applyMeetingEdit({meetingId:'m',expectedRevision:1,operation:{type:'summary',patch:{actionItemsStructured:[]}}}).ok,true);
+ assert.deepEqual(manager.getMeetingDetails('m').detailedSummary.actionItemsStructured,[]);
+});
+
+test('final I2: explicit same-patch empty actions and overview do not revive legacy body or metadata',t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ const item={id:'keep',text:'公开任务',owner:'甲',deadline:'周五',sourceTimestamp:9};
+ const markdown='## 概要\n旧正文\n## 行动项\n- 公开任务\n- 旧任务';
+ db.prepare('UPDATE meetings SET summary_json=? WHERE id=?').run(JSON.stringify({legacySummary:markdown,detailedSummary:{overview:markdown,actionItemsStructured:[item]}}),'m');
+ let result=manager.applyMeetingEdit({meetingId:'m',expectedRevision:0,operation:{type:'summary',patch:{title:'new'}}});
+ assert.equal(result.ok,true);assert.deepEqual(result.meeting.detailedSummary.actionItemsStructured.find(task=>task.text==='公开任务'),item);
+ result=manager.applyMeetingEdit({meetingId:'m',expectedRevision:1,operation:{type:'summary',patch:{overview:'',actionItemsStructured:[]}}});
+ assert.equal(result.ok,true);assert.equal(result.meeting.detailedSummary.overview,'');assert.deepEqual(result.meeting.detailedSummary.actionItemsStructured,[]);
+ // A first-upgrade deletion must also win over the legacy Markdown being migrated.
+ db.prepare('UPDATE meetings SET summary_json=? WHERE id=?').run(JSON.stringify({legacySummary:markdown}),'m');
+ result=manager.applyMeetingEdit({meetingId:'m',expectedRevision:2,operation:{type:'summary',patch:{overview:'',actionItemsStructured:[]}}});
+ assert.equal(result.ok,true);assert.equal(result.meeting.detailedSummary.overview,'');assert.deepEqual(result.meeting.detailedSummary.actionItemsStructured,[]);
+});
+
+test('final M1: meeting detail preserves the existing summary processed state',t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ for(const processed of [false,true]){
+  db.prepare('UPDATE meetings SET is_processed=? WHERE id=?').run(processed?1:0,'m');
+  assert.equal(manager.getMeetingDetails('m').isProcessed,processed);
+ }
+});

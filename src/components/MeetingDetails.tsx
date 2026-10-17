@@ -629,7 +629,7 @@ const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProp
 
                         {activeTab === 'transcript' && (
                             <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                                {(meeting.editState?.transcriptRevision ?? 0) > (meeting.editState?.summarySourceRevision ?? 0) && <p role="status" className="mb-3 text-xs text-text-tertiary">记录已修改，摘要可能需要调整。</p>}
+                                {meeting.isProcessed && (meeting.editState?.transcriptRevision ?? 0) > (meeting.editState?.summarySourceRevision ?? 0) && <p role="status" className="mb-3 text-xs text-text-tertiary">记录已修改，摘要可能需要调整。</p>}
                                 {identityStatus && <p role="status" className="mb-3 text-xs text-text-secondary">{identityStatus}</p>}
                                 {meeting.transcript?.some(entry => resolveSpeakerIdentity(entry).source === 'unknown') && <p className="mb-3 text-xs text-text-tertiary">音源不代表人物身份；旧版本曾按音源标注。可点击身份标签纠正。</p>}
                                 <TranscriptVirtualList

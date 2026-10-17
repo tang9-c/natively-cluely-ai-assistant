@@ -3471,7 +3471,8 @@ export class DatabaseManager {
                         || typeof value.text !== 'string' || (value.sourceTimestamp !== undefined && !Number.isFinite(value.sourceTimestamp))
                         || ['owner', 'deadline'].some(key => value[key] !== undefined && typeof value[key] !== 'string'))) return { ok: false, error: 'invalid_input' };
                     const summary = JSON.parse(row.summary_json || '{}');
-                    summary.detailedSummary = normalizeMeetingActionItems(summary.detailedSummary || {});
+                    summary.detailedSummary = normalizeMeetingActionItems(summary.detailedSummary || {}, false,
+                        state.editedSummaryFields.includes('overview') ? '' : summary.legacySummary);
                     if (Object.prototype.hasOwnProperty.call(patch, 'actionItems')) {
                         patch.actionItemsStructured = replaceLegacyActionItems(summary.detailedSummary, patch.actionItems as string[]);
                     }
@@ -3850,6 +3851,7 @@ export class DatabaseManager {
 
         return {
             editState: readMeetingEditState(meetingRow.edit_state_json),
+            isProcessed: Boolean(meetingRow.is_processed),
             id: meetingRow.id,
             title: meetingRow.title,
             date: meetingRow.created_at,

@@ -600,3 +600,90 @@ test('T7 launcher with no meeting editor quits naturally without a save request 
  await electronApp.evaluate(({app}:any)=>app.quit()).catch(()=>{});
  expect(await exited).toEqual({code:0,signal:null});
 });
+
+for(const action of ['close','copy','leave'] as const)test(`T7 final I1 inflight identity failure blocks queued ${action} until retry`,async({electronApp,page})=>{
+ await seed(electronApp);await open(page);await fakeClipboard(page);
+ await database(electronApp,"CREATE TRIGGER fail_final_identity BEFORE UPDATE OF speaker_identity_correction_json ON transcripts BEGIN SELECT RAISE(ABORT,'fixture_identity_failure'); END;");
+ await electronApp.evaluate(({ipcMain}:any)=>{
+  const original=(ipcMain as any)._invokeHandlers.get('meeting-apply-edit');let first=true;
+  (globalThis as any).__finalIdentityRelease=null;
+  ipcMain.removeHandler('meeting-apply-edit');ipcMain.handle('meeting-apply-edit',async(event:any,request:any)=>{
+   if(first&&request.operation.type==='identity'){first=false;await new Promise(resolve=>{(globalThis as any).__finalIdentityRelease=resolve;});}
+   return original(event,request);
+  });
+ });
+ try {
+ await page.getByRole('button',{name:'转录',exact:true}).click();
+ await page.getByRole('button',{name:'身份未确认',exact:true}).click();await page.getByRole('menuitem',{name:'标记为我',exact:true}).click();
+ await expect.poll(()=>electronApp.evaluate(()=>typeof(globalThis as any).__finalIdentityRelease)).toBe('function');
+ const request=async()=>{
+  if(action==='close')await electronApp.evaluate(({BrowserWindow}:any)=>BrowserWindow.getAllWindows().find((win:any)=>new URL(win.webContents.getURL()).searchParams.get('window')==='launcher')?.close());
+  else await page.getByRole('button',{name:action==='copy'?'复制完整转录':'返回会议列表',exact:true}).click();
+ };
+ await request();expect(page.isClosed()).toBe(false);
+ await electronApp.evaluate(()=>(globalThis as any).__finalIdentityRelease());
+ await expect(page.getByText('保存失败，输入已保留。请重试后再离开或复制导出。')).toBeVisible();
+ await expect(page.getByLabel('会议标题',{exact:true})).toBeVisible();expect(page.isClosed()).toBe(false);
+ expect(await page.evaluate(()=>(window as any).__copied)).toEqual([]);
+ expect((await readMeeting(page)).transcript[0].speakerIdentityCorrection).toBeUndefined();
+ await database(electronApp,'DROP TRIGGER fail_final_identity');await page.getByRole('button',{name:'重试保存',exact:true}).click();
+ await expect(page.getByText('已保存',{exact:true})).toBeVisible();expect((await readMeeting(page)).transcript[0].speakerIdentityCorrection.identity).toBe('me');
+ if(action==='close'){const closed=page.waitForEvent('close');await request();await closed;}
+ else if(action==='leave'){await request();await expect(page.getByLabel('会议标题',{exact:true})).toBeHidden();}
+ else{await request();expect(await page.evaluate(()=>(window as any).__copied[0])).toContain('我: 原始转录');}
+ } finally {
+  if(!page.isClosed()){
+   await electronApp.evaluate(()=>(globalThis as any).__finalIdentityRelease?.());
+   await database(electronApp,'DROP TRIGGER IF EXISTS fail_final_identity');
+   if((await readMeeting(page)).transcript[0].speakerIdentityCorrection?.identity!=='me'){
+    if(!await page.getByLabel('会议标题',{exact:true}).isVisible())await page.getByText('编辑测试会议',{exact:true}).click();
+    const retry=page.getByRole('button',{name:'重试保存',exact:true});
+    if(await retry.isVisible())await retry.click();
+    else {
+     const mark=page.getByRole('menuitem',{name:'标记为我',exact:true});
+     if(!await mark.isVisible())await page.getByRole('button',{name:'身份未确认',exact:true}).click();
+     await mark.click();
+    }
+    await expect(page.getByText('已保存',{exact:true})).toBeVisible();
+   }
+  }
+ }
+});
+
+test('T7 final I2 first legacy summary patch and reopen preserve main copy and Word order',async({electronApp,page})=>{
+ await seed(electronApp);await minutesClipboard(electronApp);
+ const markdown='## 概要\n公开会议事实\n## 行动项\n- 第一Markdown任务\n- 第二Markdown任务\n## 私人问答（仅自己可见）\n### 行动项\n- PRIVATE_TASK';
+ for(const source of ['overview','legacySummary'])for(const field of ['title','keyPoints']){
+  await minutesClipboard(electronApp);
+  await electronApp.evaluate(({app,dialog}:any,{source,markdown}:any)=>{
+   const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'final-migrate.cjs'));
+   const db=new (require('better-sqlite3'))(require('node:path').join(app.getPath('userData'),'natively.db'));
+   const summary=source==='overview'?{detailedSummary:{overview:markdown}}:{legacySummary:markdown};
+   db.prepare('UPDATE meetings SET summary_json=?,edit_state_json=? WHERE id=?').run(JSON.stringify(summary),'{}','editing-fixture');db.close();
+   dialog.showSaveDialog=async()=>({canceled:false,filePath:require('node:path').join(app.getPath('userData'),'final-migration.docx')});
+  },{source,markdown});
+  const result=await page.evaluate(field=>window.electronAPI.applyMeetingEdit({meetingId:'editing-fixture',expectedRevision:0,operation:{type:'summary',patch:field==='title'?{title:'保留任务的新标题'}:{keyPoints:['新要点']}}}),field);
+  expect(result.ok).toBe(true);await page.reload();
+  const reopened=await readMeeting(page);expect(reopened.detailedSummary.actionItemsStructured.map((item:any)=>item.text)).toEqual(['第一Markdown任务','第二Markdown任务']);
+  const revision=reopened.editState.meetingRevision;
+  expect(await page.evaluate(revision=>window.electronAPI.copyMeetingMinutes('editing-fixture',revision),revision)).toEqual({success:true});
+  const copied=(await copiedMinutes(electronApp))[0];expect(copied.text).not.toContain('PRIVATE');
+  const want=['会议概述','公开会议事实',...(field==='keyPoints'?['关键要点','新要点']:[]),'行动项','第一Markdown任务','第二Markdown任务'];
+  expect(copied.text.split('\n').slice(2).map((line:string)=>line.replace(/^• /,''))).toEqual(want);
+  const exported=await page.evaluate(revision=>window.electronAPI.exportMeetingDocx('editing-fixture',{profile:'minutes',expectedRevision:revision}),revision);expect(exported.success).toBe(true);
+  const xml=await electronApp.evaluate(async(_:any,file:string)=>{const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'final-word.cjs'));return (await require('jszip').loadAsync(require('node:fs').readFileSync(file))).file('word/document.xml').async('string');},exported.filePath);
+  const paragraphs=[...xml.matchAll(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g)].map(([p]:any)=>[...p.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(([,text]:any)=>text).join('')).filter(Boolean);
+  expect(paragraphs).toEqual(copied.text.split('\n').map((line:string)=>line.replace(/^• /,'')));
+ }
+});
+
+test('T7 final M1 only generated summaries show revision stale feedback',async({electronApp,page})=>{
+ await seed(electronApp);
+ await database(electronApp,"UPDATE meetings SET is_processed=0,edit_state_json='{}' WHERE id='editing-fixture'");
+ expect((await page.evaluate(()=>window.electronAPI.applyMeetingEdit({meetingId:'editing-fixture',expectedRevision:0,operation:{type:'identity',segmentIds:['seg-0'],identity:'me'}}))).ok).toBe(true);
+ await open(page);await page.getByRole('button',{name:'转录',exact:true}).click();
+ await expect(page.getByText('记录已修改，摘要可能需要调整。',{exact:true})).toBeHidden();
+ await database(electronApp,"UPDATE meetings SET is_processed=1 WHERE id='editing-fixture'");
+ await open(page);await page.getByRole('button',{name:'转录',exact:true}).click();
+ await expect(page.getByText('记录已修改，摘要可能需要调整。',{exact:true})).toBeVisible();
+});

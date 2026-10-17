@@ -39,7 +39,7 @@ test('audio recovery stays quiet, failures remain channel-specific and permissio
   await send({ channel: 'system', state: 'failed', terminal: true, message: systemMessage, recommendedFix: 'open-settings' });
   await send({ channel: 'mic', state: 'healthy' });
   await expect(live.getByText(systemMessage, { exact: true })).toBeVisible();
-  await expect(live.getByText('打开设置', { exact: true })).toBeVisible();
+  await expect(live.getByText(systemMessage, { exact: true }).locator('../..').getByRole('button', { name: '打开设置', exact: true })).toBeVisible();
   await live.screenshot({ path: '.tmp/v28-t3/ui-system-failed-mic-healthy.png' });
 
   await send({ channel: 'mic', state: 'failed', terminal: true, message: micMessage, recommendedFix: 'open-settings' });

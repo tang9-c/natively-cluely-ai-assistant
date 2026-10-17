@@ -1,4 +1,5 @@
 import type { MeetingEditState } from './meetingEdits';
+import { markdownBlocks } from './meetingMinutesMarkdown';
 
 export interface MeetingActionItem {
     id: string;
@@ -9,6 +10,7 @@ export interface MeetingActionItem {
 }
 interface ActionSummary {
     schemaVersion?: number;
+    overview?: string;
     actionItems?: string[];
     actionItemsStructured?: MeetingActionItem[];
     sections?: Array<{ title: string; bullets: string[] }>;
@@ -26,7 +28,7 @@ function stableId(text: string, index: number): string {
 }
 
 /** v3's structured list is authoritative, including an explicitly empty list. */
-export function normalizeMeetingActionItems<T extends ActionSummary>(summary: T, mergeExplicitSections = false): T & {
+export function normalizeMeetingActionItems<T extends ActionSummary>(summary: T, mergeExplicitSections = false, legacyMarkdown = ''): T & {
     schemaVersion: 3; actionItems: string[]; actionItemsStructured: MeetingActionItem[];
 } {
     const structured = summary.actionItemsStructured || [];
@@ -47,8 +49,10 @@ export function normalizeMeetingActionItems<T extends ActionSummary>(summary: T,
         result.push(...structured.filter(item => isValidMeetingActionText(item.text)).map(item => ({ ...item })));
         if (mergeExplicitSections) sectionActions.forEach((text, index) => add({ id: stableId(taskKey(text), index), text }));
     } else {
+        const markdownActions: string[] = [];
+        markdownBlocks(typeof summary.overview === 'string' ? summary.overview : legacyMarkdown, markdownActions);
         const remaining = [...structured];
-        for (const [index, text] of [...(summary.actionItems || []), ...sectionActions].entries()) {
+        for (const [index, text] of [...(summary.actionItems || []), ...markdownActions, ...sectionActions].entries()) {
             const match = remaining.findIndex(item => taskKey(item.text) === taskKey(text));
             const metadata = match < 0 ? undefined : remaining.splice(match, 1)[0];
             add({ ...metadata, id: metadata?.id || stableId(taskKey(text), index), text });

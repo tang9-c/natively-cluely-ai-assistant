@@ -152,3 +152,21 @@ test('a newer text draft waits for the in-flight text save and retains its own r
  assert.equal(await pending,true);assert.deepEqual(f.calls.map(call=>call.operation.text),['first text','newer text']);assert.deepEqual(f.calls.map(call=>call.expectedRevision),[0,1]);
  assert.equal(f.controller.snapshot().meeting.transcript[0].text,'newer text');
 });
+
+for(const draft of ['none','summary','text'])test(`final I1: queued flush cannot erase inflight identity failure with ${draft} draft`,async t=>{
+ const gate=deferred();const f=fixture(t,async(_request,n)=>n===1?await gate.promise:undefined);
+ const operation={type:'identity',segmentIds:['seg'],identity:'other'};
+ t.after(()=>gate.resolve({ok:false,error:'save_failed'}));
+ const identity=f.controller.operation(operation);
+ while(f.calls.length<1)await new Promise(r=>setImmediate(r));
+ if(draft==='summary')f.controller.patch({overview:'retained summary'});
+ if(draft==='text')f.controller.text('seg','retained text');
+ const barrier=f.controller.flush();gate.resolve({ok:false,error:'save_failed'});
+ assert.equal(await identity,false);assert.equal(await barrier,false);
+ assert.equal(f.controller.snapshot().status,'error');assert.equal(f.calls.length,1);
+ if(draft==='summary')assert.equal(f.controller.snapshot().meeting.detailedSummary.overview,'retained summary');
+ if(draft==='text')assert.equal(f.controller.snapshot().meeting.transcript[0].text,'retained text');
+ assert.equal(await f.controller.flush(),false);
+ assert.equal(await f.controller.retry(),true);assert.deepEqual(f.calls.at(-1).operation,operation);
+ assert.equal(await f.controller.flush(),true);assert.equal(f.controller.snapshot().status,'saved');
+});

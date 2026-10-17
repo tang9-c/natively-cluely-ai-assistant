@@ -22,7 +22,7 @@ test('saved identity correction persists and selected batch remains virtualized'
   await page.screenshot({path:'.tmp/v28-t2/saved-identity-menu.png'});
   await page.getByRole('menuitem',{name:'标记为我',exact:true}).click();
   await expect(first.getByRole('button',{name:'我',exact:true})).toBeVisible();
-  await expect(page.getByText('身份已修改，已有摘要可能需要修正。')).toBeVisible();
+  await expect(page.getByText('记录已修改，摘要可能需要调整。')).toBeVisible();
   await page.reload();
   await page.getByText('身份测试会议',{exact:true}).click();
   await page.getByRole('button',{name:'转录',exact:true}).click();
