@@ -1,20 +1,25 @@
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AudioDropSnapshot {
     pub dropped_samples: u64,
+    pub received_samples: u64,
     pub drop_events: u64,
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct AudioDropStats {
+    actual_device_id: Mutex<Option<String>>,
     dropped_samples: AtomicU64,
+    received_samples: AtomicU64,
     drop_events: AtomicU64,
 }
 
 impl AudioDropStats {
     #[inline]
     pub fn record_write(&self, requested: usize, written: usize) {
+        saturating_add(&self.received_samples, requested as u64);
         let dropped = requested.saturating_sub(written) as u64;
         if dropped == 0 {
             return;
@@ -24,15 +29,27 @@ impl AudioDropStats {
         saturating_add(&self.drop_events, 1);
     }
 
+    pub fn set_device_id(&self, id: String) {
+        if let Ok(mut slot) = self.actual_device_id.lock() {
+            *slot = Some(id);
+        }
+    }
+
+    pub fn actual_device_id(&self) -> Option<String> {
+        self.actual_device_id.lock().ok().and_then(|id| id.clone())
+    }
+
     pub fn snapshot(&self) -> AudioDropSnapshot {
         AudioDropSnapshot {
             dropped_samples: self.dropped_samples.load(Ordering::Relaxed),
+            received_samples: self.received_samples.load(Ordering::Relaxed),
             drop_events: self.drop_events.load(Ordering::Relaxed),
         }
     }
 
     pub fn reset(&self) {
         self.dropped_samples.store(0, Ordering::Relaxed);
+        self.received_samples.store(0, Ordering::Relaxed);
         self.drop_events.store(0, Ordering::Relaxed);
     }
 }
@@ -59,6 +76,25 @@ mod tests {
         let snapshot = stats.snapshot();
         assert_eq!(snapshot.dropped_samples, 60);
         assert_eq!(snapshot.drop_events, 2);
+        assert_eq!(snapshot.received_samples, 960);
+    }
+
+    #[test]
+    fn received_counter_saturates_and_device_identity_survives_counter_reset() {
+        use std::sync::atomic::Ordering;
+        let stats = AudioDropStats::default();
+        stats
+            .received_samples
+            .store(u64::MAX - 1, Ordering::Relaxed);
+        stats.record_write(320, 320);
+        assert_eq!(stats.snapshot().received_samples, u64::MAX);
+        stats.set_device_id("fictional-device".to_string());
+        stats.reset();
+        assert_eq!(stats.snapshot().received_samples, 0);
+        assert_eq!(
+            stats.actual_device_id().as_deref(),
+            Some("fictional-device")
+        );
     }
 
     #[test]
@@ -71,5 +107,6 @@ mod tests {
         let snapshot = stats.snapshot();
         assert_eq!(snapshot.dropped_samples, 0);
         assert_eq!(snapshot.drop_events, 0);
+        assert_eq!(snapshot.received_samples, 0);
     }
 }

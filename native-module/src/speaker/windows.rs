@@ -213,6 +213,7 @@ impl SpeakerInput {
                 _ => get_default_device(&Direction::Render)
                     .map_err(|e| anyhow::anyhow!("default render device unavailable: {}", e))?,
             };
+            if let Ok(id) = device.get_id() { drop_stats.set_device_id(id); }
 
             let mut audio_client = device
                 .get_iaudioclient()

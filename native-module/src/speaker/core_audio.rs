@@ -57,6 +57,7 @@ impl SpeakerInput {
         };
 
         let output_uid = output_device.uid()?;
+        drop_stats.set_device_id(output_uid.to_string());
         println!("[CoreAudioTap] Target device UID: {}", output_uid);
         let output_uid_ns = ns::String::with_str(&output_uid.to_string());
 

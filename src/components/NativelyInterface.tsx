@@ -1164,11 +1164,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const systemAudioRepairAction = 'repair-and-restart';
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
   const [isRepairingTcc, setIsRepairingTcc] = useState(false);
+  const captureWarningsRef = useRef<Partial<Record<'system' | 'mic', SystemAudioWarning>>>({});
+  const captureStatesRef = useRef<Partial<Record<'system' | 'mic', 'starting' | 'healthy' | 'recovering' | 'failed'>>>({});
   useEffect(() => {
     sttUserStatusRef.current = sttUserStatus;
-    if (sttUserStatus === 'connected') {
-      micCaptureFailureRef.current = false;
-    }
     if (sttUserStatus === 'failed') {
       micCaptureFailureRef.current = true;
     }
@@ -1195,6 +1194,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setMeetingStartStatus(null);
         return;
       }
+      captureWarningsRef.current = {};
+      captureStatesRef.current = {};
       setSystemAudioWarning(null);
       setSystemAudioIssue(null);
       setMeetingStartStatus(null);
@@ -1227,8 +1228,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
       setSystemAudioIssue(message || '系统音频未捕获');
-      if (!micCaptureFailureRef.current && sttUserStatusRef.current !== 'failed') return;
-      setSystemAudioWarning({ kind: 'screen-recording-permission', message });
+      const warning: SystemAudioWarning = { kind: 'screen-recording-permission', message };
+      captureWarningsRef.current.system = warning;
+      setSystemAudioWarning(captureWarningsRef.current.mic ?? warning);
       setIsExpanded(true); // Force overlay open so user sees the warning
     });
     return () => unsub?.();
@@ -1236,35 +1238,54 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => {
     const unsub = window.electronAPI?.onAudioCaptureFailed?.((payload) => {
+      const channel = payload.channel;
+      if (payload.state) captureStatesRef.current[channel] = payload.state;
+      if (payload.state === 'starting' || payload.state === 'recovering') return;
+      if (payload.state === 'healthy') {
+        delete captureWarningsRef.current[channel];
+        if (channel === 'mic') micCaptureFailureRef.current = false;
+        else setSystemAudioIssue(null);
+        setSystemAudioWarning((previous) => {
+          const matches = channel === 'mic'
+            ? previous?.kind === 'microphone-capture-failure'
+            : previous?.kind === 'audio-capture-failure' || previous?.kind === 'screen-recording-permission';
+          return matches ? captureWarningsRef.current.mic ?? captureWarningsRef.current.system ?? null : previous;
+        });
+        return;
+      }
+
       if (payload.channel === 'mic') {
         micCaptureFailureRef.current = true;
         if (payload.terminal || payload.stuck || payload.recommendedFix === 'reset-tcc' || payload.staleGrantSuspected) {
-          setSystemAudioWarning({
+          const warning: SystemAudioWarning = {
             kind: 'microphone-capture-failure',
             message: payload.message,
             backend: payload.backend,
             code: payload.code,
             recommendedFix: payload.recommendedFix,
             staleGrantSuspected: payload.staleGrantSuspected,
-          });
+          };
+          captureWarningsRef.current.mic = warning;
+          setSystemAudioWarning(warning);
           setIsExpanded(true);
         }
         return;
       }
       setSystemAudioIssue(payload.message || '系统音频未捕获');
-      if (!micCaptureFailureRef.current && sttUserStatusRef.current !== 'failed') return;
       // Only surface terminal failures or the stuck signal — transient
       // recovery attempts shouldn't spam the banner since recovery
       // typically succeeds within ~1.5s.
       if (payload.terminal || payload.stuck || payload.recommendedFix === 'reset-tcc' || payload.staleGrantSuspected) {
-        setSystemAudioWarning({
+        const warning: SystemAudioWarning = {
           kind: 'audio-capture-failure',
           message: payload.message,
           backend: payload.backend,
           code: payload.code,
           recommendedFix: payload.recommendedFix,
           staleGrantSuspected: payload.staleGrantSuspected,
-        });
+        };
+        captureWarningsRef.current.system = warning;
+        setSystemAudioWarning(warning);
         setIsExpanded(true);
       }
     });
@@ -1968,7 +1989,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             setHasInterviewerTranscript(true);
             setSttInterviewerStatus('connected');
             setSttInterviewerError('');
-            setSystemAudioIssue(null);
+            if (captureStatesRef.current.system !== 'failed') setSystemAudioIssue(null);
           }
 
           rollingItems.push(transcript);

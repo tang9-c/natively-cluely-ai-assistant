@@ -43,6 +43,8 @@ const CANONICAL_STT_RATE: u32 = 16000;
 pub struct AudioBufferDiagnostics {
     pub dropped_samples: f64,
     pub drop_events: f64,
+    pub received_samples: f64,
+    pub actual_device_id: Option<String>,
 }
 
 // ============================================================================
@@ -285,6 +287,8 @@ impl SystemAudioCapture {
         AudioBufferDiagnostics {
             dropped_samples: snapshot.dropped_samples as f64,
             drop_events: snapshot.drop_events as f64,
+            received_samples: snapshot.received_samples as f64,
+            actual_device_id: self.buffer_drop_stats.actual_device_id(),
         }
     }
 
@@ -621,6 +625,8 @@ impl MicrophoneCapture {
         AudioBufferDiagnostics {
             dropped_samples: snapshot.dropped_samples as f64,
             drop_events: snapshot.drop_events as f64,
+            received_samples: snapshot.received_samples as f64,
+            actual_device_id: self.buffer_drop_stats.actual_device_id(),
         }
     }
 

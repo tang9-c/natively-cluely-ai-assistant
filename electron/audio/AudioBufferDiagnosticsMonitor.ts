@@ -1,6 +1,8 @@
 export interface AudioBufferSnapshot {
     droppedSamples: number;
     dropEvents: number;
+    receivedSamples?: number;
+    actualDeviceId?: string;
 }
 
 export interface AudioBufferContext {
@@ -21,6 +23,7 @@ interface AudioBufferDiagnosticsMonitorOptions {
     isVerbose: () => boolean;
     logger?: DiagnosticsLogger;
     intervalMs?: number;
+    onHeartbeat?: (receivedSamples: number) => void;
 }
 
 const DEFAULT_INTERVAL_MS = 5_000;
@@ -38,6 +41,7 @@ export class AudioBufferDiagnosticsMonitor {
     private readonly isVerbose: () => boolean;
     private readonly logger: DiagnosticsLogger;
     private readonly intervalMs: number;
+    private readonly optionsHeartbeat?: (receivedSamples: number) => void;
     private timer: NodeJS.Timeout | null = null;
     private active = false;
     private previousSnapshot: AudioBufferSnapshot | null = null;
@@ -47,6 +51,7 @@ export class AudioBufferDiagnosticsMonitor {
     private intervalTotalMs = 0;
     private intervalCount = 0;
     private maxIntervalMs = 0;
+    private lastSummaryAtMs: number | null = null;
 
     constructor(options: AudioBufferDiagnosticsMonitorOptions) {
         this.channel = options.channel;
@@ -55,6 +60,7 @@ export class AudioBufferDiagnosticsMonitor {
         this.isVerbose = options.isVerbose;
         this.logger = options.logger ?? console;
         this.intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
+        this.optionsHeartbeat = options.onHeartbeat;
     }
 
     public start(): void {
@@ -89,6 +95,7 @@ export class AudioBufferDiagnosticsMonitor {
         const droppedSamplesDelta = Math.max(0, snapshot.droppedSamples - previous.droppedSamples);
         const dropEventsDelta = Math.max(0, snapshot.dropEvents - previous.dropEvents);
         this.previousSnapshot = snapshot;
+        if (snapshot.receivedSamples !== undefined) this.optionsHeartbeat?.(snapshot.receivedSamples);
 
         const context = this.readContext();
         if (droppedSamplesDelta > 0 || dropEventsDelta > 0) {
@@ -101,7 +108,8 @@ export class AudioBufferDiagnosticsMonitor {
             });
         }
 
-        if (this.isVerbose()) {
+        if (this.isVerbose() && (this.lastSummaryAtMs === null || Date.now() - this.lastSummaryAtMs >= DEFAULT_INTERVAL_MS)) {
+            this.lastSummaryAtMs = Date.now();
             this.logger.log('[AudioBufferDiagnostics] Capture summary', {
                 channel: this.channel,
                 backend: context.backend,
@@ -130,6 +138,7 @@ export class AudioBufferDiagnosticsMonitor {
         this.intervalTotalMs = 0;
         this.intervalCount = 0;
         this.maxIntervalMs = 0;
+        this.lastSummaryAtMs = null;
     }
 
     private readSnapshot(): AudioBufferSnapshot | null {
@@ -140,6 +149,8 @@ export class AudioBufferDiagnosticsMonitor {
             return {
                 droppedSamples: normalizeCounter(snapshot.droppedSamples),
                 dropEvents: normalizeCounter(snapshot.dropEvents),
+                receivedSamples: Number.isSafeInteger(snapshot.receivedSamples) && snapshot.receivedSamples! >= 0
+                    ? snapshot.receivedSamples : undefined,
             };
         } catch {
             return null;

@@ -16,6 +16,8 @@ function createNativeUnavailableError(): Error {
 
 export class SystemAudioCapture extends EventEmitter {
     private isRecording: boolean = false;
+    private captureGeneration = 0;
+    private nativeStartAttempted = false;
     private deviceId: string | null = null;
     private detectedSampleRate: number = 48000;
     private monitor: any = null;
@@ -35,6 +37,10 @@ export class SystemAudioCapture extends EventEmitter {
             emittedSampleRate: this.getSampleRate(),
         }),
         isVerbose: isVerboseLogging,
+        intervalMs: 250,
+        onHeartbeat: (samples) => {
+            if (this.isRecording && this.supportsContinuousHeartbeat()) this.emit('heartbeat', samples);
+        },
     });
 
     constructor(deviceId?: string | null) {
@@ -105,6 +111,21 @@ export class SystemAudioCapture extends EventEmitter {
         return 'unknown';
     }
 
+    public getActualDeviceId(): string | null {
+        // SCK captures globally; a failed CoreAudio attempt may have left an endpoint in diagnostics.
+        if (this.getBackendName() === 'sck') return null;
+        try { return this.getBufferDiagnostics().actualDeviceId || null; }
+        catch { return null; }
+    }
+
+    public supportsContinuousHeartbeat(): boolean {
+        // Old native binaries and silence-gated backends must never look stalled.
+        try {
+            const samples = this.getBufferDiagnostics().receivedSamples;
+            return this.getBackendName() === 'coreaudio' && Number.isSafeInteger(samples) && samples! >= 0;
+        } catch { return false; }
+    }
+
     private getBufferDiagnostics(): AudioBufferSnapshot {
         if (typeof this.monitor?.getBufferDiagnostics === 'function') {
             return this.monitor.getBufferDiagnostics();
@@ -120,6 +141,8 @@ export class SystemAudioCapture extends EventEmitter {
      */
     public start(): void {
         if (this.isRecording) return;
+        const generation = ++this.captureGeneration;
+        this.emit('start');
 
         if (!RustAudioCapture) {
             const err = createNativeUnavailableError();
@@ -147,7 +170,10 @@ export class SystemAudioCapture extends EventEmitter {
 
             this.isRecording = true; // Set BEFORE start() to prevent re-entrant calls
 
+            this.nativeStartAttempted = true;
             this.monitor.start((err: Error | null, chunk: Buffer) => {
+                // Ignore all late callbacks, including errors from a destroyed instance.
+                if (!this.isRecording || generation !== this.captureGeneration) return;
                 // napi v3 ThreadsafeFunction passes (err, arg) format
                 if (err) {
                     console.error('[SystemAudioCapture] Callback error:', err);
@@ -175,6 +201,7 @@ export class SystemAudioCapture extends EventEmitter {
                     this.emit('data', chunk);
                 }
             }, (err: Error | null, _ended: boolean) => {
+                if (!this.isRecording || generation !== this.captureGeneration) return;
                 // Speech-ended callback from Rust SilenceSuppressor.
                 // _ended is always `true` when fired (Rust only invokes on speech→silence transition).
                 if (err) {
@@ -184,6 +211,7 @@ export class SystemAudioCapture extends EventEmitter {
                 this.emit('speech_ended');
             });
 
+            if (!this.isRecording || generation !== this.captureGeneration) return;
             this.audioDiagnostics.start();
             // getSampleRate MUST be called AFTER start() — background init updates
             // the atomic once SCK/CoreAudio initialises (~5-7s). Reading before start()
@@ -208,7 +236,6 @@ export class SystemAudioCapture extends EventEmitter {
                 this.sampleRatePollTimers.push(setTimeout(pollRate, 8000));
             }
 
-            this.emit('start');
         } catch (error) {
             console.error('[SystemAudioCapture] Failed to start:', error);
             this.isRecording = false;
@@ -265,9 +292,10 @@ export class SystemAudioCapture extends EventEmitter {
      */
     public stop(): Promise<void> {
         // Idempotent — see MicrophoneCapture.stop().
-        if (!this.isRecording) {
+        if (!this.isRecording && !this.nativeStartAttempted) {
             return this._teardownPromise ?? Promise.resolve();
         }
+        this.nativeStartAttempted = false;
 
         // Cancel pending sample-rate polls before nulling the monitor to prevent
         // stale timers from reading a null or re-created monitor on the next start().

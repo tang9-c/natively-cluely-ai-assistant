@@ -217,6 +217,7 @@ impl MicrophoneStream {
     pub fn new(device_id: Option<String>, drop_stats: Arc<AudioDropStats>) -> Result<Self> {
         let host = cpal::default_host();
         let device = resolve_input_device(&host, device_id.as_deref())?;
+        drop_stats.set_device_id(device.name().unwrap_or_default());
 
         let config = pick_supported_config(&device)?;
 

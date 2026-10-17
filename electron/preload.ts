@@ -403,6 +403,7 @@ interface ElectronAPI {
   onAudioCaptureFailed: (
     callback: (payload: {
       channel: 'system' | 'mic';
+      state?: 'starting' | 'healthy' | 'recovering' | 'failed';
       message: string;
       code?: string;
       recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
@@ -1602,6 +1603,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAudioCaptureFailed: (
     callback: (payload: {
       channel: 'system' | 'mic';
+      state?: 'starting' | 'healthy' | 'recovering' | 'failed';
       message: string;
       code?: string;
       recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';

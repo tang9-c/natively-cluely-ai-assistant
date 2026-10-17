@@ -18,6 +18,8 @@ function createNativeUnavailableError(): Error {
 export class MicrophoneCapture extends EventEmitter {
     private monitor: any = null;
     private isRecording: boolean = false;
+    private captureGeneration = 0;
+    private nativeStartAttempted = false;
     private deviceId: string | null = null;
     // Promise that resolves when the deferred native teardown setImmediate body
     // finishes (i.e. monitor.stop() has released the cpal stream / HAL handle).
@@ -46,6 +48,10 @@ export class MicrophoneCapture extends EventEmitter {
             emittedSampleRate: this.getSampleRate(),
         }),
         isVerbose: isVerboseLogging,
+        intervalMs: 250,
+        onHeartbeat: (samples) => {
+            if (this.isRecording && this.supportsContinuousHeartbeat()) this.emit('heartbeat', samples);
+        },
     });
 
     constructor(deviceId?: string | null) {
@@ -101,6 +107,19 @@ export class MicrophoneCapture extends EventEmitter {
         return 0;
     }
 
+    public getActualDeviceId(): string | null {
+        try { return this.getBufferDiagnostics().actualDeviceId || null; }
+        catch { return null; }
+    }
+
+    public supportsContinuousHeartbeat(): boolean {
+        // Old native binaries and silence-gated backends must never look stalled.
+        try {
+            const samples = this.getBufferDiagnostics().receivedSamples;
+            return Number.isSafeInteger(samples) && samples! >= 0;
+        } catch { return false; }
+    }
+
     private getBufferDiagnostics(): AudioBufferSnapshot {
         if (typeof this.monitor?.getBufferDiagnostics === 'function') {
             return this.monitor.getBufferDiagnostics();
@@ -116,6 +135,8 @@ export class MicrophoneCapture extends EventEmitter {
      */
     public start(): void {
         if (this.isRecording) return;
+        const generation = ++this.captureGeneration;
+        this.emit('start');
 
         if (!RustMicCapture) {
             const err = createNativeUnavailableError();
@@ -143,7 +164,10 @@ export class MicrophoneCapture extends EventEmitter {
 
             this.isRecording = true; // Set BEFORE start() to prevent re-entrant calls
 
+            this.nativeStartAttempted = true;
             this.monitor.start((err: Error | null, chunk: Buffer) => {
+                // Ignore all late callbacks, including errors from a destroyed instance.
+                if (!this.isRecording || generation !== this.captureGeneration) return;
                 // napi v3 ThreadsafeFunction passes (err, arg) format
                 if (err) {
                     console.error('[MicrophoneCapture] Callback error:', err);
@@ -167,6 +191,7 @@ export class MicrophoneCapture extends EventEmitter {
                     this.emit('data', chunk);
                 }
             }, (err: Error | null, _ended: boolean) => {
+                if (!this.isRecording || generation !== this.captureGeneration) return;
                 // Speech-ended callback from Rust SilenceSuppressor.
                 // _ended is always `true` when fired (Rust only invokes on speech→silence transition).
                 if (err) {
@@ -176,8 +201,8 @@ export class MicrophoneCapture extends EventEmitter {
                 this.emit('speech_ended');
             });
 
+            if (!this.isRecording || generation !== this.captureGeneration) return;
             this.audioDiagnostics.start();
-            this.emit('start');
         } catch (error) {
             console.error('[MicrophoneCapture] Failed to start:', error);
             this.isRecording = false;
@@ -202,9 +227,10 @@ export class MicrophoneCapture extends EventEmitter {
         // recovery teardown) joins the in-flight teardown instead of
         // starting a second one. If we are not recording AND no teardown is
         // in flight, this is a no-op resolved promise.
-        if (!this.isRecording) {
+        if (!this.isRecording && !this.nativeStartAttempted) {
             return this._teardownPromise ?? Promise.resolve();
         }
+        this.nativeStartAttempted = false;
 
         console.log('[MicrophoneCapture] Stopping capture (deferred native teardown)...');
         this.isRecording = false;
