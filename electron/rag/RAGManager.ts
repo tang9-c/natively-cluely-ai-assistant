@@ -1,3 +1,4 @@
+import { normalizeMeetingActionItems, formatMeetingActionItem, type MeetingActionItem } from '../../shared/meetingActionItems';
 // electron/rag/RAGManager.ts
 // Central orchestrator for RAG pipeline
 // Coordinates preprocessing, chunking, embedding, and retrieval
@@ -233,7 +234,7 @@ export class RAGManager {
         let summary: MeetingSummaryEvidence = {};
         try {
             const parsed = JSON.parse(meeting.summary_json || '{}');
-            summary = parsed?.detailedSummary ?? {};
+            summary = normalizeMeetingActionItems(parsed?.detailedSummary ?? {});
         } catch {
             summary = {};
         }
@@ -729,7 +730,7 @@ export class RAGManager {
                 summary = [
                     ...(meeting.detailedSummary.overview ? [meeting.detailedSummary.overview] : []),
                     ...(meeting.detailedSummary.keyPoints || []),
-                    ...(meeting.detailedSummary.actionItems || []).map((a: any) => `Action: ${a}`)
+                    ...normalizeMeetingActionItems(meeting.detailedSummary).actionItemsStructured.map((item: MeetingActionItem) => `Action: ${formatMeetingActionItem(item)}`)
                 ].join('. ');
             } else if (meeting.summary) {
                 summary = meeting.summary;

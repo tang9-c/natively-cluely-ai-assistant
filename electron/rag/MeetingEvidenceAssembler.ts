@@ -1,3 +1,4 @@
+import { normalizeMeetingActionItems, formatMeetingActionItem, type MeetingActionItem } from '../../shared/meetingActionItems';
 import type { QueryIntent } from './RAGRetriever';
 import type { ScoredChunk, StoredChunk } from './VectorStore';
 
@@ -5,6 +6,9 @@ export interface MeetingSummaryEvidence {
     overview?: string;
     keyPoints?: string[];
     actionItems?: string[];
+    actionItemsStructured?: MeetingActionItem[];
+    schemaVersion?: number;
+    sections?: Array<{ title: string; bullets: string[] }>;
     decisions?: string[];
 }
 
@@ -101,7 +105,7 @@ export function expandMeetingRetrievalQuery(
     intent: QueryIntent,
     summary: MeetingSummaryEvidence
 ): string {
-    if (intent === 'action_items' && nonEmptyStrings(summary.actionItems).length === 0) {
+    if (intent === 'action_items' && normalizeMeetingActionItems(summary).actionItems.length === 0) {
         return `${query}\n${ACTION_RETRIEVAL_TERMS.join(' ')}`;
     }
     if (intent === 'decision_recall' && nonEmptyStrings(summary.decisions).length === 0) {
@@ -152,7 +156,7 @@ export function assembleMeetingEvidence(input: {
             );
         }
     } else if (input.intent === 'action_items') {
-        for (const text of nonEmptyStrings(summary.actionItems)) {
+        for (const text of normalizeMeetingActionItems(summary).actionItemsStructured.map(formatMeetingActionItem)) {
             candidates.push({
                 meetingId: input.meetingId,
                 source: 'action_item',

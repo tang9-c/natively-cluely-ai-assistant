@@ -515,14 +515,14 @@ test('generateCoachingInsights uses mode-specific coaching rules', () => {
   assert.ok(team.some(insight => insight.type === 'missing_ownership'));
 });
 
-test('buildPostCallEnhancements returns schema v2 payload', () => {
+test('buildPostCallEnhancements returns canonical schema v3 payload', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'lecture',
     transcript: [{ speaker: 'interviewer', text: 'Read chapter 4 before Friday.', timestamp: 10 }],
     summaryData: { overview: 'Lecture covered graph traversal.', actionItems: [] },
   });
 
-  assert.equal(result.schemaVersion, 2);
+  assert.equal(result.schemaVersion, 3);
   assert.ok(Array.isArray(result.actionItemsStructured));
   assert.equal(result.followUpDraft, '');
   assert.deepEqual(result.coachingInsights, []);
@@ -545,12 +545,13 @@ test('post-call schema remains JSON-safe and excludes raw transcript fields', ()
     'acceptedDecisionRecords',
     'acceptedFdeRecords',
     'acceptedRecruitingRecords',
+    'actionItems',
     'actionItemsStructured',
     'coachingInsights',
     'followUpDraft',
     'schemaVersion',
   ]);
-  assert.equal(result.schemaVersion, 2);
+  assert.equal(result.schemaVersion, 3);
   assert.doesNotThrow(() => JSON.stringify(result));
   assert.equal('transcript' in result, false);
   assert.equal('rawTranscript' in result, false);

@@ -1,3 +1,4 @@
+import { normalizeMeetingActionItems } from '../shared/meetingActionItems';
 // MeetingPersistence.ts
 // Handles meeting lifecycle: stop, save, and recovery.
 // Extracted from IntelligenceManager to decouple DB operations from LLM orchestration.
@@ -418,7 +419,7 @@ export class MeetingPersistence {
                 date: new Date().toISOString(),
                 duration: durationStr,
                 summary: "See detailed summary",
-                detailedSummary: summaryData,
+                detailedSummary: normalizeMeetingActionItems(summaryData),
                 transcript: data.transcript,
                 usage: data.usage,
                 calendarEventId: calendarEventId,

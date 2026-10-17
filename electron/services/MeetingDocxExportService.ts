@@ -1,3 +1,4 @@
+import { normalizeMeetingActionItems, hasManuallyEditedActions } from '../../shared/meetingActionItems';
 import {
   AlignmentType,
   Document,
@@ -43,12 +44,13 @@ function nonEmptyStrings(values: unknown): string[] {
 }
 
 function effectiveLegacySummary(meeting: Meeting): string {
+  if (typeof meeting.detailedSummary?.overview === 'string' || meeting.editState?.editedSummaryFields.includes('overview')) return '';
   const summary = cleanText(meeting.summary);
   return summary && !SUMMARY_PLACEHOLDERS.has(summary.toLowerCase()) ? summary : '';
 }
 
 export function hasExportableMeetingSummary(meeting: Meeting): boolean {
-  const summary = meeting.detailedSummary;
+  const summary = meeting.detailedSummary ? normalizeMeetingActionItems(meeting.detailedSummary) : undefined;
   if (summary) {
     const hasDetailedContent = Boolean(
       cleanText(summary.overview)
@@ -123,7 +125,7 @@ function buildDocumentChildren(meeting: Meeting, options: MeetingDocxExportOptio
     throw new Error('summary_not_ready');
   }
 
-  const summary = meeting.detailedSummary;
+  const summary = meeting.detailedSummary ? normalizeMeetingActionItems(meeting.detailedSummary) : undefined;
   const children: Paragraph[] = [
     new Paragraph({
       text: cleanText(meeting.title) || '会议纪要',
@@ -149,9 +151,6 @@ function buildDocumentChildren(meeting: Meeting, options: MeetingDocxExportOptio
       children.push(bulletParagraph(cleanText(item.text)));
       if (cleanText(item.owner)) children.push(bodyParagraph(`负责人：${cleanText(item.owner)}`, { indent: 720 }));
       if (cleanText(item.deadline)) children.push(bodyParagraph(`截止日期：${cleanText(item.deadline)}`, { indent: 720 }));
-      if (Number.isFinite(item.sourceTimestamp)) {
-        children.push(bodyParagraph(`来源：${formatElapsedTime(item.sourceTimestamp as number)}`, { indent: 720 }));
-      }
     });
   } else {
     addList(children, summary?.actionItemsTitle || '行动项', summary?.actionItems);
@@ -172,7 +171,7 @@ function buildDocumentChildren(meeting: Meeting, options: MeetingDocxExportOptio
 
   const followUpDraft = cleanText(summary?.followUpDraft);
   if (followUpDraft && !LEGACY_ENGLISH_FOLLOW_UP_PATTERN.test(followUpDraft)) {
-    children.push(heading('跟进草稿', HeadingLevel.HEADING_1), bodyParagraph(followUpDraft));
+    children.push(heading(`跟进草稿${hasManuallyEditedActions(meeting.editState) ? '（行动项已修改，草稿未自动更新）' : ''}`, HeadingLevel.HEADING_1), bodyParagraph(followUpDraft));
   }
 
   const coachingInsights = (summary?.coachingInsights || []).filter(insight => {

@@ -1,3 +1,5 @@
+import { normalizeMeetingActionItems } from '../../shared/meetingActionItems';
+import { readMeetingEditState } from '../../shared/meetingEdits';
 // electron/rag/VectorStore.ts
 // SQLite-based vector storage with native sqlite-vec search (fallback to JS cosine similarity)
 // JS fallback is offloaded to a worker_threads Worker to avoid blocking the Electron main thread.
@@ -466,7 +468,11 @@ export class VectorStore {
         return rows
             .map((row) => {
                 const title = String(row.title || '').trim();
-                const summary = String(row.summary_json || '').trim();
+                let summary = '';
+                try {
+                    const parsed = JSON.parse(row.summary_json || '{}');
+                    summary = parsed.detailedSummary ? JSON.stringify(normalizeMeetingActionItems(parsed.detailedSummary)) : String(parsed.legacySummary || '');
+                } catch { /* Malformed legacy summaries supply no evidence. */ }
                 const transcriptMatches = String(row.transcript_matches || '').trim();
                 const haystack = [
                     title ? `Meeting title: ${title}` : '',
@@ -823,10 +829,14 @@ export class VectorStore {
             console.warn('[VectorStore] searchSummaries called without an active spaceKey — returning empty.');
             return [];
         }
-        if (this.useNativeVec) {
-            return this.searchSummariesNative(queryEmbedding, limit, spaceKey);
-        }
-        return this.searchSummariesJSWorker(queryEmbedding, limit, spaceKey);
+        const results = this.useNativeVec
+            ? await this.searchSummariesNative(queryEmbedding, limit, spaceKey)
+            : await this.searchSummariesJSWorker(queryEmbedding, limit, spaceKey);
+        // T5 rebuilds these embeddings; until then old summaries cannot supply evidence or rank boosts.
+        return results.filter(result => {
+            const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(result.meetingId) as any;
+            return row && !readMeetingEditState(row.edit_state_json).indexDirty;
+        });
     }
 
     /**

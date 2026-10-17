@@ -76,7 +76,6 @@ test('summary DOCX contains detailed summary sections without transcript or AI u
     '准备接口清单',
     '负责人：张三',
     '截止日期：2026-08-30',
-    '来源：12:35',
     '待确认事项',
     '销售推进',
     '跟进草稿',
@@ -85,7 +84,7 @@ test('summary DOCX contains detailed summary sections without transcript or AI u
     assert.match(xml, new RegExp(expected));
   }
 
-  assert.doesNotMatch(xml, /See detailed summary/);
+  assert.doesNotMatch(xml, /See detailed summary|来源：12:35/);
   assert.doesNotMatch(xml, /这段转录只应出现在完整档案中/);
   assert.doesNotMatch(xml, /隐藏问题|隐藏回答|AI 使用记录/);
   assert.equal((xml.match(/准备接口清单/g) || []).length, 1, 'structured actions should not be duplicated');
@@ -132,4 +131,27 @@ test('DOCX chooses a native Chinese font for each desktop platform', () => {
   assert.equal(resolveDocxFont('darwin'), 'Arial Unicode MS');
   assert.equal(resolveDocxFont('win32'), 'Microsoft YaHei');
   assert.equal(resolveDocxFont('linux'), 'Noto Sans CJK SC');
+});
+
+test('canonical edited DOCX preserves legacy unique tasks and does not resurrect deleted tasks',async()=>{
+ const {buildMeetingDocxBuffer}=loadService();
+ const legacy={...meeting,detailedSummary:{overview:'edited body',actionItems:['string-only'],keyPoints:[],actionItemsStructured:[{id:'x',text:'owned-only',owner:'甲',deadline:'周五'}],sections:[{title:'下一步',bullets:['section-only']}]}};
+ const xml=await documentXml(await buildMeetingDocxBuffer(legacy,{includeTranscript:false}));
+ for(const text of ['edited body','string-only','owned-only','section-only','负责人：甲','截止日期：周五'])assert.match(xml,new RegExp(text));
+ assert.equal((xml.match(/section-only/g)||[]).length,1);assert.doesNotMatch(xml,/下一步/);
+ const empty=await documentXml(await buildMeetingDocxBuffer({...legacy,detailedSummary:{...legacy.detailedSummary,schemaVersion:3,actionItemsStructured:[]}},{includeTranscript:false}));
+ assert.doesNotMatch(empty,/string-only|owned-only|section-only/);
+});
+
+test('explicitly emptied overview never falls back to stale top-level summary',async()=>{
+ const {buildMeetingDocxBuffer,hasExportableMeetingSummary}=loadService();
+ const empty={...meeting,summary:'STALE TOP LEVEL',detailedSummary:{schemaVersion:3,overview:'',actionItems:[],actionItemsStructured:[],keyPoints:['保留要点']},editState:{editedSummaryFields:['overview']}};
+ const xml=await documentXml(await buildMeetingDocxBuffer(empty,{includeTranscript:false}));assert.doesNotMatch(xml,/STALE TOP LEVEL/);
+ assert.equal(hasExportableMeetingSummary({...empty,detailedSummary:{...empty.detailedSummary,keyPoints:[]}}),false);
+});
+
+test('edited canonical actions label an existing generated follow-up draft without rewriting it',async()=>{
+ const {buildMeetingDocxBuffer}=loadService();
+ const edited={...meeting,editState:{editedSummaryFields:['actionItemsStructured']},detailedSummary:{...meeting.detailedSummary,schemaVersion:3,actionItems:['旧字符串'],actionItemsStructured:[],followUpDraft:'原有跟进草稿'}};
+ const xml=await documentXml(await buildMeetingDocxBuffer(edited,{includeTranscript:true}));assert.match(xml,/行动项已修改，草稿未自动更新/);assert.match(xml,/原有跟进草稿/);assert.doesNotMatch(xml,/旧字符串/);
 });

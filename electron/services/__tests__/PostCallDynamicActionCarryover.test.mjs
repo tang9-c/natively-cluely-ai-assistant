@@ -606,3 +606,9 @@ test('post-call carryover preserves at least ninety percent of accepted team art
     result.acceptedBlockerRecords.length;
   assert.ok(preserved >= 9);
 });
+
+test('generated canonical actions retain unique mode action sections',async()=>{
+ const {buildPostCallEnhancements}=await loadWorkflow();
+ const result=buildPostCallEnhancements({transcript:[],summaryData:{actionItems:['任务一'],sections:[{title:'行动项',bullets:['任务一。','分区独有任务']},{title:'结论',bullets:['正常结论']}]}});
+ assert.equal(result.schemaVersion,3);assert.deepEqual(result.actionItems,['任务一','分区独有任务']);assert.deepEqual(result.sections,[{title:'结论',bullets:['正常结论']}]);
+});

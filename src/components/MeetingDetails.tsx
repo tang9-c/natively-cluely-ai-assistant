@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, Sparkles, FolderOpen, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,7 +15,9 @@ import {
     buildVisibleTranscriptRows,
     type MeetingTranscriptEntry,
 } from '../../shared/transcriptVirtualization';
-import type { MeetingEditState } from '../../shared/meetingEdits';
+import type { Meeting } from '../../shared/meetingEdits';
+import { formatMeetingActionItem, hasManuallyEditedActions } from '../../shared/meetingActionItems';
+import { useMeetingAutosave } from '../hooks/useMeetingAutosave';
 import type { IdentityChoice } from './meeting/SpeakerIdentityMenu';
 import { TranscriptVirtualList } from './meeting/TranscriptVirtualList';
 
@@ -51,53 +53,6 @@ const parentPathOf = (filePath: string) => {
     return index > 0 ? filePath.slice(0, index) : filePath;
 };
 
-interface Meeting {
-    editState?: MeetingEditState;
-    id: string;
-    title: string;
-    date: string;
-    duration: string;
-    summary: string;
-    detailedSummary?: {
-        overview?: string;
-        actionItems: string[];
-        keyPoints: string[];
-        generationStatus?: 'success' | 'failed';
-        decisions?: string[];
-        openQuestions?: string[];
-        actionItemsTitle?: string;
-        keyPointsTitle?: string;
-        sections?: Array<{ title: string; bullets: string[] }>;
-        // Phase 7 — PostCallWorkflow enhancements (schema v2). Backend writes
-        // these via buildPostCallEnhancements(); UI renders them when present.
-        schemaVersion?: number;
-        actionItemsStructured?: Array<{
-            id: string;
-            text: string;
-            owner?: string;
-            deadline?: string;
-            sourceTimestamp?: number;
-        }>;
-        followUpDraft?: string;
-        coachingInsights?: Array<{
-            id: string;
-            type: string;
-            title: string;
-            detail: string;
-            severity: 'info' | 'opportunity' | 'warning';
-            evidence?: string;
-        }>;
-    };
-    transcript?: MeetingTranscriptEntry[];
-    usage?: Array<{
-        type: 'assist' | 'followup' | 'chat' | 'followup_questions';
-        timestamp: number;
-        question?: string;
-        answer?: string;
-        items?: string[];
-    }>;
-}
-
 interface MeetingDetailsProps {
     meeting: Meeting;
     onBack: () => void;
@@ -121,37 +76,21 @@ const getVisibleFollowUpDraft = (summary?: Meeting['detailedSummary']) => {
     return LEGACY_ENGLISH_FOLLOW_UP_PATTERN.test(draft) ? '' : draft;
 };
 
-const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting }) => {
+export interface MeetingDetailsHandle { flush: () => Promise<boolean> }
+const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProps>(({ meeting: initialMeeting }, ref) => {
     const isLight = useResolvedTheme() === 'light';
-    // We need local state for the meeting object to reflect optimistic updates
-    const [meeting, setMeeting] = useState<Meeting>(initialMeeting);
-    const meetingRef = useRef(meeting);
-    const identitySavePending = useRef(false);
+    const { meeting, status: saveStatus, controller } = useMeetingAutosave(initialMeeting);
+    useImperativeHandle(ref, () => ({ flush: controller.flush }), [controller]);
     const [identitySaving, setIdentitySaving] = useState(false);
     const [identityStatus, setIdentityStatus] = useState('');
+    const identitySavePending = useRef(false);
     const updateIdentity = async (segmentIds: string[], identity: IdentityChoice): Promise<boolean> => {
         if (identitySavePending.current) return false;
-        identitySavePending.current = true;
-        setIdentitySaving(true);
-        try {
-            const current = meetingRef.current;
-            const result = await window.electronAPI.applyMeetingEdit({ meetingId: current.id,
-                expectedRevision: current.editState?.meetingRevision ?? 0, operation: { type: 'identity', segmentIds, identity } });
-            if (!result.ok) {
-                setIdentityStatus(result.error === 'conflict' ? '记录已变化，请重新打开后重试；所选片段已保留。' : '身份保存失败，所选片段已保留，请重试。');
-                return false;
-            }
-            meetingRef.current = result.meeting;
-            setMeeting(result.meeting);
-            setIdentityStatus('身份已修改，已有摘要可能需要修正。');
-            return true;
-        } catch {
-            setIdentityStatus('身份保存失败，所选片段已保留，请重试。');
-            return false;
-        } finally {
-            identitySavePending.current = false;
-            setIdentitySaving(false);
-        }
+        identitySavePending.current = true; setIdentitySaving(true);
+        const ok = await controller.operation({ type: 'identity', segmentIds, identity });
+        setIdentityStatus(ok ? '身份已修改，已有摘要可能需要修正。' : '身份保存失败，所选片段已保留，请重试。');
+        identitySavePending.current = false; setIdentitySaving(false);
+        return ok;
     };
     const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'usage'>('summary');
     const [query, setQuery] = useState('');
@@ -175,6 +114,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const canRunTranscriptSkill = activeTab === 'transcript' && transcriptMarkdown.trim().length > 0;
     const visibleCoachingInsights = getVisibleCoachingInsights(meeting.detailedSummary);
     const visibleFollowUpDraft = getVisibleFollowUpDraft(meeting.detailedSummary);
+    const followUpDraftNotice = hasManuallyEditedActions(meeting.editState) ? '（行动项已修改，草稿未自动更新）' : '';
 
     useEffect(() => {
         setFollowUpCopyStatus('idle');
@@ -187,8 +127,9 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     }, [followUpCopyStatus]);
 
     const handleCopyFollowUpDraft = async () => {
+        if (!await controller.flush()) return;
         try {
-            await navigator.clipboard.writeText(visibleFollowUpDraft);
+            await navigator.clipboard.writeText(getVisibleFollowUpDraft(controller.snapshot().meeting.detailedSummary));
             setFollowUpCopyStatus('copied');
         } catch {
             setFollowUpCopyStatus('error');
@@ -255,6 +196,11 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     };
 
     const handleCopy = async () => {
+        if (!await controller.flush()) return;
+        const meeting = controller.snapshot().meeting;
+        const visibleCoachingInsights = getVisibleCoachingInsights(meeting.detailedSummary);
+        const visibleFollowUpDraft = getVisibleFollowUpDraft(meeting.detailedSummary);
+        const followUpDraftNotice = hasManuallyEditedActions(meeting.editState) ? '（行动项已修改，草稿未自动更新）' : '';
         let textToCopy = '';
 
         if (activeTab === 'summary' && meeting.detailedSummary) {
@@ -280,7 +226,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
 ${meeting.detailedSummary.overview || ''}
 
 行动项：
-${formatList(meeting.detailedSummary.actionItems)}
+${formatList(meeting.detailedSummary.actionItemsStructured?.map(formatMeetingActionItem))}
 
 要点：
 ${formatList(meeting.detailedSummary.keyPoints)}
@@ -291,7 +237,7 @@ ${formatList(meeting.detailedSummary.decisions)}
 待确认事项：
 ${formatList(meeting.detailedSummary.openQuestions)}
 
-${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `辅导：\n${coachingText}\n\n` : ''}${visibleFollowUpDraft ? `跟进草稿：\n${visibleFollowUpDraft}` : ''}
+${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `辅导：\n${coachingText}\n\n` : ''}${visibleFollowUpDraft ? `跟进草稿${followUpDraftNotice}：\n${visibleFollowUpDraft}` : ''}
             `.trim();
         } else if (activeTab === 'transcript' && meeting.transcript) {
             textToCopy = meeting.transcript.map(t => {
@@ -314,6 +260,8 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
     };
 
     const handleRunTranscriptSkill = async (skill: SkillSummary) => {
+        if (!await controller.flush()) return;
+        const meeting = controller.snapshot().meeting;
         if (typeof window.electronAPI?.transcriptSkillRun !== 'function') {
             setSkillExportStatus({ message: '技能导出桥接不可用，请重启应用后重试。', error: true });
             return;
@@ -354,64 +302,24 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
         }
     };
 
-    // UPDATE HANDLERS
-    const handleTitleSave = async (newTitle: string) => {
-        setMeeting(prev => ({ ...prev, title: newTitle }));
-        if (window.electronAPI?.updateMeetingTitle) {
-            await window.electronAPI.updateMeetingTitle(meeting.id, newTitle);
-        }
+    const textEditor = (label: string, value: string, change: (text: string) => void, multiline = true) => (
+        <EditableTextBlock key={label} ariaLabel={label} initialValue={value} onDraftChange={change}
+            onSave={controller.flush} onFlush={controller.flush} multiline={multiline}
+            className="text-sm text-text-secondary leading-relaxed px-2 py-1 rounded-sm" placeholder={label.includes('负责人') || label.includes('期限') ? '待确认' : '点击填写...'} />
+    );
+    const updateList = (field: 'keyPoints' | 'decisions' | 'openQuestions', index: number, text: string) => {
+        const items = [...(controller.snapshot().meeting.detailedSummary?.[field] || [])];
+        items[index] = text; controller.patch({ [field]: items });
     };
-
-    const handleOverviewSave = async (newOverview: string) => {
-        setMeeting(prev => ({
-            ...prev,
-            detailedSummary: {
-                ...prev.detailedSummary!,
-                overview: newOverview
-            }
-        }));
-        if (window.electronAPI?.updateMeetingSummary) {
-            await window.electronAPI.updateMeetingSummary(meeting.id, { overview: newOverview });
-        }
+    const updateAction = (id: string, patch: { text?: string; owner?: string; deadline?: string }) => {
+        const items = controller.snapshot().meeting.detailedSummary?.actionItemsStructured || [];
+        controller.patch({ actionItemsStructured: items.map(item => item.id === id ? { ...item, ...patch } : item) });
     };
-
-    const handleActionItemSave = async (index: number, newVal: string) => {
-        const newItems = [...(meeting.detailedSummary?.actionItems || [])];
-        if (!newVal.trim()) {
-            // Optional: Remove empty items? For now just keep empty or update
-        }
-        newItems[index] = newVal;
-
-        setMeeting(prev => ({
-            ...prev,
-            detailedSummary: {
-                ...prev.detailedSummary!,
-                actionItems: newItems
-            }
-        }));
-
-        if (window.electronAPI?.updateMeetingSummary) {
-            await window.electronAPI.updateMeetingSummary(meeting.id, { actionItems: newItems });
-        }
+    const updateSection = (index: number, bullet: number | null, text: string) => {
+        const sections = (controller.snapshot().meeting.detailedSummary?.sections || []).map(section => ({ ...section, bullets: [...section.bullets] }));
+        if (bullet === null) sections[index].title = text; else sections[index].bullets[bullet] = text;
+        controller.patch({ sections });
     };
-
-    const handleKeyPointSave = async (index: number, newVal: string) => {
-        const newItems = [...(meeting.detailedSummary?.keyPoints || [])];
-        newItems[index] = newVal;
-
-        setMeeting(prev => ({
-            ...prev,
-            detailedSummary: {
-                ...prev.detailedSummary!,
-                keyPoints: newItems
-            }
-        }));
-
-        if (window.electronAPI?.updateMeetingSummary) {
-            await window.electronAPI.updateMeetingSummary(meeting.id, { keyPoints: newItems });
-        }
-    };
-
 
     return (
         <div className="h-full w-full flex flex-col bg-bg-secondary text-text-secondary font-sans overflow-hidden">
@@ -434,7 +342,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                             {/* Editable Title */}
                             <EditableTextBlock
                                 initialValue={meeting.title}
-                                onSave={handleTitleSave}
+                                ariaLabel="会议标题" onSave={controller.flush} onFlush={controller.flush} onDraftChange={title => controller.patch({ title })}
                                 tagName="h1"
                                 className="text-3xl font-bold text-text-primary tracking-tight -ml-2 px-2 py-1 rounded-md transition-colors"
                                 multiline={false}
@@ -445,6 +353,14 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                         {/* <div className="flex items-center gap-2 mt-1"> ... </div> */}
                     </div>
 
+                    <div role="status" aria-live="polite" className="mb-3 text-xs text-text-tertiary">
+                        {saveStatus === 'pending' ? '有未保存修改' : saveStatus === 'saving' ? '正在保存...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'error' ? '保存失败，输入已保留。请重试后再离开或复制导出。' : saveStatus === 'conflict' ? '记录已变化，输入已保留。请选择重新加载或保留本次修改。' : ''}
+                        {saveStatus === 'error' && <button className="ml-2 underline" onClick={() => void controller.retry()}>重试保存</button>}
+                        {saveStatus === 'conflict' && <>
+                            <button className="ml-2 underline" onClick={() => void controller.reload()}>重新加载</button>
+                            <button className="ml-2 underline" onClick={() => void controller.keepLocal()}>保留本次修改</button>
+                        </>}
+                    </div>
                     {/* Tabs */}
                     {/* Designing Tabs to match reference 1:1 (Dark Pill Container) */}
                     <div className="flex items-center justify-between mb-8">
@@ -456,7 +372,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                             ].map(({ key: tab, label }) => (
                                 <button
                                     key={tab}
-                                    onClick={() => setActiveTab(tab as any)}
+                                    onClick={async () => { if (await controller.flush()) setActiveTab(tab as any); }}
                                     className={`
                                         relative px-3 py-1 text-[13px] font-medium rounded-lg transition-all duration-200 z-10
                                         ${activeTab === tab ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : `${isLight ? 'text-text-secondary' : 'text-text-tertiary'} hover:text-text-primary`}
@@ -588,173 +504,41 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                     </p>
                                 )}
 
-                                {/* Overview - Rendered as Markdown */}
-                                {meeting.detailedSummary?.overview && (
                                 <div className="mb-6 pb-6 border-b border-border-subtle prose prose-sm max-w-none">
-                                    <ReactMarkdown
-                                        remarkPlugins={[remarkGfm]}
-                                        components={{
-                                            h1: ({ node, ...props }) => <h1 className="text-xl font-bold text-text-primary mt-4 mb-2" {...props} />,
-                                            h2: ({ node, ...props }) => <h2 className="text-lg font-semibold text-text-primary mt-4 mb-2" {...props} />,
-                                            h3: ({ node, ...props }) => <h3 className="text-base font-semibold text-text-primary mt-3 mb-1" {...props} />,
-                                            p: ({ node, ...props }) => <p className="text-sm text-text-secondary leading-relaxed mb-2" {...props} />,
-                                            ul: ({ node, ...props }) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
-                                            ol: ({ node, ...props }) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
-                                            li: ({ node, ...props }) => <li className="text-sm text-text-secondary" {...props} />,
-                                            strong: ({ node, ...props }) => <strong className="font-semibold text-text-primary" {...props} />,
-                                            del: ({ node, ...props }) => <span {...props} />,
-                                            a: ({ node, ...props }) => <a className="text-blue-500 hover:underline" {...props} />,
-                                        }}
-                                    >
-                                        {meeting.detailedSummary?.overview || ''}
-                                    </ReactMarkdown>
+                                    <EditableTextBlock ariaLabel="摘要正文" initialValue={meeting.detailedSummary?.overview || ''}
+                                        onSave={controller.flush} onFlush={controller.flush}
+                                        onDraftChange={overview => controller.patch({ overview })}
+                                        renderValue={value => <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>}
+                                        placeholder="点击填写摘要..." />
                                 </div>
-                                )}
-
-                                {/* Action Items - Only show if there are items */}
-                                {meeting.detailedSummary?.actionItems && meeting.detailedSummary.actionItems.length > 0 && (
-                                    <section className="mb-8">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <EditableTextBlock
-                                                initialValue={meeting.detailedSummary?.actionItemsTitle || '行动项'}
-                                                onSave={(val) => {
-                                                    setMeeting(prev => ({
-                                                        ...prev,
-                                                        detailedSummary: { ...prev.detailedSummary!, actionItemsTitle: val }
-                                                    }));
-                                                    window.electronAPI?.updateMeetingSummary(meeting.id, { actionItemsTitle: val });
-                                                }}
-                                                tagName="h2"
-                                                className="text-lg font-semibold text-text-primary -ml-2 px-2 py-1 rounded-sm transition-colors"
-                                                multiline={false}
-                                            />
-                                        </div>
-                                        <ul className="space-y-3">
-                                            {meeting.detailedSummary.actionItems.map((item, i) => (
-                                                <li key={i} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary group-hover:bg-blue-500 transition-colors shrink-0" />
-                                                    <div className="flex-1">
-                                                        <EditableTextBlock
-                                                            initialValue={item}
-                                                            onSave={(val) => handleActionItemSave(i, val)}
-                                                            tagName="p"
-                                                            className="text-sm text-text-secondary leading-relaxed -ml-2 px-2 rounded-sm transition-colors"
-                                                            placeholder="输入行动项..."
-                                                            onEnter={() => {
-                                                                const newItems = [...(meeting.detailedSummary?.actionItems || [])];
-                                                                newItems.splice(i + 1, 0, "");
-                                                                setMeeting(prev => ({
-                                                                    ...prev,
-                                                                    detailedSummary: { ...prev.detailedSummary!, actionItems: newItems }
-                                                                }));
-                                                            }}
-                                                        />
+                                <section className="mb-8" aria-label="行动项清单">
+                                    <div className="flex items-center justify-between mb-4">
+                                        {textEditor('行动项标题', meeting.detailedSummary?.actionItemsTitle ?? '行动项', actionItemsTitle => controller.patch({ actionItemsTitle }), false)}
+                                        <button onClick={() => controller.patch({ actionItemsStructured: [...(controller.snapshot().meeting.detailedSummary?.actionItemsStructured || []), { id: crypto.randomUUID(), text: '新行动项' }] })} className="text-xs text-text-tertiary hover:text-text-primary">添加行动项</button>
+                                    </div>
+                                    <ul className="space-y-3">
+                                        {meeting.detailedSummary?.actionItemsStructured?.map((item, index) => (
+                                            <li key={item.id} className="flex items-start gap-2 group">
+                                                <div className="flex-1 min-w-0">
+                                                    {textEditor(`行动项 ${index + 1} 内容`, item.text, text => updateAction(item.id, { text }))}
+                                                    <div className="flex gap-4 text-xs text-text-tertiary">
+                                                        <div>负责人{textEditor(`行动项 ${index + 1} 负责人`, item.owner || '', owner => updateAction(item.id, { owner }), false)}</div>
+                                                        <div>期限{textEditor(`行动项 ${index + 1} 期限`, item.deadline || '', deadline => updateAction(item.id, { deadline }), false)}</div>
                                                     </div>
-                                                </li>
-                                            ))}
-                                        </ul>
+                                                </div>
+                                                <button aria-label={`删除行动项 ${index + 1}`} className="text-xs text-text-tertiary hover:text-text-primary" onClick={() => controller.patch({ actionItemsStructured: (controller.snapshot().meeting.detailedSummary?.actionItemsStructured || []).filter(action => action.id !== item.id) })}>删除</button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </section>
+                                {(['keyPoints', 'decisions', 'openQuestions'] as const).map(field => (
+                                    (meeting.detailedSummary?.[field]?.length || 0) > 0 && <section key={field} className="mb-8">
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{field === 'keyPoints' ? textEditor('要点标题', meeting.detailedSummary?.keyPointsTitle ?? '要点', keyPointsTitle => controller.patch({ keyPointsTitle }), false) : field === 'decisions' ? '决策项' : '待确认事项'}</h2>
+                                        <ul className="space-y-3">{meeting.detailedSummary?.[field]?.map((item, index) => (
+                                            <li key={index}>{textEditor(`${field === 'keyPoints' ? '要点' : field === 'decisions' ? '决策' : '待确认事项'} ${index + 1}`, item, text => updateList(field, index, text))}</li>
+                                        ))}</ul>
                                     </section>
-                                )}
-
-                                {/* Key Points - Only show if there are items */}
-                                {meeting.detailedSummary?.keyPoints && meeting.detailedSummary.keyPoints.length > 0 && (
-                                    <section>
-                                        <div className="flex items-center justify-between mb-4">
-                                            <EditableTextBlock
-                                                initialValue={meeting.detailedSummary?.keyPointsTitle || '要点'}
-                                                onSave={(val) => {
-                                                    setMeeting(prev => ({
-                                                        ...prev,
-                                                        detailedSummary: { ...prev.detailedSummary!, keyPointsTitle: val }
-                                                    }));
-                                                    window.electronAPI?.updateMeetingSummary(meeting.id, { keyPointsTitle: val });
-                                                }}
-                                                tagName="h2"
-                                                className="text-lg font-semibold text-text-primary -ml-2 px-2 py-1 rounded-sm transition-colors"
-                                                multiline={false}
-                                            />
-                                        </div>
-                                        <ul className="space-y-3">
-                                            {meeting.detailedSummary.keyPoints.map((item, i) => (
-                                                <li key={i} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary group-hover:bg-purple-500 transition-colors shrink-0" />
-                                                    <div className="flex-1">
-                                                        <EditableTextBlock
-                                                            initialValue={item}
-                                                            onSave={(val) => handleKeyPointSave(i, val)}
-                                                            tagName="p"
-                                                            className="text-sm text-text-secondary leading-relaxed -ml-2 px-2 rounded-sm transition-colors"
-                                                            placeholder="输入关键点..."
-                                                            onEnter={() => {
-                                                                const newItems = [...(meeting.detailedSummary?.keyPoints || [])];
-                                                                newItems.splice(i + 1, 0, "");
-                                                                setMeeting(prev => ({
-                                                                    ...prev,
-                                                                    detailedSummary: { ...prev.detailedSummary!, keyPoints: newItems }
-                                                                }));
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </section>
-                                )}
-
-                                {/* Phase 7 — Structured action items (with owner / deadline).
-                                    Rendered ONLY when PostCallWorkflow has produced them
-                                    (schemaVersion === 2). Falls through silently otherwise so
-                                    pre-Phase-7 meetings still look the same. */}
-                                {meeting.detailedSummary?.actionItemsStructured && meeting.detailedSummary.actionItemsStructured.length > 0 && (
-                                    <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">下一步</h2>
-                                        <ul className="space-y-2">
-                                            {meeting.detailedSummary.actionItemsStructured.map(item => (
-                                                <li key={item.id} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-emerald-500/70 group-hover:bg-emerald-400 shrink-0" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm text-text-secondary leading-relaxed">{item.text}</p>
-                                                        {(item.owner || item.deadline) && (
-                                                            <p className="text-[11px] text-text-tertiary mt-0.5">
-                                                                {item.owner && <span className="font-medium">{item.owner}</span>}
-                                                                {item.owner && item.deadline && <span> · </span>}
-                                                                {item.deadline && <span>截止：{item.deadline}</span>}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </section>
-                                )}
-
-                                {meeting.detailedSummary?.decisions && meeting.detailedSummary.decisions.length > 0 && (
-                                    <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">决策项</h2>
-                                        <ul className="space-y-3">
-                                            {meeting.detailedSummary.decisions.map((decision, index) => (
-                                                <li key={index} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary shrink-0" />
-                                                    <p className="text-sm text-text-secondary leading-relaxed">{decision}</p>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </section>
-                                )}
-
-                                {meeting.detailedSummary?.openQuestions && meeting.detailedSummary.openQuestions.length > 0 && (
-                                    <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">待确认事项</h2>
-                                        <ul className="space-y-3">
-                                            {meeting.detailedSummary.openQuestions.map((question, index) => (
-                                                <li key={index} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-tertiary shrink-0" />
-                                                    <p className="text-sm text-text-secondary leading-relaxed">{question}</p>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </section>
-                                )}
+                                ))}
 
                                 {/* Phase 7 — Coaching insights (mode-specific opportunities). */}
                                 {visibleCoachingInsights.length > 0 && (
@@ -785,7 +569,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                 {visibleFollowUpDraft && (
                                     <section className="mb-8">
                                         <div className="flex items-center justify-between mb-3">
-                                            <h2 className="text-lg font-semibold text-text-primary">跟进草稿</h2>
+                                            <h2 className="text-lg font-semibold text-text-primary">跟进草稿<span className="ml-2 text-xs font-normal text-text-tertiary">{followUpDraftNotice}</span></h2>
                                             <button
                                                 type="button"
                                                 onClick={handleCopyFollowUpDraft}
@@ -809,13 +593,13 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                             section.bullets.length > 0 && (
                                                 <section key={si}>
                                                     <div className="flex items-center justify-between mb-4">
-                                                        <h2 className="text-lg font-semibold text-text-primary">{section.title}</h2>
+                                                        <h2 className="text-lg font-semibold text-text-primary">{textEditor(`分区 ${si + 1} 标题`, section.title, text => updateSection(si, null, text), false)}</h2>
                                                     </div>
                                                     <ul className="space-y-3">
                                                         {section.bullets.map((bullet, bi) => (
                                                             <li key={bi} className="flex items-start gap-3 group">
                                                                 <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary shrink-0" />
-                                                                <p className="text-sm text-text-secondary leading-relaxed">{bullet}</p>
+                                                                {textEditor(`分区 ${si + 1} 结论 ${bi + 1}`, bullet, text => updateSection(si, bi, text))}
                                                             </li>
                                                         ))}
                                                     </ul>
@@ -970,7 +754,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                     title: meeting.title,
                     summary: meeting.detailedSummary?.overview,
                     keyPoints: meeting.detailedSummary?.keyPoints,
-                    actionItems: meeting.detailedSummary?.actionItems,
+                    actionItems: meeting.detailedSummary?.actionItemsStructured?.map(formatMeetingActionItem),
                     transcript: meeting.transcript
                 }}
                 initialQuery={submittedQuery}
@@ -982,6 +766,6 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
             />
         </div>
     );
-};
+});
 
 export default MeetingDetails;

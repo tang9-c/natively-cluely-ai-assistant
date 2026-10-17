@@ -103,7 +103,7 @@ test('revision conflicts, whitelist and identity batches are atomic',t=>{
  manager.mergeGeneratedMeetingResult({id:'m',title:'generated',detailedSummary:{actionItems:[],keyPoints:[],actionItemsStructured:[{id:'b',text:'stale'}]}},0);
  assert.equal(manager.getMeetingDetails('m').title,'legacy title');
  assert.deepEqual(manager.getMeetingDetails('m').detailedSummary.actionItems,['legacy human']);
- assert.equal(manager.getMeetingDetails('m').detailedSummary.actionItemsStructured,undefined);
+ assert.deepEqual(manager.getMeetingDetails('m').detailedSummary.actionItemsStructured.map(item=>item.text),['legacy human']);
 });
 test('migration failure rolls back columns and user_version',t=>{
  const {db,manager}=fixture(t);seed(db);
@@ -186,4 +186,50 @@ test('deduplicated final alias remains editable after persisted reload', async t
  assert.equal(result.meeting.transcript[0].segmentId,'dedup-a');
  assert.equal(result.meeting.transcript[0].timestamp,first.timestamp);
  assert.equal(result.meeting.transcript[0].text,first.text);
+});
+
+test('first summary edit upgrades both historical lists atomically and preserves metadata',t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ const old={overview:'old',actionItems:['Task one.','Only strings'],keyPoints:[],actionItemsStructured:[{id:'stable',text:'Task one',owner:'甲',deadline:'周五'},{id:'unique',text:'Only structured'}]};
+ db.prepare('UPDATE meetings SET summary_json=?').run(JSON.stringify({detailedSummary:old}));
+ const result=manager.applyMeetingEdit({meetingId:'m',expectedRevision:0,operation:{type:'summary',patch:{overview:''}}});
+ assert.equal(result.ok,true);
+ assert.equal(result.meeting.detailedSummary.schemaVersion,3);
+ assert.deepEqual(result.meeting.detailedSummary.actionItems,['Task one.','Only strings','Only structured']);
+ assert.equal(result.meeting.detailedSummary.actionItemsStructured[0].id,'stable');
+ assert.equal(result.meeting.detailedSummary.actionItemsStructured[0].owner,'甲');
+ assert.equal(result.meeting.transcript[0].text,'original');
+});
+test('canonical deletion and legacy explicit empty stay empty after reload and delayed generation',t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ db.prepare('UPDATE meetings SET summary_json=?').run(JSON.stringify({detailedSummary:{schemaVersion:3,actionItems:['stale'],keyPoints:[],actionItemsStructured:[{id:'a',text:'old',owner:'甲'}]}}));
+ assert.equal(manager.updateMeetingSummary('m',{actionItems:[]}),true);
+ manager.mergeGeneratedMeetingResult({id:'m',title:'late',detailedSummary:{actionItems:['resurrect'],keyPoints:[],actionItemsStructured:[{id:'b',text:'resurrect'}]}},0);
+ const summary=manager.getMeetingDetails('m').detailedSummary;
+ assert.deepEqual(summary.actionItemsStructured,[]); assert.deepEqual(summary.actionItems,[]); assert.equal(summary.schemaVersion,3);
+});
+test('legacy explicit edits retain matching metadata but remove deleted canonical items',t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ db.prepare('UPDATE meetings SET summary_json=?').run(JSON.stringify({detailedSummary:{schemaVersion:3,actionItems:[],keyPoints:[],actionItemsStructured:[{id:'a',text:'keep',owner:'甲'},{id:'b',text:'delete'}]}}));
+ assert.equal(manager.updateMeetingSummary('m',{actionItems:['keep.','new']}),true);
+ const items=manager.getMeetingDetails('m').detailedSummary.actionItemsStructured;
+ assert.equal(items.length,2); assert.equal(items[0].id,'a');assert.equal(items[0].owner,'甲');assert.equal(items[1].text,'new');
+});
+test('explicit section rename to an action heading retains its text in canonical actions',t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ const first=manager.applyMeetingEdit({meetingId:'m',expectedRevision:0,operation:{type:'summary',patch:{sections:[{title:'会议结论',bullets:['保留普通结论']}]}}});assert.equal(first.ok,true);
+ const result=manager.applyMeetingEdit({meetingId:'m',expectedRevision:1,operation:{type:'summary',patch:{sections:[{title:'下一步',bullets:['不能丢失的任务']},{title:'结论',bullets:['普通结论']}]}}});
+ assert.equal(result.ok,true);assert.deepEqual(result.meeting.detailedSummary.actionItems,['不能丢失的任务']);assert.deepEqual(result.meeting.detailedSummary.sections,[{title:'结论',bullets:['普通结论']}]);
+});
+test('section-derived human actions stay protected against delayed generation',t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ const result=manager.applyMeetingEdit({meetingId:'m',expectedRevision:0,operation:{type:'summary',patch:{sections:[{title:'行动项',bullets:['人手添加']}]}}});assert.equal(result.ok,true);
+ manager.mergeGeneratedMeetingResult({id:'m',title:'late',detailedSummary:{actionItems:['late'],keyPoints:[]}},0);
+ assert.deepEqual(manager.getMeetingDetails('m').detailedSummary.actionItems,['人手添加']);
+});
+test('legacy text-only update cannot choose between conflicting existing owners',t=>{
+ const {db,manager}=fixture(t);seed(db);manager.migrateMeetingEdits();
+ db.prepare('UPDATE meetings SET summary_json=?').run(JSON.stringify({detailedSummary:{actionItems:['任务'],keyPoints:[],actionItemsStructured:[{id:'a',text:'任务',owner:'甲'},{id:'b',text:'任务',owner:'乙'},{id:'c',text:'已删除'}]}}));
+ assert.equal(manager.updateMeetingSummary('m',{actionItems:['任务']}),true);
+ assert.deepEqual(manager.getMeetingDetails('m').detailedSummary.actionItemsStructured.map(item=>[item.id,item.owner]),[['a','甲'],['b','乙']]);
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Telescope, X, Play } from 'lucide-react';
 import mainui from "../UI_comp/mainui.png";
-import MeetingDetails from './MeetingDetails';
+import MeetingDetails, { type MeetingDetailsHandle } from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -81,6 +81,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [isStartingMeeting, setIsStartingMeeting] = useState(false);
+    const meetingDetailsRef = useRef<MeetingDetailsHandle>(null);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
     const [isMeetingPreparationOpen, setIsMeetingPreparationOpen] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -138,6 +139,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     };
 
     const exportMeetingDocx = async (meetingId: string, includeTranscript: boolean) => {
+        if (meetingDetailsRef.current && !await meetingDetailsRef.current.flush()) return;
         const api = window.electronAPI?.exportMeetingDocx;
         if (!api) {
             window.alert('导出功能不可用，请重启 CueUp 后重试。');
@@ -323,6 +325,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     }, [selectedMeeting, isGlobalChatOpen, isMeetingPreparationOpen, onPageChange]);
 
     const handleOpenMeeting = async (meeting: Meeting | string) => {
+        if (meetingDetailsRef.current && !await meetingDetailsRef.current.flush()) return;
         const meetingId = typeof meeting === 'string' ? meeting : meeting.id;
         setForwardMeeting(null); // Clear forward history on new navigation
         console.log("[Launcher] Opening meeting:", meetingId);
@@ -349,14 +352,15 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         if (typeof meeting !== 'string') setSelectedMeeting(meeting);
     };
 
-    const handleBack = () => {
+    const handleBack = async () => {
+        if (meetingDetailsRef.current && !await meetingDetailsRef.current.flush()) return;
         setForwardMeeting(selectedMeeting);
         setSelectedMeeting(null);
     };
 
     const handleForward = () => {
         if (forwardMeeting) {
-            setSelectedMeeting(forwardMeeting);
+            void handleOpenMeeting(forwardMeeting.id);
             setForwardMeeting(null);
         }
     };
@@ -393,6 +397,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
                     {/* Back Button */}
                     <button
+                        aria-label="返回会议列表"
                         onClick={selectedMeeting ? handleBack : undefined}
                         disabled={!selectedMeeting}
                         className={`
@@ -424,7 +429,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                 {/* Center: Spotlight-style Search Pill */}
                 <TopSearchPill
                     meetings={meetings}
-                    onAIQuery={(query) => {
+                    onAIQuery={async (query) => {
+                        if (meetingDetailsRef.current && !await meetingDetailsRef.current.flush()) return;
                         analytics.trackCommandExecuted('ai_query_search');
                         setSubmittedGlobalQuery(query);
                         setSubmittedGlobalQueryNonce((prev) => prev + 1);
@@ -440,7 +446,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                 {/* Right: Actions */}
                 <div className={`flex items-center gap-1 no-drag shrink-0 ${isMac ? 'mr-1' : ''}`}>
                     <button
-                        onClick={() => onOpenResearch?.()}
+                        onClick={async () => { if (!meetingDetailsRef.current || await meetingDetailsRef.current.flush()) onOpenResearch?.(); }}
                         title="公司调研"
                         className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                     >
@@ -448,7 +454,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     </button>
                     <div className="relative group/profile-btn select-none">
                         <button
-                            onClick={() => {
+                            onClick={async () => {
+                                if (meetingDetailsRef.current && !await meetingDetailsRef.current.flush()) return;
                                 dismissProfileOnboarding();
                                 onOpenProfile?.();
                             }}
@@ -547,7 +554,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     </div>
                     <div className="relative group/modes-btn select-none">
                         <button
-                            onClick={() => {
+                            onClick={async () => {
+                                if (meetingDetailsRef.current && !await meetingDetailsRef.current.flush()) return;
                                 dismissModesOnboarding();
                                 onOpenModes?.();
                             }}
@@ -662,7 +670,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         </AnimatePresence>
                     </div>
                     <button
-                        onClick={() => {
+                        onClick={async () => {
+                            if (meetingDetailsRef.current && !await meetingDetailsRef.current.flush()) return;
                             onOpenSettings();
                         }}
                         title="设置"
@@ -688,7 +697,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                             transition={{ duration: 0.08 }}
                         >
                             <MeetingDetails
+                                key={selectedMeeting.id}
                                 meeting={selectedMeeting}
+                                ref={meetingDetailsRef}
                                 onBack={handleBack}
                                 onOpenSettings={onOpenSettings}
                             />

@@ -1,3 +1,4 @@
+import { normalizeMeetingActionItems } from '../../../shared/meetingActionItems';
 import { resolveSpeakerIdentity, type SpeakerIdentitySegmentLike } from '../../../shared/speakerIdentity';
 import type { ActionArtifact } from '../dynamic-actions/DynamicActionArtifacts';
 
@@ -86,7 +87,8 @@ export interface AcceptedRecruitingRecord {
 }
 
 export interface PostCallEnhancements {
-  schemaVersion: 2;
+  schemaVersion: 3;
+  actionItems: string[];
   actionItemsStructured: StructuredActionItem[];
   acceptedActionItems: StructuredActionItem[];
   acceptedDecisionRecords: AcceptedDecisionRecord[];
@@ -178,8 +180,7 @@ export function buildPostCallEnhancements(params: {
   const coachingInsights: CoachingInsight[] = [];
 
   return {
-    schemaVersion: 2,
-    actionItemsStructured,
+    ...normalizeMeetingActionItems({ actionItems: summaryActions, actionItemsStructured, ...(params.summaryData?.sections ? { sections: params.summaryData.sections } : {}) }),
     acceptedActionItems,
     acceptedDecisionRecords,
     acceptedBlockerRecords,

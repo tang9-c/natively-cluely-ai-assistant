@@ -1,8 +1,13 @@
+import type { ReactNode } from 'react';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 interface EditableTextBlockProps {
     initialValue: string;
-    onSave: (value: string) => void;
+    onSave: (value: string) => void | boolean | Promise<void | boolean>;
+    onDraftChange?: (value: string) => void;
+    onFlush?: () => Promise<boolean>;
+    renderValue?: (value: string) => ReactNode;
+    ariaLabel?: string;
     tagName?: 'h1' | 'h2' | 'h3' | 'p' | 'span' | 'div';
     className?: string;
     placeholder?: string;
@@ -13,7 +18,7 @@ interface EditableTextBlockProps {
 
 const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
     initialValue,
-    onSave,
+    onSave, onDraftChange, onFlush, renderValue, ariaLabel,
     tagName = 'div',
     className = '',
     placeholder = 'Type here...',
@@ -24,25 +29,21 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
     const [isEditing, setIsEditing] = useState(autoFocus); // Start editing if autoFocus is true
     const [localValue, setLocalValue] = useState(initialValue);
     const contentRef = useRef<HTMLElement>(null);
+    const composingRef = useRef(false);
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Sync external changes if not editing
     useEffect(() => {
         if (!isEditing) {
             setLocalValue(initialValue);
-            if (contentRef.current && contentRef.current.innerText !== initialValue) {
-                contentRef.current.innerText = initialValue;
-            }
         }
     }, [initialValue, isEditing]);
 
-    const handleSave = useCallback((newValue: string) => {
+    const handleSave = useCallback(async (newValue: string) => {
         const trimmed = newValue.trim();
-        // Only save if changed (allow saving empty string if that's the intent, but usually we want to keep it clean)
-        // If it's a list item, empty might mean delete, but for now let's just save whatever.
-        if (trimmed !== initialValue) {
-            onSave(trimmed);
-        }
+        try {
+            return trimmed === initialValue || await onSave(trimmed) !== false;
+        } catch { return false; }
     }, [initialValue, onSave]);
 
     const handleChange = useCallback(() => {
@@ -50,29 +51,35 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
         const newValue = contentRef.current.innerText;
         setLocalValue(newValue);
 
-        // Debounced save
+        if (onDraftChange) { onDraftChange(newValue); return; }
+        // Legacy callers retain the existing debounce.
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
         }
 
         saveTimeoutRef.current = setTimeout(() => {
-            handleSave(newValue);
+            void handleSave(newValue);
         }, 600); // 600ms debounce
-    }, [handleSave]);
+    }, [handleSave, onDraftChange]);
 
-    const handleBlur = useCallback(() => {
-        setIsEditing(false);
+    const handleBlur = useCallback(async () => {
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
         }
         if (contentRef.current) {
-            handleSave(contentRef.current.innerText);
+            const value = contentRef.current.innerText;
+            if (onDraftChange) onDraftChange(value);
+            const ok = onFlush ? await onFlush() : await handleSave(value);
+            if (ok === false) return;
         }
-    }, [handleSave]);
+        if (renderValue && contentRef.current) contentRef.current.textContent = '';
+        setIsEditing(false);
+    }, [handleSave, onDraftChange, onFlush, renderValue]);
 
     const lastEnterTime = useRef<number>(0);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.nativeEvent.isComposing || composingRef.current || e.keyCode === 229) return;
         if (e.key === 'Escape') {
             e.preventDefault();
             // Revert
@@ -81,7 +88,7 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
                 clearTimeout(saveTimeoutRef.current);
             }
             if (contentRef.current) {
-                contentRef.current.innerText = initialValue;
+                contentRef.current.innerText = renderValue ? '' : initialValue;
             }
             setLocalValue(initialValue);
         } else if (e.key === 'Enter') {
@@ -95,7 +102,7 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
                     // Double-Enter detected!
                     e.preventDefault();
                     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                    if (contentRef.current) handleSave(contentRef.current.innerText);
+                    if (contentRef.current && !onDraftChange) void handleSave(contentRef.current.innerText);
                     onEnter();
                     lastEnterTime.current = 0; // Reset
                 } else {
@@ -116,17 +123,23 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
     // Focus management
     useEffect(() => {
         if (isEditing && contentRef.current) {
+            contentRef.current.innerText = initialValue;
             contentRef.current.focus();
             // If autoFocus was relevant (newly created), we might want cursor at start or end?
             // Standard behavior usually end, but for new empty item it doesn't matter.
         }
     }, [isEditing]);
 
+    useEffect(() => () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); }, []);
     const Tag = tagName as any;
 
     return (
         <Tag
             ref={contentRef}
+            aria-label={ariaLabel}
+            role={isEditing ? 'textbox' : undefined}
+            onCompositionStart={() => { composingRef.current = true; }}
+            onCompositionEnd={() => { composingRef.current = false; handleChange(); }}
             contentEditable={isEditing}
             suppressContentEditableWarning={true}
             onClick={handleClick}
@@ -136,13 +149,13 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
             className={`
                 outline-none min-w-[10px] cursor-text transition-colors duration-200
                 bg-transparent
-                ${!localValue && placeholder ? 'empty:before:content-[attr(data-placeholder)] empty:before:text-white/20' : ''}
+                ${!localValue && placeholder ? 'empty:before:content-[attr(data-placeholder)] empty:before:text-text-tertiary' : ''}
                 ${className}
             `}
             data-placeholder={placeholder}
             spellCheck={false} // Clean look
         >
-            {initialValue}
+            {isEditing ? undefined : renderValue ? renderValue(initialValue) : initialValue}
         </Tag>
     );
 };

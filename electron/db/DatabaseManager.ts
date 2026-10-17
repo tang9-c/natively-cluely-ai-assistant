@@ -1,3 +1,4 @@
+import { normalizeMeetingActionItems, replaceLegacyActionItems } from '../../shared/meetingActionItems';
 import { readMeetingEditState, type Meeting, type MeetingEditRequest, type MeetingEditResult } from '../../shared/meetingEdits';
 import { redactForLog } from '../utils/redactForLog';
 
@@ -3470,11 +3471,18 @@ export class DatabaseManager {
                         || typeof value.text !== 'string' || (value.sourceTimestamp !== undefined && !Number.isFinite(value.sourceTimestamp))
                         || ['owner', 'deadline'].some(key => value[key] !== undefined && typeof value[key] !== 'string'))) return { ok: false, error: 'invalid_input' };
                     const summary = JSON.parse(row.summary_json || '{}');
-                    summary.detailedSummary = summary.detailedSummary || {};
+                    summary.detailedSummary = normalizeMeetingActionItems(summary.detailedSummary || {});
+                    if (Object.prototype.hasOwnProperty.call(patch, 'actionItems')) {
+                        patch.actionItemsStructured = replaceLegacyActionItems(summary.detailedSummary, patch.actionItems as string[]);
+                    }
                     for (const [key, value] of Object.entries(patch)) {
                         if (key !== 'title') summary.detailedSummary[key] = value;
                         if (!state.editedSummaryFields.includes(key)) state.editedSummaryFields.push(key);
                     }
+                    const beforeSectionActions = JSON.stringify(summary.detailedSummary.actionItemsStructured);
+                    summary.detailedSummary = normalizeMeetingActionItems(summary.detailedSummary, Object.prototype.hasOwnProperty.call(patch, 'sections'));
+                    if (Object.prototype.hasOwnProperty.call(patch, 'sections') && beforeSectionActions !== JSON.stringify(summary.detailedSummary.actionItemsStructured)
+                        && !state.editedSummaryFields.includes('actionItemsStructured')) state.editedSummaryFields.push('actionItemsStructured');
                     const updated = this.db!.prepare('UPDATE meetings SET title = ?, summary_json = ? WHERE id = ?')
                         .run(patch.title ?? row.title, JSON.stringify(summary), request.meetingId);
                     if (updated.changes !== 1) throw new Error('Meeting summary was not saved');
@@ -3538,8 +3546,8 @@ export class DatabaseManager {
             if (!row) return false;
             const state = readMeetingEditState(row.edit_state_json);
             const summary = JSON.parse(row.summary_json || '{}');
-            const detailed = summary.detailedSummary || {};
-            for (const [key, value] of Object.entries(meeting.detailedSummary || {})) {
+            const detailed = normalizeMeetingActionItems(summary.detailedSummary || {});
+            for (const [key, value] of Object.entries(normalizeMeetingActionItems(meeting.detailedSummary || {}))) {
                 if (state.editedSummaryFields.includes(key)) continue;
                 if (['actionItems', 'actionItemsStructured'].includes(key)
                     && state.editedSummaryFields.some(field => ['actionItems', 'actionItemsStructured'].includes(field))) continue;
@@ -3549,7 +3557,7 @@ export class DatabaseManager {
             state.meetingRevision++;
             const updated = this.db!.prepare('UPDATE meetings SET title = ?, summary_json = ?, edit_state_json = ?, is_processed = 1 WHERE id = ?')
                 .run(state.editedSummaryFields.includes('title') ? row.title : meeting.title,
-                    JSON.stringify({ ...summary, legacySummary: meeting.summary, detailedSummary: detailed }), JSON.stringify(state), meeting.id);
+                    JSON.stringify({ ...summary, legacySummary: meeting.summary, detailedSummary: normalizeMeetingActionItems(detailed) }), JSON.stringify(state), meeting.id);
             return updated.changes === 1;
         })();
     }
@@ -3762,7 +3770,7 @@ export class DatabaseManager {
                 date: row.created_at, // Use the stored ISO string
                 duration: durationStr,
                 summary: summaryData.legacySummary || '',
-                detailedSummary: summaryData.detailedSummary,
+                detailedSummary: summaryData.detailedSummary ? normalizeMeetingActionItems(summaryData.detailedSummary) : undefined,
                 calendarEventId: row.calendar_event_id,
                 source: row.source as any,
                 // We don't load full transcript/usage for list view to keep it light
@@ -3847,7 +3855,7 @@ export class DatabaseManager {
             date: meetingRow.created_at,
             duration: durationStr,
             summary: summaryData.legacySummary || '',
-            detailedSummary: summaryData.detailedSummary,
+            detailedSummary: summaryData.detailedSummary ? normalizeMeetingActionItems(summaryData.detailedSummary) : undefined,
             calendarEventId: meetingRow.calendar_event_id,
             source: meetingRow.source,
             transcript: transcript,
@@ -3895,7 +3903,7 @@ export class DatabaseManager {
                 date: row.created_at,
                 duration: durationStr,
                 summary: summaryData.legacySummary || '',
-                detailedSummary: summaryData.detailedSummary,
+                detailedSummary: summaryData.detailedSummary ? normalizeMeetingActionItems(summaryData.detailedSummary) : undefined,
                 calendarEventId: row.calendar_event_id,
                 source: row.source,
                 isProcessed: false,
