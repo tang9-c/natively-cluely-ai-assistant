@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Meeting, MeetingEditRequest, MeetingEditResult, MeetingSummaryPatch } from '../../shared/meetingEdits';
 import { normalizeMeetingActionItems, isValidMeetingActionText } from '../../shared/meetingActionItems';
 
-type Field = keyof MeetingSummaryPatch;
+type Field = keyof MeetingSummaryPatch | `text:${string}`;
 type Status = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict' | 'invalid';
 interface Bridge {
     applyMeetingEdit(request: MeetingEditRequest): Promise<MeetingEditResult>;
@@ -11,7 +11,9 @@ interface Bridge {
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const project = (meeting: Meeting): Meeting => ({ ...meeting,
     detailedSummary: normalizeMeetingActionItems(meeting.detailedSummary || { actionItems: [], keyPoints: [] }) });
-const valueAt = (meeting: Meeting, field: Field) => field === 'title' ? meeting.title : meeting.detailedSummary?.[field];
+const valueAt = (meeting: Meeting, field: Field) => field.startsWith('text:')
+    ? meeting.transcript?.find(entry => entry.segmentId === field.slice(5))?.text
+    : field === 'title' ? meeting.title : meeting.detailedSummary?.[field as keyof MeetingSummaryPatch & keyof NonNullable<Meeting['detailedSummary']>];
 
 /** One queue owns every edit to this meeting, including transcript identity edits. */
 export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
@@ -26,9 +28,12 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
     const listeners = new Set<() => void>();
     const notify = () => listeners.forEach(listener => listener());
     const view = () => {
-        const meeting = { ...saved, detailedSummary: { ...saved.detailedSummary! } };
+        const meeting = { ...saved, transcript: saved.transcript?.map(entry => ({ ...entry })), detailedSummary: { ...saved.detailedSummary! } };
         for (const [field, draft] of drafts) {
-            if (field === 'title') meeting.title = draft.value as string;
+            if (field.startsWith('text:')) {
+                const entry = meeting.transcript?.find(entry => entry.segmentId === field.slice(5));
+                if (entry) entry.text = draft.value as string;
+            } else if (field === 'title') meeting.title = draft.value as string;
             else (meeting.detailedSummary as any)[field] = draft.value;
         }
         // Keep intermediate input intact; only saved responses use the canonical projection.
@@ -54,7 +59,9 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
         flushPromise = enqueue(async () => {
             while (drafts.size) {
                 if (status === 'conflict') return false;
-                const batch = new Map(drafts);
+                const textEntry = [...drafts].find(([field]) => field.startsWith('text:'));
+                const batch = new Map(textEntry ? [textEntry] : [...drafts]);
+                if (textEntry && !(textEntry[1].value as string).trim()) { status = 'invalid'; notify(); return false; }
                 const actions = batch.get('actionItemsStructured')?.value as MeetingSummaryPatch['actionItemsStructured'];
                 if (actions?.some(item => !isValidMeetingActionText(item.text))) { status = 'invalid'; notify(); return false; }
                 if (sectionTitleEditing && batch.has('sections')) return false;
@@ -62,10 +69,13 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
                     status = 'conflict'; notify(); return false;
                 }
                 const patch = Object.fromEntries([...batch].map(([field, draft]) => [field, draft.value])) as MeetingSummaryPatch;
+                const operation: MeetingEditRequest['operation'] = textEntry
+                    ? { type: 'text', segmentId: textEntry[0].slice(5), text: textEntry[1].value as string }
+                    : { type: 'summary', patch };
                 status = 'saving'; notify();
                 try {
                     let result = await bridge.applyMeetingEdit({ meetingId: saved.id,
-                        expectedRevision: saved.editState?.meetingRevision ?? 0, operation: { type: 'summary', patch } });
+                        expectedRevision: saved.editState?.meetingRevision ?? 0, operation });
                     if (!result.ok && result.error === 'conflict') {
                         const latest = await bridge.getMeetingDetails(saved.id);
                         if (!latest) { status = 'error'; notify(); return false; }
@@ -74,7 +84,7 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
                         refresh(latest);
                         if (changed) { status = 'conflict'; notify(); return false; }
                         result = await bridge.applyMeetingEdit({ meetingId: saved.id,
-                            expectedRevision: saved.editState?.meetingRevision ?? 0, operation: { type: 'summary', patch } });
+                            expectedRevision: saved.editState?.meetingRevision ?? 0, operation });
                     }
                     if (!result.ok) { status = result.error === 'conflict' ? 'conflict' : 'error'; notify(); return false; }
                     const superseded = (saved.editState?.meetingRevision ?? 0) > result.revision;
@@ -112,6 +122,16 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
         snapshot: () => ({ meeting: view(), status }),
         subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
         refresh,
+        text(segmentId: string, text: string) {
+            const field: Field = `text:${segmentId}`;
+            if (!saved.transcript?.some(entry => entry.segmentId === segmentId)) return;
+            const previous = drafts.get(field);
+            if (equal(previous ? previous.value : valueAt(saved, field), text)) return;
+            drafts.set(field, { base: previous ? previous.base : valueAt(saved, field), value: text });
+            if (failedOperation) status = 'error';
+            else if (status !== 'conflict') status = 'pending';
+            notify(); cancelTimer(); timer = setTimeout(() => { void flush(); }, 600);
+        },
         patch(patch: MeetingSummaryPatch) {
             let changed = false;
             for (const [field, value] of Object.entries(patch) as [Field, unknown][]) {

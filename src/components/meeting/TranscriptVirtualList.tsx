@@ -8,6 +8,8 @@ import { TranscriptRow } from './TranscriptRow';
 interface TranscriptVirtualListProps {
   meetingId: string;
   rows: TranscriptVirtualRow[];
+  onTextChange?: (segmentId: string, text: string) => void;
+  onTextBlur?: () => void;
   onIdentityChange?: (ids: string[], identity: IdentityChoice) => Promise<boolean>;
   saving?: boolean;
   formatTime: (timestamp: number) => string;
@@ -16,7 +18,7 @@ interface TranscriptVirtualListProps {
 export function TranscriptVirtualList({
   meetingId,
   rows,
-  formatTime, onIdentityChange, saving,
+  formatTime, onTextChange, onTextBlur, onIdentityChange, saving,
 }: TranscriptVirtualListProps) {
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -62,7 +64,7 @@ export function TranscriptVirtualList({
             className="absolute left-0 top-0 w-full"
             style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
-            <TranscriptRow row={rows[virtualRow.index]} formatTime={formatTime} onIdentityChange={onIdentityChange} saving={saving}
+            <TranscriptRow onTextChange={onTextChange} onTextBlur={onTextBlur} row={rows[virtualRow.index]} formatTime={formatTime} onIdentityChange={onIdentityChange} saving={saving}
               selecting={selected !== null} selected={selected?.has(rows[virtualRow.index].entry.segmentId ?? '')}
               onSelect={() => setSelected(new Set([rows[virtualRow.index].entry.segmentId!]))}
               onToggle={() => setSelected(current => { const next = new Set(current ?? []); const id = rows[virtualRow.index].entry.segmentId!;

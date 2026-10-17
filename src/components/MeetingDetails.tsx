@@ -88,7 +88,7 @@ const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProp
         if (identitySavePending.current) return false;
         identitySavePending.current = true; setIdentitySaving(true);
         const ok = await controller.operation({ type: 'identity', segmentIds, identity });
-        setIdentityStatus(ok ? '身份已修改，已有摘要可能需要修正。' : '身份保存失败，所选片段已保留，请重试。');
+        setIdentityStatus(ok ? '' : '身份保存失败，所选片段已保留，请重试。');
         identitySavePending.current = false; setIdentitySaving(false);
         return ok;
     };
@@ -354,7 +354,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                     </div>
 
                     <div role="status" aria-live="polite" className="mb-3 text-xs text-text-tertiary">
-                        {saveStatus === 'pending' ? '有未保存修改' : saveStatus === 'saving' ? '正在保存...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'invalid' ? '行动项内容无效，请填写具体内容或使用删除。' : saveStatus === 'error' ? '保存失败，输入已保留。请重试后再离开或复制导出。' : saveStatus === 'conflict' ? '记录已变化，输入已保留。请选择重新加载或保留本次修改。' : ''}
+                        {saveStatus === 'pending' ? '有未保存修改' : saveStatus === 'saving' ? '正在保存...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'invalid' ? '内容无效，请保留有效转录或填写具体行动项。删除行动项请使用删除。' : saveStatus === 'error' ? '保存失败，输入已保留。请重试后再离开或复制导出。' : saveStatus === 'conflict' ? '记录已变化，输入已保留。请选择重新加载或保留本次修改。' : ''}
                         {saveStatus === 'error' && <button className="ml-2 underline" onClick={async () => { if (await controller.retry()) setIdentityStatus(''); }}>重试保存</button>}
                         {saveStatus === 'conflict' && <>
                             <button className="ml-2 underline" onClick={() => void controller.reload()}>重新加载</button>
@@ -613,6 +613,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
 
                         {activeTab === 'transcript' && (
                             <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                {(meeting.editState?.transcriptRevision ?? 0) > (meeting.editState?.summarySourceRevision ?? 0) && <p role="status" className="mb-3 text-xs text-text-tertiary">记录已修改，摘要可能需要调整。</p>}
                                 {identityStatus && <p role="status" className="mb-3 text-xs text-text-secondary">{identityStatus}</p>}
                                 {meeting.transcript?.some(entry => resolveSpeakerIdentity(entry).source === 'unknown') && <p className="mb-3 text-xs text-text-tertiary">音源不代表人物身份；旧版本曾按音源标注。可点击身份标签纠正。</p>}
                                 <TranscriptVirtualList
@@ -620,6 +621,8 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                     rows={visibleTranscriptRows}
                                     formatTime={formatTime}
                                     onIdentityChange={updateIdentity}
+                                    onTextChange={controller.text}
+                                    onTextBlur={() => { void controller.flush(); }}
                                     saving={identitySaving}
                                 />
                             </motion.section>

@@ -8,6 +8,7 @@ const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return
 function fixture(t,apply){let latest=meeting();const calls=[];
  const bridge={getMeetingDetails:async()=>structuredClone(latest),applyMeetingEdit:async request=>{calls.push(request);if(apply){const result=await apply(request,calls.length);if(result)return result;}
  latest={...latest,editState:{meetingRevision:latest.editState.meetingRevision+1},detailedSummary:{...latest.detailedSummary}};
+ if(request.operation.type==='text')latest.transcript=latest.transcript.map(entry=>entry.segmentId===request.operation.segmentId?{...entry,text:request.operation.text}:entry);
  if(request.operation.type==='summary'){for(const [key,value]of Object.entries(request.operation.patch)){if(key==='title')latest.title=value;else latest.detailedSummary[key]=value;}}
  return {ok:true,meeting:structuredClone(latest),revision:latest.editState.meetingRevision};}};
  const controller=createMeetingAutosave(latest,bridge);t.after(()=>controller.dispose());
@@ -128,4 +129,26 @@ test('review I1 punctuation: canonical-discarded text cannot save or remove its 
   f.controller.patch({actionItemsStructured:[{...item,text:text+'补充任务。'}]});assert.equal(await f.controller.flush(),true);
   assert.deepEqual(f.controller.snapshot().meeting.detailedSummary.actionItemsStructured,[{...item,text:text+'补充任务。'}]);
  }
+});
+
+test('text drafts survive virtualization, invalid input and failed saves in the shared revision queue',async t=>{
+ const f=fixture(t,async(_request,n)=>n===1?{ok:false,error:'save_failed'}:undefined);
+ f.controller.text('seg','  ');assert.equal(f.controller.snapshot().meeting.transcript[0].text,'  ');
+ assert.equal(await f.controller.flush(),false);assert.equal(f.calls.length,0);assert.equal(f.controller.snapshot().status,'invalid');
+ f.controller.text('seg','corrected');assert.equal(await f.controller.flush(),false);
+ assert.equal(f.controller.snapshot().meeting.transcript[0].text,'corrected');
+ assert.equal(await f.controller.retry(),true);assert.deepEqual(f.calls.at(-1).operation,{type:'text',segmentId:'seg',text:'corrected'});
+ f.controller.patch({overview:'after text'});assert.equal(await f.controller.flush(),true);assert.equal(f.calls.at(-1).expectedRevision,1);
+});
+test('text conflict keeps the local draft until explicit resolution',async t=>{
+ const f=fixture(t);f.controller.text('seg','mine');const remote=meeting(1);remote.transcript[0].text='theirs';f.setLatest(remote);f.controller.refresh(remote);
+ assert.equal(await f.controller.flush(),false);assert.equal(f.controller.snapshot().meeting.transcript[0].text,'mine');assert.equal(f.calls.length,0);
+});
+
+test('a newer text draft waits for the in-flight text save and retains its own revision',async t=>{
+ const gate=deferred();const f=fixture(t,async(_request,n)=>{if(n===1)await gate.promise;});
+ f.controller.text('seg','first text');const pending=f.controller.flush();await Promise.resolve();
+ f.controller.text('seg','newer text');assert.equal(f.controller.snapshot().meeting.transcript[0].text,'newer text');gate.resolve();
+ assert.equal(await pending,true);assert.deepEqual(f.calls.map(call=>call.operation.text),['first text','newer text']);assert.deepEqual(f.calls.map(call=>call.expectedRevision),[0,1]);
+ assert.equal(f.controller.snapshot().meeting.transcript[0].text,'newer text');
 });
