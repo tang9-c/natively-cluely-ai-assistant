@@ -1,3 +1,4 @@
+import { resolveSpeakerIdentity } from '../../../shared/speakerIdentity';
 import type { AnswerDegradedReason } from '../../db/DatabaseManager';
 import type { TranscriptTurn } from '../../llm/transcriptCleaner';
 import type { SpeakerVerificationMetadata } from '../speaker/speakerVerificationTypes';
@@ -36,12 +37,6 @@ function isUsableLocalVerification(value: unknown): value is SpeakerVerification
         isFiniteNumber(metadata.threshold);
 }
 
-function isHighConfidenceLocalMe(metadata: SpeakerVerificationMetadata): boolean {
-    return metadata.provider === 'local-speaker-verification' &&
-        metadata.isMe === true &&
-        metadata.confidence >= metadata.threshold;
-}
-
 function addReason(reasons: AnswerDegradedReason[], reason: AnswerDegradedReason): void {
     if (!reasons.includes(reason)) reasons.push(reason);
 }
@@ -65,6 +60,11 @@ export function evaluateSpeakerContextForAnswer(turns: TranscriptTurn[]): Speake
 
     const sanitizedTurns = turns.map((turn) => {
         let speakerVerification = turn.speakerVerification;
+        const identity = resolveSpeakerIdentity(turn);
+        if (identity.identity === 'unknown' && turn.role !== 'assistant') {
+            unknownCount += 1;
+            addReason(degradedReasons, 'speaker_metadata_unavailable');
+        }
 
         if (turn.diarizationProvider || turn.providerSpeakerId) {
             diarizationUsed = true;
@@ -79,7 +79,7 @@ export function evaluateSpeakerContextForAnswer(turns: TranscriptTurn[]): Speake
                 sources.add('local-speaker-verification');
                 recordConfidence(speakerVerification.confidence);
 
-                if (isHighConfidenceLocalMe(speakerVerification)) {
+                if (identity.source === 'voice') {
                     verifiedMeCount += 1;
                 } else {
                     lowConfidenceCount += 1;
@@ -87,7 +87,6 @@ export function evaluateSpeakerContextForAnswer(turns: TranscriptTurn[]): Speake
                     speakerVerification = undefined;
                 }
             } else {
-                unknownCount += 1;
                 addReason(degradedReasons, 'speaker_metadata_unavailable');
                 speakerVerification = undefined;
             }

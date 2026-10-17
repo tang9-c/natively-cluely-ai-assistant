@@ -1,3 +1,4 @@
+import { speakerIdentityPromptLabel } from '../../shared/speakerIdentity';
 // electron/llm/transcriptQuestionExtractor.ts
 //
 // Deterministic (NO LLM) extractor that pulls the latest meaningful
@@ -225,7 +226,7 @@ export function extractLatestQuestion(
     // Background window: the most recent few cleaned turns, oldest-first.
     const window = cleaned.slice(-windowTurns);
     const relevantTranscriptWindow = window
-        .map(t => `[${t.role === 'interviewer' ? 'INTERVIEWER' : t.role === 'user' ? 'ME' : 'ASSISTANT'}]: ${t.text}`)
+        .map(t => `[${speakerIdentityPromptLabel(t)}]: ${t.text}`)
         .join('\n');
 
     // Walk backwards for the latest meaningful INTERVIEWER turn that looks like

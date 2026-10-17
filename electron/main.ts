@@ -1309,8 +1309,16 @@ export class AppState {
     this.logMeetingEchoDiagnostics(speaker, routedPayload.text, routedPayload.final, receivedAt);
 
     this.intelligenceManager.handleTranscript(routedPayload);
+    if (routedPayload.final) {
+      const canonical = this.intelligenceManager.findSpeakerIdentitySegment(routedPayload);
+      if (canonical) Object.assign(routedPayload, {
+        canonicalSegmentId: canonical.segmentId, canonicalText: canonical.text,
+        canonicalRawSegmentIds: canonical.rawSegmentIds, speakerIdentityCorrection: canonical.speakerIdentityCorrection,
+      });
+    }
     if (routedPayload.final && this.ragManager) {
       this.ragManager.feedLiveTranscript([{
+        ...routedPayload,
         speaker: routedPayload.speaker,
         text: routedPayload.text,
         timestamp: routedPayload.timestamp ?? receivedAt,
@@ -1372,15 +1380,18 @@ export class AppState {
       const { SpeakerVerificationService } = require('./services/speaker/SpeakerVerificationService');
       const { SpeakerVerificationAnnotator } = require('./services/speaker/SpeakerVerificationAnnotator');
       const store = new SpeakerProfileStore(DatabaseManager.getInstance());
-      const profile = store.getMeProfile();
-      if (profile && SettingsManager.getInstance().getSpeakerVerificationMode() === 'local') {
-        const extractor = getSharedSpeakerEmbeddingExtractor();
-        const service = new SpeakerVerificationService({ store, extractor });
-        stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
-          getMode: () => SettingsManager.getInstance().getSpeakerVerificationMode(),
-          service,
-        }));
-      }
+      // Install once even when currently paused or unenrolled. The service reads the current profile per request.
+      const service = new SpeakerVerificationService({ store, extractor: {
+        extract: (samples: Float32Array, options: any) => getSharedSpeakerEmbeddingExtractor().extract(samples, options),
+        get dim() { return getSharedSpeakerEmbeddingExtractor().dim; },
+        get modelId() { return getSharedSpeakerEmbeddingExtractor().modelId; },
+        get version() { return getSharedSpeakerEmbeddingExtractor().version; },
+      } });
+      stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
+        getMode: () => SettingsManager.getInstance().getSpeakerVerificationMode(),
+        getGeneration: () => `${SettingsManager.getInstance().getSpeakerVerificationGeneration()}:${store.getGeneration()}`,
+        service,
+      }));
     } catch (error: any) {
       console.warn('[Main] Local speaker verification unavailable', {
         message: error?.message ?? String(error),
@@ -3997,6 +4008,7 @@ export class AppState {
 
       // Convert transcript to RAG format
       const segments = meeting.transcript.map(t => ({
+        ...t,
         speaker: t.speaker,
         text: t.text,
         timestamp: t.timestamp

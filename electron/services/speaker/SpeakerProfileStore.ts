@@ -67,6 +67,8 @@ function safeErrorCode(error?: string): string | undefined {
 }
 
 export class SpeakerProfileStore {
+  private static generation = 0;
+  getGeneration(): number { return SpeakerProfileStore.generation; }
   constructor(private readonly dbProvider: DbProvider) {}
 
   getStatus(mode: SpeakerVerificationMode = 'off', health?: SpeakerVerificationHealth): SpeakerVerificationStatus {
@@ -271,6 +273,7 @@ export class SpeakerProfileStore {
   }
 
   saveMeProfile(input: SaveSpeakerProfileInput): void {
+    SpeakerProfileStore.generation++;
     const db = this.dbProvider.getDb();
     if (!db) throw new Error('speaker_profile_store_unavailable');
     const nowMs = input.nowMs ?? Date.now();
@@ -320,6 +323,7 @@ export class SpeakerProfileStore {
   }
 
   deleteMeProfile(): void {
+    SpeakerProfileStore.generation++;
     const db = this.dbProvider.getDb();
     if (!db) return;
     const tx = db.transaction(() => {

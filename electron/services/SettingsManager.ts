@@ -169,6 +169,10 @@ export class SettingsManager {
         this.saveSettings();
     }
 
+    private speakerVerificationGeneration = 0;
+
+    public getSpeakerVerificationGeneration(): number { return this.speakerVerificationGeneration; }
+
     public getSpeakerVerificationMode(): 'off' | 'local' {
         return this.settings.speakerVerificationMode === 'local' ? 'local' : 'off';
     }
@@ -177,6 +181,7 @@ export class SettingsManager {
         if (!['off', 'local'].includes(mode)) {
             throw new Error(`[SettingsManager] Invalid speakerVerificationMode: ${mode}`);
         }
+        this.speakerVerificationGeneration++;
         this.settings.speakerVerificationMode = mode;
         this.saveSettings();
     }

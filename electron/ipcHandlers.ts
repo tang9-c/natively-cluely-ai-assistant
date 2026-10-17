@@ -1560,7 +1560,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('speaker-verification:set-session-override', async (_, input: any) => {
     try {
       const action = input?.action;
-      if (action !== 'force_me' && action !== 'force_not_me' && action !== 'clear') {
+      if (action !== 'force_me' && action !== 'force_not_me' && action !== 'force_unknown' && action !== 'clear') {
         return { success: false, error: 'invalid_action' };
       }
       const timestamp = Number(input?.timestamp);
@@ -1578,6 +1578,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         text: input.text,
         action,
       });
+      if (applied) {
+        const segment = appState.getIntelligenceManager().findSpeakerIdentitySegment(input);
+        if (segment) broadcast('speaker-identity-corrected', segment);
+      }
       return applied ? { success: true } : { success: false, error: 'segment_not_found' };
     } catch (error: any) {
       console.warn('[IPC] speaker verification session override failed', redactForLog([error]));

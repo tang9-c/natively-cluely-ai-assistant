@@ -1,20 +1,24 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 import type { TranscriptVirtualRow } from '../../../shared/transcriptVirtualization';
+import { SpeakerIdentityMenu, type IdentityChoice } from './SpeakerIdentityMenu';
 import { TranscriptRow } from './TranscriptRow';
 
 interface TranscriptVirtualListProps {
   meetingId: string;
   rows: TranscriptVirtualRow[];
+  onIdentityChange?: (ids: string[], identity: IdentityChoice) => Promise<boolean>;
+  saving?: boolean;
   formatTime: (timestamp: number) => string;
 }
 
 export function TranscriptVirtualList({
   meetingId,
   rows,
-  formatTime,
+  formatTime, onIdentityChange, saving,
 }: TranscriptVirtualListProps) {
+  const [selected, setSelected] = useState<Set<string> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -27,6 +31,7 @@ export function TranscriptVirtualList({
 
   useEffect(() => {
     virtualizer.scrollToOffset(0);
+    setSelected(null);
   }, [meetingId, virtualizer]);
 
   if (rows.length === 0) {
@@ -35,6 +40,13 @@ export function TranscriptVirtualList({
 
   const virtualRows = virtualizer.getVirtualItems();
   return (
+    <>
+    {selected && <div className="mb-3 flex items-center gap-3 text-xs text-text-secondary">
+      <span>已选 {selected.size} 段</span>
+      {onIdentityChange && <SpeakerIdentityMenu segment={{}} label="批量修改身份" disabled={saving || selected.size === 0}
+        onChange={async identity => { const ok = await onIdentityChange([...selected], identity); if (ok) setSelected(null); return ok; }} />}
+      <button type="button" disabled={saving} onClick={() => setSelected(null)}>取消选择</button>
+    </div>}
     <div
       ref={scrollRef}
       className="h-[calc(100vh-260px)] min-h-[320px] overflow-y-auto custom-scrollbar"
@@ -50,10 +62,15 @@ export function TranscriptVirtualList({
             className="absolute left-0 top-0 w-full"
             style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
-            <TranscriptRow row={rows[virtualRow.index]} formatTime={formatTime} />
+            <TranscriptRow row={rows[virtualRow.index]} formatTime={formatTime} onIdentityChange={onIdentityChange} saving={saving}
+              selecting={selected !== null} selected={selected?.has(rows[virtualRow.index].entry.segmentId ?? '')}
+              onSelect={() => setSelected(new Set([rows[virtualRow.index].entry.segmentId!]))}
+              onToggle={() => setSelected(current => { const next = new Set(current ?? []); const id = rows[virtualRow.index].entry.segmentId!;
+                if (next.has(id)) next.delete(id); else next.add(id); return next; })} />
           </div>
         ))}
       </div>
     </div>
+    </>
   );
 }

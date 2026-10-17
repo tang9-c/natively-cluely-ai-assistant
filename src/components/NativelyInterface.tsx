@@ -1,3 +1,5 @@
+import { resolveSpeakerIdentity } from '../../shared/speakerIdentity';
+import { LiveSpeakerIdentity } from './meeting/LiveSpeakerIdentity';
 import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
   AlertCircle,
@@ -595,7 +597,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messages, autoScroll]);
 
-  const [rollingTranscript, setRollingTranscript] = useState(''); // For interviewer rolling text bar
+  const [rollingSegments, setRollingSegments] = useState<NativeAudioTranscriptPayload[]>([]);
+  const rollingTranscript = rollingSegments.map(segment => `${resolveSpeakerIdentity(segment).label}: ${segment.text}`).join('  ·  ');
+  const setRollingTranscript = (_text: string) => setRollingSegments([]); // For interviewer rolling text bar
   const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false); // Track if actively speaking
   const [detectedEmotion, setDetectedEmotion] = useState<{
     emotion: TranscriptEmotion;
@@ -633,7 +637,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       emotion: transcript.emotion,
       emotionDegree: transcript.emotionDegree,
       label,
-      speaker: transcript.speaker === 'user' ? '你' : '面试官',
+      speaker: resolveSpeakerIdentity(transcript).label,
       receivedAt: Date.now(),
     });
     emotionClearTimerRef.current = window.setTimeout(() => {
@@ -641,6 +645,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       emotionClearTimerRef.current = null;
     }, 4000);
   }, []);
+
+  useEffect(() => window.electronAPI.onSpeakerIdentityCorrected(segment => {
+    setRollingSegments(previous => previous.map(item => item.segmentId === segment.segmentId
+      ? { ...item, ...segment, final: true } : item));
+  }), []);
 
   // Stability gate for code-visibility transitions. Scroll fires at ~60Hz;
   // without this, fast scrolls cancel and restart the 0.7s tween repeatedly,
@@ -1974,21 +1983,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         }
 
         if (rollingItems.length > 0) {
-          setRollingTranscript((prev) => {
-            return rollingItems.reduce((current, transcript) => {
-              const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
-              if (transcript.final) {
-                const separator = current ? '  ·  ' : '';
-                const displaySpeakerLabel = transcript.speakerLabel || speakerLabel;
-                return current + separator + `${displaySpeakerLabel}: ${transcript.text}`;
-              }
-
-              // Replace only the current partial while preserving finalized text.
-              const lastSeparator = current.lastIndexOf('  ·  ');
-              const accumulated = lastSeparator >= 0 ? current.substring(0, lastSeparator + 5) : '';
-              return accumulated + `${speakerLabel}: ${transcript.text}`;
-            }, prev);
-          });
+          setRollingSegments(previous => rollingItems.reduce((items, transcript) => {
+            const id = transcript.canonicalSegmentId ?? transcript.segmentId;
+            const normalized = { ...transcript, segmentId: id,
+              text: transcript.canonicalText ?? transcript.text,
+              rawSegmentIds: transcript.canonicalRawSegmentIds ?? transcript.rawSegmentIds };
+            const retained = items.filter(item => item.final && (!id || item.segmentId !== id));
+            return [...retained, normalized].slice(-120);
+          }, previous));
         }
       }),
     );
@@ -4472,6 +4474,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                   onCopyDiagnostics={copyDiagnostics}
                 />
               ) : null}
+
+              {showTranscript && <LiveSpeakerIdentity segments={rollingSegments} />}
 
               {/* Chat History - Only show if there are messages OR active states */}
               {(messages.length > 0 || isManualRecording || isProcessing) && (

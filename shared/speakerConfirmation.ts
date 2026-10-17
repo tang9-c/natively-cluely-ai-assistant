@@ -1,9 +1,14 @@
+import { resolveSpeakerIdentity, type SpeakerIdentitySegmentLike } from './speakerIdentity';
 export type SpeakerConfirmationSpeaker = 'user' | 'interviewer';
 
 export interface DynamicActionSpeakerConfirmation {
     speaker: SpeakerConfirmationSpeaker;
     timestamp: number;
     text: string;
+    segmentId?: string;
+    sessionGeneration?: string;
+    rawSegmentIds?: string[];
+    coalescedFromCount?: number;
 }
 
 interface SpeakerVerificationLike {
@@ -14,7 +19,9 @@ interface SpeakerVerificationLike {
     threshold?: number;
 }
 
-interface SpeakerConfirmationSegmentLike {
+interface SpeakerConfirmationSegmentLike extends SpeakerIdentitySegmentLike {
+    segmentId?: string;
+    sessionGeneration?: string;
     speaker?: string;
     timestamp?: number;
     text?: string;
@@ -26,7 +33,6 @@ export interface DynamicActionSpeakerConfirmationInput {
     hasConsequentialAction: boolean;
 }
 
-const NEAR_THRESHOLD_MARGIN = 0.04;
 const MIN_MEANINGFUL_CHARACTERS = 2;
 
 function normalizeSegmentText(text: string): string {
@@ -58,23 +64,13 @@ export function buildDynamicActionSpeakerConfirmation(
     const text = normalizeSegmentText(String(segment.text || ''));
     if (meaningfulCharacterCount(text) < MIN_MEANINGFUL_CHARACTERS) return undefined;
 
-    const verification = segment.speakerVerification;
-    if (verification?.provider !== 'local-speaker-verification'
-        || verification.profileId !== 'me'
-        || typeof verification.isMe !== 'boolean'
-        || !Number.isFinite(verification.confidence)
-        || !Number.isFinite(verification.threshold)) {
-        return undefined;
-    }
-
-    const confidence = verification.confidence as number;
-    const threshold = verification.threshold as number;
-    const verifiedSpeaker: SpeakerConfirmationSpeaker = verification.isMe ? 'user' : 'interviewer';
-    const channelConflict = verifiedSpeaker !== segment.speaker;
-    const nearThreshold = Math.abs(confidence - threshold) <= NEAR_THRESHOLD_MARGIN;
-    if (!channelConflict && !nearThreshold) return undefined;
+    const identity = resolveSpeakerIdentity(segment);
+    if (identity.identity === 'me' || identity.identity === 'other') return undefined;
 
     return {
+        ...(segment.segmentId ? { segmentId: segment.segmentId, sessionGeneration: segment.sessionGeneration } : {}),
+        ...((segment.rawSegmentIds?.length ?? 0) > 1 ? { rawSegmentIds: segment.rawSegmentIds } : {}),
+        ...((segment.coalescedFromCount ?? 0) > 1 ? { coalescedFromCount: segment.coalescedFromCount } : {}),
         speaker: segment.speaker,
         timestamp: segment.timestamp as number,
         text,

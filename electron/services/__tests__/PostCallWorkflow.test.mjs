@@ -31,7 +31,7 @@ test('extractStructuredActionItems captures owner, deadline, and stable ids', ()
 
   assert.equal(items.length, 2);
   assert.equal(items[0].id, 'action_1');
-  assert.equal(items[0].owner, 'Me');
+  assert.equal(items[0].owner, '待确认');
   assert.equal(items[0].text, 'send the pricing proposal');
   assert.equal(items[0].deadline, 'Friday');
   assert.equal(items[0].sourceTimestamp, 1200);
@@ -98,7 +98,7 @@ test('failed summary retains transcript action extraction as a fallback', () => 
   });
 
   assert.equal(result.actionItemsStructured[0].text, 'send the integration checklist');
-  assert.equal(result.actionItemsStructured[0].owner, 'Me');
+  assert.equal(result.actionItemsStructured[0].owner, '待确认');
   assert.equal(result.actionItemsStructured[0].deadline, 'Friday');
 });
 
@@ -110,7 +110,7 @@ test('summarized actions retain metadata for exactly matching transcript actions
   });
 
   assert.deepEqual(result.actionItemsStructured, [{
-    id: 'action_1', text: 'send the integration checklist', owner: 'Me', deadline: 'Friday', sourceTimestamp: 1,
+    id: 'action_1', text: 'send the integration checklist', owner: '待确认', deadline: 'Friday', sourceTimestamp: 1,
   }]);
 });
 
@@ -577,4 +577,15 @@ test('structured action items cap at eight and keep deterministic ids after dedu
     'action_8',
   ]);
   assert.equal(items.filter(item => item.text === 'prepare follow up item 1').length, 1);
+});
+
+test('unknown first-person commitment owner remains pending while named ownership survives', () => {
+  const items=extractStructuredActionItems([
+    {speaker:'user',text:'I will send the recap.',timestamp:1},
+    {speaker:'user',text:'Alice will send the budget report.',timestamp:2},
+    {speaker:'interviewer',text:'I will send the integration plan.',timestamp:3,speakerIdentityCorrection:{identity:'me',source:'user',correctedAt:1}},
+  ]);
+  assert.equal(items[0].owner,'待确认');
+  assert.equal(items[1].owner,'Alice');
+  assert.equal(items[2].owner,'Me');
 });

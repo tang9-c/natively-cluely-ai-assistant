@@ -37,7 +37,7 @@ test('final routing assigns one stable ID before both session and IPC; interim s
   const { SessionTracker } = await import('../../../dist-electron/electron/SessionTracker.js');
   const tracker = new SessionTracker();
   route.logMeetingEchoDiagnostics=()=>{};
-  route.intelligenceManager={getSessionGeneration:()=> tracker.getSessionGeneration(),handleTranscript:p=>{ seen.push({...p});tracker.addTranscript(p); }};
+  route.intelligenceManager={getSessionGeneration:()=> tracker.getSessionGeneration(),findSpeakerIdentitySegment:p=>tracker.findEffectiveSpeakerVerificationSegment(p),handleTranscript:p=>{ seen.push({...p});tracker.addTranscript(p); }};
   route.transcriptIpcBatcher={enqueue:p=>sent.push(p)};
   route.routeTranscriptPayload({speaker:'user',text:'fictional',final:true});
   assert.ok(seen[0].segmentId);

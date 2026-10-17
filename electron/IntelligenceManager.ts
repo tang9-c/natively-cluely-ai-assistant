@@ -141,6 +141,10 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.handleTranscript(segment);
     }
 
+    findSpeakerIdentitySegment(input: { segmentId?: string; speaker?: string; timestamp?: number; text?: string }) {
+        return this.session.findEffectiveSpeakerVerificationSegment(input);
+    }
+
     getSessionGeneration(): string { return this.session.getSessionGeneration(); }
 
     setSpeakerVerificationSessionOverride(input: import('./SessionTracker').SpeakerVerificationSessionOverride): boolean {

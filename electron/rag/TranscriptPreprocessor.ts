@@ -1,8 +1,9 @@
+import { speakerIdentityPromptLabel, type SpeakerIdentitySegmentLike } from '../../shared/speakerIdentity';
 // electron/rag/TranscriptPreprocessor.ts
 // Enhanced transcript cleaning for RAG - extends existing transcriptCleaner.ts patterns
 // Adds semantic detection (questions, decisions, action items)
 
-export interface RawSegment {
+export interface RawSegment extends SpeakerIdentitySegmentLike {
     speaker: string;
     text: string;
     timestamp: number;  // ms
@@ -71,24 +72,6 @@ function cleanText(text: string): string {
     result = result.replace(/\s+/g, ' ');
 
     return result;
-}
-
-/**
- * Normalize speaker labels for consistency
- */
-function normalizeSpeaker(speaker: string): string {
-    const lower = speaker.toLowerCase();
-    if (lower === 'interviewer' || lower === 'speaker') {
-        return 'Speaker';
-    }
-    if (lower === 'user' || lower === 'me') {
-        return 'You';
-    }
-    if (lower === 'assistant' || lower === 'natively') {
-        return 'Natively';
-    }
-    // Keep original if it looks like a name
-    return speaker;
 }
 
 /**
@@ -166,7 +149,7 @@ export function preprocessTranscript(segments: RawSegment[]): CleanedSegment[] {
     if (segments.length === 0) return [];
 
     // 1. Merge consecutive segments from same speaker
-    const merged = mergeConsecutiveSpeakerSegments(segments);
+    const merged = mergeConsecutiveSpeakerSegments(segments.map(segment => ({ ...segment, speaker: speakerIdentityPromptLabel(segment) })));
 
     // 2. Clean and annotate each segment
     const cleaned: CleanedSegment[] = [];
@@ -177,7 +160,7 @@ export function preprocessTranscript(segments: RawSegment[]): CleanedSegment[] {
         if (!hasMeaningfulContent(text)) continue;
 
         cleaned.push({
-            speaker: normalizeSpeaker(seg.speaker),
+            speaker: seg.speaker,
             text,
             startMs: seg.startMs,
             endMs: seg.endMs,

@@ -24,11 +24,9 @@ test('LocalWhisperSTT.stop does not clear queued VAD finals before worker readin
   assert.match(stopSource, /shouldKeepWorkerForFinals[\s\S]*this\.pendingAudio\.length > 0/);
 });
 
-test('LocalWhisperSTT drains queued stop-time finals before terminating worker', () => {
-  assert.ok(flushPendingStart >= 0, 'flushPending should exist');
-  assert.match(source, /if \(this\.isDrainingFinals\) \{\n\s+this\.drainingFinalsInFlight\+\+;\n\s+\}\n\s+this\.sendTranscribe\(audio, false\);/);
-  assert.match(flushPendingSource, /queued\.forEach\(audio => \{[\s\S]*this\.drainingFinalsInFlight\+\+;[\s\S]*this\.sendTranscribe\(audio, false\);[\s\S]*\}\);/);
-  assert.match(listenerSource, /!this\._isActive && !\(this\.isDrainingFinals && msg\.type === 'result'\)/);
-  assert.match(listenerSource, /this\.drainingFinalsInFlight = Math\.max\(0, this\.drainingFinalsInFlight - 1\);/);
-  assert.match(listenerSource, /this\.beginWorkerTermination\(this\.worker\);/);
+test('LocalWhisperSTT tracks every accepted final before draining and keeps audio by task', () => {
+  assert.match(source, /pendingAudioByTaskId/);
+  assert.match(flushPendingSource, /this\.sendTranscribe\(audio, false\)/);
+  assert.match(source, /this\.finalTaskOrder\.push\(taskId\)/);
+  assert.match(source, /this\.drainingFinalsInFlight\+\+/);
 });

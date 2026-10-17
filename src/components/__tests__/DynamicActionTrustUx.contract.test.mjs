@@ -117,11 +117,11 @@ test('speaker-uncertain dynamic actions require bidirectional confirmation befor
   assert.match(bar, /if \(action\.speakerConfirmation\) return/);
   assert.match(bar, /!action\.speakerConfirmation/);
   assert.match(bar, /filter\(\(action\) => !action\.speakerConfirmation\)/);
-  assert.match(card, /可能是对方说的/);
-  assert.match(card, /可能是你说的/);
+  assert.match(card, /身份未确认/);
+  assert.match(card, /仅执行此动作/);
   assert.match(card, /确认/);
-  assert.match(card, /这是我/);
-  assert.match(card, /这不是我/);
+  assert.match(card, /SpeakerIdentityMenu/);
+  assert.match(card, /onIdentityChange/);
   assert.match(card, /onConfirmSpeaker/);
 });
 

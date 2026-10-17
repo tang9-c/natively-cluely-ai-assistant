@@ -41,8 +41,8 @@ test('LocalSenseVoiceSTT attaches bounded final VAD speaker verification metadat
   const sense = read('electron/audio/sensevoice/LocalSenseVoiceSTT.ts');
   assert.match(sense, /pendingAudioByTaskId/);
   assert.match(sense, /const speakerVerification = await this\.annotateSpeaker\(message\.taskId\)/);
-  assert.match(sense, /\.\.\.\(speakerVerification \? \{ speakerVerification \} : \{\}\)/);
-  assert.match(sense, /return this\.speakerVerificationAnnotator\?\.annotate\(samples\)/);
+  assert.match(sense, /if \(speakerVerification\) segment\.speakerVerification = speakerVerification/);
+  assert.match(sense, /return this\.speakerVerificationAnnotator\?\.annotate\(samples, pendingSegment\.generation\)/);
 });
 
 test('DatabaseManager persists speaker verification json with transcripts', () => {

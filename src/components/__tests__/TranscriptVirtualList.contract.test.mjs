@@ -23,5 +23,5 @@ test('transcript row is memoized and remains selectable', () => {
 
   assert.match(row, /React\.memo/);
   assert.match(row, /select-text/);
-  assert.match(row, /resolveEffectiveSpeaker/);
+  assert.match(row, /resolveSpeakerIdentity/);
 });

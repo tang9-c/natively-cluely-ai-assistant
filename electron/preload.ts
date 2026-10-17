@@ -357,6 +357,7 @@ interface ElectronAPI {
   onCredentialsChanged: (callback: () => void) => () => void;
 
   // Native Audio Service Events
+  onSpeakerIdentityCorrected: (callback: (segment: NativeAudioTranscriptPayload) => void) => () => void;
   onNativeAudioTranscriptBatch: (
     callback: (batch: TranscriptBatchPayload) => void,
   ) => () => void;
@@ -1485,6 +1486,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Native Audio Service Events
+  onSpeakerIdentityCorrected: (callback: (segment: NativeAudioTranscriptPayload) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, segment: NativeAudioTranscriptPayload) => callback(segment);
+    ipcRenderer.on('speaker-identity-corrected', subscription);
+    return () => { ipcRenderer.removeListener('speaker-identity-corrected', subscription); };
+  },
   onNativeAudioTranscriptBatch: (
     callback: (batch: TranscriptBatchPayload) => void,
   ) => {

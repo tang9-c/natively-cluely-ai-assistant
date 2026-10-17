@@ -465,3 +465,15 @@ test('annotator timeout prevents a late verification from recording another outc
   await new Promise(resolve => setTimeout(resolve, 80));
   assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['timeout']);
 });
+
+test('annotator rejects pending evidence across pause-resume or profile generations', async () => {
+  const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
+  let generation = 0;
+  let finish;
+  const annotator = new SpeakerVerificationAnnotator({getMode:()=> 'local',getGeneration:()=>generation,
+    service:{verify:()=>new Promise(resolve=>{finish=resolve;})}});
+  const pending = annotator.annotate(loudSamples(2));
+  generation += 2;
+  finish({status:'verified',speakerVerification:{provider:'local-speaker-verification',profileId:'me',isMe:true,confidence:1,threshold:0.72}});
+  assert.equal(await pending,undefined);
+});

@@ -1,3 +1,4 @@
+import { SpeakerIdentityMenu, type IdentityChoice } from '../meeting/SpeakerIdentityMenu';
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, Zap } from 'lucide-react'
@@ -12,7 +13,8 @@ interface Props {
   countdownSeconds?: number
   onAccept: (action: DynamicActionPayload) => void | Promise<void>
   onDismiss: (actionId: string) => void
-  onConfirmSpeaker: (action: DynamicActionPayload, decision: 'confirm' | 'correct') => void | Promise<void>
+  onIdentityChange?: (action: DynamicActionPayload, identity: IdentityChoice) => Promise<boolean>
+  onConfirmSpeaker: (action: DynamicActionPayload) => void | Promise<void>
 }
 
 const STATUS_LABELS: Record<DynamicActionCardStatus, string> = {
@@ -45,7 +47,7 @@ export const DynamicActionCard: React.FC<Props> = ({
   countdownSeconds,
   onAccept,
   onDismiss,
-  onConfirmSpeaker,
+  onConfirmSpeaker, onIdentityChange,
 }) => {
   const [busy, setBusy] = useState(false)
   const productContract = action.productContract
@@ -56,12 +58,7 @@ export const DynamicActionCard: React.FC<Props> = ({
     ? `${Math.max(1, countdownSeconds ?? 5)} 秒后自动生成`
     : STATUS_LABELS[status]
   const buttonLabel = isGenerating ? '正在生成' : ctaLabelForOutputType(productContract.outputType)
-  const speakerPrompt = speakerConfirmation?.speaker === 'interviewer'
-    ? '可能是对方说的'
-    : '可能是你说的'
-  const speakerCorrectionLabel = speakerConfirmation?.speaker === 'interviewer'
-    ? '这是我'
-    : '这不是我'
+  const speakerPrompt = '身份未确认，执行前请确认此动作'
 
   const accept = async () => {
     if (speakerConfirmation || isGenerating || status === 'cancelled' || status === 'expired') return
@@ -109,7 +106,7 @@ export const DynamicActionCard: React.FC<Props> = ({
         {speakerConfirmation ? (
           <>
             <span className="text-[12px] font-semibold overlay-text-primary truncate">{speakerPrompt}</span>
-            <span className="text-[10.5px] text-white/78 truncate">“{speakerConfirmation.text}”</span>
+            <span title={speakerConfirmation.text} className="text-[10.5px] text-white/78 truncate">“{speakerConfirmation.text}”</span>
           </>
         ) : (
           <span className="text-[12px] font-semibold overlay-text-primary truncate">{productContract.userAction}</span>
@@ -128,24 +125,17 @@ export const DynamicActionCard: React.FC<Props> = ({
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                void onConfirmSpeaker(action, 'confirm')
+                void onConfirmSpeaker(action)
               }}
               className="inline-flex h-7 items-center justify-center rounded-md border border-sky-200/45 bg-sky-500 px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-sky-400"
               aria-label={`确认说话人：${speakerPrompt}`}
             >
-              确认
+              仅执行此动作
             </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                void onConfirmSpeaker(action, 'correct')
-              }}
-              className="inline-flex h-7 items-center justify-center rounded-md border border-white/24 bg-white/14 px-2 text-[11px] font-medium text-white/86 transition-colors hover:bg-white/22"
-              aria-label={speakerCorrectionLabel}
-            >
-              {speakerCorrectionLabel}
-            </button>
+            {onIdentityChange && <div onClick={event => event.stopPropagation()}>
+              <SpeakerIdentityMenu segment={speakerConfirmation} label="修改身份"
+                onChange={identity => onIdentityChange(action, identity)} />
+            </div>}
           </>
         ) : (
           <>

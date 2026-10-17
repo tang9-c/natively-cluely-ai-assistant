@@ -1,3 +1,4 @@
+import { resolveSpeakerIdentity } from '../shared/speakerIdentity';
 // IntelligenceEngine.ts
 // LLM mode routing and orchestration.
 // Extracted from IntelligenceManager to decouple LLM logic from state management.
@@ -489,7 +490,7 @@ export class IntelligenceEngine extends EventEmitter {
             .slice(-6)
             .map((turn) => ({
                 role: turn.role,
-                speaker: turn.speakerLabel ?? turn.speakerId ?? turn.role,
+                speaker: resolveSpeakerIdentity(turn).label,
                 text: turn.text,
                 timestamp: turn.timestamp,
             }));
@@ -759,7 +760,7 @@ export class IntelligenceEngine extends EventEmitter {
             return;
         }
 
-        if (action !== 'force_me' || !this.dynamicActionEngine || !this.currentSessionId) {
+        if ((action !== 'force_me' && action !== 'force_unknown' && action !== 'clear') || !this.dynamicActionEngine || !this.currentSessionId) {
             return;
         }
 
@@ -1081,6 +1082,7 @@ export class IntelligenceEngine extends EventEmitter {
 
     private contextItemToTranscriptTurn(item: ContextItem): TranscriptTurn {
         return {
+            ...item,
             role: item.role,
             text: item.text,
             timestamp: item.timestamp,
@@ -1108,6 +1110,7 @@ export class IntelligenceEngine extends EventEmitter {
         );
         if (duplicate) return;
         turns.push({
+            ...segment,
             role,
             text,
             timestamp: segment.timestamp,
@@ -1127,18 +1130,7 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     private shouldSkipDynamicActionForSpeaker(segment: TranscriptSegment): boolean {
-        const verification = segment.speakerVerification;
-        if (!verification
-            || verification.provider !== 'local-speaker-verification'
-            || verification.profileId !== 'me'
-            || verification.isMe !== true) {
-            return false;
-        }
-
-        const { confidence, threshold } = verification;
-        return Number.isFinite(confidence)
-            && Number.isFinite(threshold)
-            && confidence >= threshold;
+        return resolveSpeakerIdentity(segment).identity === 'me';
     }
 
     private async detectConfirmAndEmitDynamicActions(

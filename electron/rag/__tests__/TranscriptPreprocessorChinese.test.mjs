@@ -24,3 +24,8 @@ test('keeps meaningful mixed-language text with one CJK character', () => {
   assert.equal(preprocessTranscript(segment('AI 在 production is unavailable')).length, 1);
   assert.equal(preprocessTranscript(segment('啊 hello')).length, 0);
 });
+
+test('live source-only microphone speech remains unknown while explicit me survives',()=>{
+  assert.equal(preprocessTranscript([{speaker:'user',text:'我会提供测试资料',timestamp:1}])[0].speaker,'身份未确认');
+  assert.equal(preprocessTranscript([{speaker:'user',text:'我会提供测试资料',timestamp:1,speakerIdentityCorrection:{identity:'me',source:'user',correctedAt:1}}])[0].speaker,'ME');
+});

@@ -283,3 +283,26 @@ test('ready preparation contains only current-meeting formatted evidence', async
   assert.match(result.formattedContext, /700 万/);
   assert.doesNotMatch(result.formattedContext, /300 万/);
 });
+
+test('RAG rebuild preserves unknown, manual identity and provider evidence without source inference', async () => {
+  const db=createDatabase({transcript:false});
+  db.exec(`ALTER TABLE transcripts ADD COLUMN speaker_identity_correction_json TEXT;
+    ALTER TABLE transcripts ADD COLUMN speaker_verification_json TEXT;
+    ALTER TABLE transcripts ADD COLUMN raw_segment_ids_json TEXT;
+    ALTER TABLE transcripts ADD COLUMN provider_speaker_id TEXT;
+    ALTER TABLE transcripts ADD COLUMN diarization_provider TEXT;`);
+  const insert=db.prepare('INSERT INTO transcripts(meeting_id,speaker,content,timestamp_ms,speaker_identity_correction_json,provider_speaker_id,diarization_provider) VALUES(?,?,?,?,?,?,?)');
+  insert.run('meeting-a','user','我来提供测试材料',1000,null,null,null);
+  insert.run('meeting-a','user','已经确认的本人发言',10000,JSON.stringify({identity:'me',source:'user',correctedAt:1}),null,null);
+  insert.run('meeting-a','interviewer','已经确认的非本人发言',20000,JSON.stringify({identity:'other',source:'user',correctedAt:1}),null,null);
+  insert.run('meeting-a','user','提供商编号的测试发言',30000,null,'2','doubao-auc');
+  const h=createHarness({db});
+  await h.manager.prepareMeetingQuery('meeting-a','测试');
+  assert.deepEqual(h.manager.vectorStore.getChunksForMeeting().map(x=>x.speaker),['身份未确认','ME','其他参会者','说话人 2']);
+  const before=h.getState().transcriptHash;
+  db.prepare('UPDATE transcripts SET speaker_identity_correction_json=? WHERE timestamp_ms=1000').run(JSON.stringify({identity:'me',source:'user',correctedAt:2}));
+  await h.manager.prepareMeetingQuery('meeting-a','测试');
+  assert.notEqual(h.getState().transcriptHash,before);
+  assert.equal(h.manager.vectorStore.getChunksForMeeting()[0].speaker,'ME');
+  db.close();
+});

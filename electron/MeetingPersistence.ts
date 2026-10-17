@@ -13,7 +13,7 @@ import { generatePostCallLlmEnhancements } from './services/post-call/PostCallLl
 import { buildDynamicActionArtifacts } from './services/dynamic-actions/DynamicActionArtifacts';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
-import { resolveEffectiveSpeaker } from '../shared/speakerIdentity';
+import { resolveEffectiveSpeaker, speakerIdentityPromptLabel } from '../shared/speakerIdentity';
 const crypto = require('crypto');
 
 const DEFAULT_MEETING_TITLE = '会议纪要';
@@ -210,7 +210,7 @@ export class MeetingPersistence {
         const latestEffective = latestTranscript.map(segment => ({ ...segment, speaker: resolveEffectiveSpeaker(segment) }));
         data = { ...data, transcript: latestTranscript, effectiveTranscript: latestEffective,
             context: latestEffective.map(segment => {
-                const label = segment.speaker === 'user' ? 'ME' : segment.speaker === 'interviewer' ? 'INTERVIEWER' : 'ASSISTANT';
+                const label = speakerIdentityPromptLabel(segment);
                 return `[${label}]: ${segment.text}`;
             }).join('\n') };
         let title = "Untitled Session";
@@ -326,6 +326,7 @@ export class MeetingPersistence {
             // Generate Structured Summary
             if (hasSummarizableTranscript) {
                 const baseRules = `规则：
+- 音源通道不代表人物身份。未知身份或说话人编号发言中的“我来做”等承诺，负责人必须待确认，不得归给用户；原话明确提到姓名可按内容提取。
 - 只基于会议中实际出现的信息总结，不编造未提到的事实、数字、结论、责任人或上下文。
 - 对 ASR 转写中的口误、重复话术、语气词、停顿词和明显错别字，应结合上下文自动完成语义纠错和信息降噪。
 - 对明显同音误识别、拼写错误和常见中英文术语识别错误可做语义纠正；金额、日期、比例、数量、公司名、人名、系统名、合同条款等高风险信息必须保持谨慎，只有上下文高度明确时才可规范化。
@@ -498,8 +499,7 @@ export class MeetingPersistence {
                     speaker: resolveEffectiveSpeaker(t),
                 })) as TranscriptSegment[] | undefined;
                 const context = effectiveTranscript?.map(t => {
-                    const label = t.speaker === 'interviewer' ? 'INTERVIEWER' :
-                        t.speaker === 'user' ? 'ME' : 'ASSISTANT';
+                    const label = speakerIdentityPromptLabel(t);
                     return `[${label}]: ${t.text}`;
                 }).join('\n') || "";
 

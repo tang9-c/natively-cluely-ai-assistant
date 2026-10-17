@@ -1,3 +1,4 @@
+import { resolveSpeakerIdentity } from '../../shared/speakerIdentity';
 import React, { useState, useEffect, useRef } from 'react';
 import { SENSEVOICE_EMOTION_LABELS, TRANSCRIPT_EMOTION_DEGREE_LABELS } from '../../shared/senseVoiceEmotion';
 import type { TranscriptEmotion, TranscriptEmotionDegree } from '../../shared/senseVoiceEmotion';
@@ -131,7 +132,7 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
                 <div className="transcript-bubble mb-3 p-3 rounded-lg bg-gray-800/80 backdrop-blur-sm border border-gray-700">
                     <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs font-medium text-blue-400">
-                            {currentTranscript.speaker === 'interviewer' ? '🎤 面试官' : '👤 你'}
+                            {resolveSpeakerIdentity(currentTranscript).label}
                         </span>
                         {displayedEmotion && (
                             <span className="rounded border border-amber-400/20 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-200">

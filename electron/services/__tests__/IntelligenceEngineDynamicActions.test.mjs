@@ -152,6 +152,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     await waitForAsyncSignals();
 
     assert.ok(emitted.length >= 1, `expected ≥1 emitted action, got ${emitted.length}`);
+    assert.ok(emitted.every(action => action.speakerConfirmation), 'unknown consequential speech must remain gated');
     const pricing = emitted.find(a => a.type === 'pricing_objection');
     assert.ok(pricing, 'expected a pricing_objection action');
     assert.equal(pricing.modeId, 'mode-sales');
@@ -739,7 +740,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       text: verifiedMeSegment.text,
       action: 'force_not_me',
     }), true);
-    engine.handleTranscript(session.getEffectiveFullTranscript()[0], true);
+    engine.handleSpeakerVerificationSessionOverride(session.getEffectiveFullTranscript()[0], 'force_not_me');
     await waitForAsyncSignals();
 
     assert.equal(calls.length, 1, 'override non-ME must not skip assessment');
@@ -827,14 +828,14 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     await waitForAsyncSignals();
 
     assert.equal(emitted.length, 1);
-    assert.deepEqual(emitted[0].speakerConfirmation, {
-      speaker: 'interviewer',
-      timestamp,
-      text: '这个价格太高了，我们预算不够',
-    });
+    assert.equal(emitted[0].speakerConfirmation.speaker, 'interviewer');
+    assert.equal(emitted[0].speakerConfirmation.timestamp, timestamp);
+    assert.equal(emitted[0].speakerConfirmation.text, '这个价格太高了，我们预算不够');
+    assert.equal(typeof emitted[0].speakerConfirmation.segmentId, 'string');
+    assert.equal(typeof emitted[0].speakerConfirmation.sessionGeneration, 'string');
   });
 
-  test('confident speaker agreement does not gate a consequential action', async () => {
+  test('manually confirmed non-me identity does not gate a consequential action', async () => {
     const { engine } = await makeEngine();
     const emitted = [];
     engine.on('dynamic_action_emitted', action => emitted.push(action));
@@ -861,6 +862,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     engine.handleTranscript({
       speaker: 'interviewer',
+      speakerIdentityCorrection:{identity:'other',source:'user',correctedAt:1},
       text: '这个价格太高了，我们预算不够',
       timestamp: Date.now(),
       final: true,
@@ -1076,6 +1078,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     engine.handleTranscript({
       speaker: 'user',
+      speakerIdentityCorrection:{identity:'other',source:'user',correctedAt:1},
       text: '我来发发布清单，周五前完成。',
       timestamp: Date.now(),
       final: true,
@@ -1632,7 +1635,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.ok(lastCall, 'expected dynamic action engine to be called');
     assert.equal(lastCall.providerDataScopes.transcript, true);
     assert.equal(lastCall.recentContextTurns.length, 6);
-    assert.equal(lastCall.recentContextTurns[0].speaker, 'Me');
+    assert.equal(lastCall.recentContextTurns[0].speaker, '身份未确认');
     assert.equal(lastCall.recentContextTurns.at(-1).text, 'Seventh context turn asks for pricing page.');
     assert.equal(typeof lastCall.cloudClassifier, 'function');
   });
@@ -2186,7 +2189,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const emitted = [];
     engine.on('dynamic_action_emitted', (a) => emitted.push(a));
     engine.setDynamicActionContext({ sessionId: 's', modeId: 'm', modeTemplateType: 'sales' });
-    engine.handleTranscript({ speaker: 'interviewer', text: '这个价格太高了', timestamp: Date.now(), final: true }, true);
+    engine.handleTranscript({ speaker: 'interviewer', speakerIdentityCorrection:{identity:'other',source:'user',correctedAt:1}, text: '这个价格太高了', timestamp: Date.now(), final: true }, true);
     await waitForAsyncSignals();
     assert.ok(emitted.length >= 1);
     const action = emitted[0];

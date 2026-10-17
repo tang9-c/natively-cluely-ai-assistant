@@ -9,7 +9,7 @@ import {
   TextRun,
 } from 'docx';
 import type { Meeting } from '../db/DatabaseManager';
-import { resolveEffectiveSpeaker } from '../../shared/speakerIdentity';
+import { resolveSpeakerIdentity } from '../../shared/speakerIdentity';
 
 export interface MeetingDocxExportOptions {
   includeTranscript: boolean;
@@ -198,7 +198,7 @@ function buildDocumentChildren(meeting: Meeting, options: MeetingDocxExportOptio
     children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(heading('完整转录', HeadingLevel.HEADING_1));
     transcript.forEach(entry => {
-      const speaker = resolveEffectiveSpeaker(entry) === 'user' ? '我' : '对方';
+      const speaker = resolveSpeakerIdentity(entry).label;
       const timestamp = formatElapsedTime(entry.timestamp);
       children.push(bodyParagraph(`${speaker}${timestamp ? ` [${timestamp}]` : ''}`, { italic: true }));
       children.push(bodyParagraph(cleanText(entry.text)));

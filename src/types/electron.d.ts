@@ -351,7 +351,7 @@ export interface SpeakerVerificationMetadata {
   threshold: number
 }
 
-export type SpeakerVerificationSessionOverrideAction = 'force_me' | 'force_not_me' | 'clear'
+export type SpeakerVerificationSessionOverrideAction = 'force_me' | 'force_not_me' | 'force_unknown' | 'clear'
 
 export type SpeakerVerificationSessionOverride = import('../../shared/transcriptIpc').SpeakerVerificationSessionOverride
 
@@ -788,6 +788,7 @@ export interface ElectronAPI {
   onCredentialsChanged: (callback: () => void) => () => void
 
   // Native Audio Service Events
+  onSpeakerIdentityCorrected: (callback: (segment: NativeAudioTranscriptPayload) => void) => () => void;
   onNativeAudioTranscriptBatch: (callback: (batch: TranscriptBatchPayload) => void) => () => void
   onNativeAudioTranscript: (callback: (transcript: NativeAudioTranscriptPayload) => void) => () => void
   onNativeAudioSuggestion: (callback: (suggestion: { context: string; lastQuestion: string; confidence: number }) => void) => () => void

@@ -1,3 +1,4 @@
+import { speakerIdentityPromptLabel, resolveSpeakerIdentity, type SpeakerIdentitySegmentLike } from '../../shared/speakerIdentity';
 // electron/llm/TemporalContextBuilder.ts
 // Temporal RAG context builder for "What should I say?" feature
 // Builds enriched context to prevent repetition and maintain consistency
@@ -8,7 +9,7 @@ export interface AssistantResponse {
     questionContext: string; // The question/context that triggered this
 }
 
-export interface ContextItem {
+export interface ContextItem extends SpeakerIdentitySegmentLike {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
@@ -103,10 +104,10 @@ function detectRoleContext(
 
     // Find the last non-assistant speaker
     for (let i = recent.length - 1; i >= 0; i--) {
-        if (recent[i].role === 'interviewer') {
+        if (resolveSpeakerIdentity(recent[i]).identity === 'other') {
             return 'responding_to_interviewer';
         }
-        if (recent[i].role === 'user') {
+        if (resolveSpeakerIdentity(recent[i]).identity === 'me') {
             return 'responding_to_user';
         }
     }
@@ -138,16 +139,7 @@ function formatPreviousResponses(responses: AssistantResponse[], maxResponses: n
  * INTERVIEWER turns are weighted more heavily for better intent detection
  */
 function formatTranscript(items: ContextItem[]): string {
-    return items.map(item => {
-        if (item.role === 'interviewer') {
-            // Weight interviewer turns more strongly - they define intent
-            return `[INTERVIEWER – IMPORTANT]: ${item.text}`;
-        } else if (item.role === 'user') {
-            return `[ME]: ${item.text}`;
-        } else {
-            return `[ASSISTANT (MY PREVIOUS RESPONSE)]: ${item.text}`;
-        }
-    }).join('\n');
+    return items.map(item => `[${speakerIdentityPromptLabel(item)}]: ${item.text}`).join('\n');
 }
 
 /**

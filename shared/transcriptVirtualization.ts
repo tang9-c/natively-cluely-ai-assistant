@@ -1,6 +1,6 @@
-import type { SpeakerIdentityCorrection } from './speakerIdentity';
+import type { SpeakerIdentityCorrection, SpeakerIdentitySegmentLike } from './speakerIdentity';
 
-export interface MeetingTranscriptEntry {
+export interface MeetingTranscriptEntry extends SpeakerIdentitySegmentLike {
   segmentId?: string;
   speaker: string;
   text: string;

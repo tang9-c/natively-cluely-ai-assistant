@@ -27,17 +27,17 @@ function segment(overrides = {}) {
   };
 }
 
-test('speaker confirmation requires a consequential action and verification evidence', async () => {
+test('speaker confirmation requires a consequential action even when verification is unavailable', async () => {
   const { buildDynamicActionSpeakerConfirmation } = await loadPolicy();
 
   assert.equal(buildDynamicActionSpeakerConfirmation({
     segment: segment(),
     hasConsequentialAction: false,
   }), undefined);
-  assert.equal(buildDynamicActionSpeakerConfirmation({
+  assert.ok(buildDynamicActionSpeakerConfirmation({
     segment: segment({ speakerVerification: undefined }),
     hasConsequentialAction: true,
-  }), undefined);
+  }));
 });
 
 test('speaker confirmation ignores punctuation and one-character filler', async () => {
@@ -92,11 +92,11 @@ test('speaker confirmation is required when verification conflicts with capture 
   })?.speaker, 'user');
 });
 
-test('speaker confirmation is omitted when verification confidently agrees with capture channel', async () => {
+test('speaker confirmation is omitted for manual non-me or valid positive voice', async () => {
   const { buildDynamicActionSpeakerConfirmation } = await loadPolicy();
 
   assert.equal(buildDynamicActionSpeakerConfirmation({
-    segment: segment(),
+    segment: segment({speakerIdentityCorrection:{identity:'other',source:'user',correctedAt:1}}),
     hasConsequentialAction: true,
   }), undefined);
   assert.equal(buildDynamicActionSpeakerConfirmation({
@@ -130,4 +130,9 @@ test('speaker confirmation segment identity requires speaker, timestamp, and nor
   assert.equal(sameSpeakerConfirmationSegment(target, {
     speaker: 'interviewer', timestamp: 1_000, text: '太高',
   }), false);
+});
+
+test('unknown consequential speaker requires confirmation even without voice metadata', async () => {
+  const { buildDynamicActionSpeakerConfirmation } = await loadPolicy();
+  assert.ok(buildDynamicActionSpeakerConfirmation({segment:segment({speakerVerification:undefined}),hasConsequentialAction:true}));
 });

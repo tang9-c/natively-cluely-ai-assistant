@@ -1,8 +1,9 @@
+import { speakerIdentityPromptLabel, type SpeakerIdentitySegmentLike } from '../../shared/speakerIdentity';
 // electron/llm/transcriptCleaner.ts
 // Deterministic transcript cleaner - NO LLM calls
 // Fast string-based processing for interview copilot
 
-export interface TranscriptTurn {
+export interface TranscriptTurn extends SpeakerIdentitySegmentLike {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
@@ -101,6 +102,7 @@ export function cleanTranscript(turns: TranscriptTurn[]): TranscriptTurn[] {
 
         if (isMeaningfulTurn(turn, cleanedText)) {
             cleaned.push({
+                ...turn,
                 role: turn.role,
                 text: cleanedText,
                 timestamp: turn.timestamp,
@@ -192,48 +194,9 @@ export function sparsifyTranscript(
     return Array.from(selected.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
-function baseRoleLabel(role: TranscriptTurn['role']): string {
-    return role === 'interviewer' ? 'INTERVIEWER' : role === 'user' ? 'ME' : 'ASSISTANT';
-}
-
-function verificationLabel(turn: TranscriptTurn): string | null {
-    const verification = turn.speakerVerification;
-    return verification?.provider === 'local-speaker-verification' &&
-        verification.isMe === true &&
-        Number.isFinite(verification.confidence) &&
-        Number.isFinite(verification.threshold) &&
-        verification.confidence >= verification.threshold
-        ? 'ME'
-        : null;
-}
-
-function shouldShowSpeakerLabel(turn: TranscriptTurn, label: string): boolean {
-    const normalized = label.trim().toLowerCase();
-    if (!normalized) return false;
-    const genericLabels: Record<TranscriptTurn['role'], Set<string>> = {
-        interviewer: new Set(['interviewer']),
-        user: new Set(['me', 'user', 'candidate']),
-        assistant: new Set(['assistant']),
-    };
-    return !genericLabels[turn.role].has(normalized);
-}
-
-/**
- * Format cleaned transcript for LLM input
- */
+/** Format identity evidence consistently; channel roles remain available for routing. */
 export function formatTranscriptForLLM(turns: TranscriptTurn[]): string {
-    return turns.map(turn => {
-        const verified = verificationLabel(turn);
-        if (verified) {
-            return `[${verified}]: ${turn.text}`;
-        }
-        const baseLabel = baseRoleLabel(turn.role);
-        const speakerLabel = verified ?? turn.speakerLabel?.trim();
-        const label = speakerLabel && shouldShowSpeakerLabel(turn, speakerLabel)
-            ? `${baseLabel}: ${speakerLabel}`
-            : baseLabel;
-        return `[${label}]: ${turn.text}`;
-    }).join('\n');
+    return turns.map(turn => `[${speakerIdentityPromptLabel(turn)}]: ${turn.text}`).join('\n');
 }
 
 /**

@@ -1,3 +1,5 @@
+import identityModule from '../../../dist-electron/shared/speakerIdentity.js';
+const identity = segment => identityModule.resolveSpeakerIdentity(segment);
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -156,11 +158,11 @@ describe('SpeakerContextPolicy', () => {
 
     const prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
     assert.doesNotMatch(prompt, /\[ME\]: i will own pricing\./);
-    assert.match(prompt, /\[INTERVIEWER\]: i will own pricing\./);
+    assert.match(prompt, /\[其他参会者\]: i will own pricing\./);
     assert.match(prompt, /\[ME\]: i will own security\./);
     assert.equal(session.getFullTranscript()[0].speakerVerification.isMe, true);
-    assert.equal(session.getEffectiveFullTranscript()[0].speakerVerification, undefined);
-    assert.equal(session.getEffectiveFullTranscript()[1].speaker, 'user');
+    assert.equal(session.getEffectiveFullTranscript()[0].speakerVerification.isMe, true);
+    assert.equal(identity(session.getEffectiveFullTranscript()[1]).identity, 'me');
   });
 
   test('session overrides preserve the raw channel speaker and attach durable user correction metadata', async () => {
@@ -186,7 +188,7 @@ describe('SpeakerContextPolicy', () => {
     assert.equal(persisted.speakerIdentityCorrection?.isMe, false);
     assert.equal(persisted.speakerIdentityCorrection?.source, 'user');
     assert.equal(typeof persisted.speakerIdentityCorrection?.correctedAt, 'number');
-    assert.equal(session.getEffectiveFullTranscript()[0].speaker, 'interviewer');
+    assert.equal(identity(session.getEffectiveFullTranscript()[0]).identity, 'other');
 
     assert.equal(session.setSpeakerVerificationOverride({
       speaker: segment.speaker,
@@ -255,7 +257,7 @@ describe('SpeakerContextPolicy', () => {
     const prompt = prepareTranscriptForWhatToAnswer(result.turns, 12);
 
     assert.doesNotMatch(prompt, /\[ME\]/);
-    assert.match(prompt, /\[INTERVIEWER: Candidate\]: i can own the security review\./);
+    assert.match(prompt, /\[身份未确认\]: i can own the security review\./);
     assert.ok(result.degradedReasons.includes('speaker_metadata_low_confidence'));
     assert.equal(result.trace.degraded, true);
     assert.equal(result.trace.confidenceSummary.lowConfidenceCount, 1);
@@ -282,8 +284,8 @@ describe('SpeakerContextPolicy', () => {
 
     const prompt = prepareTranscriptForWhatToAnswer(result.turns, 12);
 
-    assert.match(prompt, /\[INTERVIEWER: Jordan\]: jordan asked for legal next steps\./);
-    assert.match(prompt, /\[INTERVIEWER: Priya\]: priya raised security review risk\./);
+    assert.match(prompt, /\[说话人 1\]: jordan asked for legal next steps\./);
+    assert.match(prompt, /\[说话人 2\]: priya raised security review risk\./);
     assert.doesNotMatch(prompt, /\[ME\]/);
     assert.equal(result.trace.diarizationUsed, true);
     assert.deepEqual(result.trace.sources, ['doubao-auc']);
@@ -389,7 +391,7 @@ describe('SpeakerContextPolicy', () => {
     let prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
     assert.doesNotMatch(prompt, /\[ME\]: i will send the pricing follow up\./);
     assert.equal(session.getFullTranscript()[0].speakerVerification.isMe, true);
-    assert.equal(session.getEffectiveFullTranscript()[0].speakerVerification, undefined);
+    assert.equal(session.getEffectiveFullTranscript()[0].speakerVerification.isMe, true);
 
     session.addTranscript(unverifiedSegment);
     assert.equal(session.setSpeakerVerificationOverride({
@@ -403,7 +405,7 @@ describe('SpeakerContextPolicy', () => {
     assert.match(session.getFullSessionContext(), /\[ME\]: I own the legal review\./);
     assert.notEqual(session.getLastInterviewerTurn(), unverifiedSegment.text);
     assert.equal(session.getFullTranscript()[1].speaker, 'interviewer');
-    assert.equal(session.getEffectiveFullTranscript()[1].speaker, 'user');
+    assert.equal(identity(session.getEffectiveFullTranscript()[1]).identity, 'me');
 
     session.reset();
     assert.equal(session.getContext(180).length, 0);
@@ -436,9 +438,9 @@ describe('SpeakerContextPolicy', () => {
 
     const prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
     assert.doesNotMatch(prompt, /\[ME\]/);
-    assert.match(prompt, /\[INTERVIEWER\]: this phrase was captured on the wrong microphone\./);
+    assert.match(prompt, /\[其他参会者\]: this phrase was captured on the wrong microphone\./);
     assert.doesNotMatch(session.getFullSessionContext(), /\[ME\]/);
-    assert.match(session.getFullSessionContext(), /\[INTERVIEWER\]: This phrase was captured on the wrong microphone\./);
+    assert.match(session.getFullSessionContext(), /\[其他参会者\]: This phrase was captured on the wrong microphone\./);
   });
 
   test('session override can target a transcript after it was merged with the previous final segment', async () => {
@@ -481,7 +483,7 @@ describe('SpeakerContextPolicy', () => {
 
     const prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
     assert.doesNotMatch(prompt, /\[ME\]/);
-    assert.match(prompt, /\[INTERVIEWER\]: i will send the pricing follow up/);
+    assert.match(prompt, /\[其他参会者\]: i will send the pricing follow up/);
   });
 
   test('dynamic action path uses the session-overridden segment for speaker skip checks', () => {

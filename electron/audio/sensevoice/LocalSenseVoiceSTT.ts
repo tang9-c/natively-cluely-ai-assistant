@@ -31,6 +31,7 @@ type SenseVoiceWorkerLike = {
 type PendingAudioSegment = {
   samples: Float32Array;
   sourceSegmentCount: number;
+  generation?: string;
 };
 
 function debugLog(event: string, metadata: Record<string, unknown> = {}): void {
@@ -388,22 +389,21 @@ export class LocalSenseVoiceSTT extends BaseSTT {
         }
         this.inFlightAnnotations += 1;
         this.flushPendingAudio();
-        let segment: TranscriptSegment | null = null;
+        const segment: TranscriptSegment = {
+          text,
+          isFinal: true,
+          confidence: 0.9,
+          ...(parsed.emotion ? { emotion: parsed.emotion, emotionSource: 'sensevoice' as const } : {}),
+          ...(pendingTask.sourceSegmentCount > 1 ? {
+            coalescedFromCount: pendingTask.sourceSegmentCount,
+            coalescedProvider: 'local_vad' as const,
+          } : {}),
+        };
         try {
           const speakerVerification = await this.annotateSpeaker(message.taskId);
-          segment = {
-            text,
-            isFinal: true,
-            confidence: 0.9,
-            ...(speakerVerification ? { speakerVerification } : {}),
-            ...(parsed.emotion ? { emotion: parsed.emotion, emotionSource: 'sensevoice' as const } : {}),
-            ...(pendingTask.sourceSegmentCount > 1 ? {
-              coalescedFromCount: pendingTask.sourceSegmentCount,
-              coalescedProvider: 'local_vad' as const,
-            } : {}),
-          };
-        } catch (error) {
-          this.emit('error', error instanceof Error ? error : new Error(String(error)));
+          if (speakerVerification) segment.speakerVerification = speakerVerification;
+        } catch {
+          // Optional identity failures cannot discard recognized text.
         } finally {
           this.inFlightAnnotations = Math.max(0, this.inFlightAnnotations - 1);
           this.completeTranscriptTask(message.taskId, segment);
@@ -485,7 +485,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
         sourceSegmentCount: tail.sourceSegmentCount + 1,
       };
     } else {
-      this.pendingAudio.push({ samples: copiedSamples, sourceSegmentCount: 1 });
+      this.pendingAudio.push({ samples: copiedSamples, sourceSegmentCount: 1, generation: this.speakerVerificationAnnotator?.getGenerationToken?.() });
     }
     this.flushPendingAudio();
   }
@@ -504,6 +504,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       this.inFlightTasks++;
       this.pendingAudioByTaskId.set(taskId, {
         samples: samples.slice(),
+        generation: pendingSegment.generation,
         sourceSegmentCount: pendingSegment.sourceSegmentCount,
       });
       debugLog('dispatch-final', {
@@ -527,9 +528,9 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private async annotateSpeaker(taskId: string) {
     const pendingSegment = this.pendingAudioByTaskId.get(taskId);
     this.pendingAudioByTaskId.delete(taskId);
-    if (!pendingSegment) return undefined;
+    if (!pendingSegment || pendingSegment.sourceSegmentCount > 1) return undefined;
     const { samples } = pendingSegment;
-    return this.speakerVerificationAnnotator?.annotate(samples);
+    return this.speakerVerificationAnnotator?.annotate(samples, pendingSegment.generation);
   }
 
   private resetGapFlushTimer(): void {

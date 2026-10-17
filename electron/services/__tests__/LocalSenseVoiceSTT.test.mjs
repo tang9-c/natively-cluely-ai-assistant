@@ -641,3 +641,20 @@ describe('LocalSenseVoiceSTT — worker error handling', () => {
     assert.equal(errors.length, 0);
   });
 });
+
+test('identity annotation failure preserves SenseVoice text', async () => {
+  const { LocalSenseVoiceSTT }=await loadLocalSenseVoiceSTT();
+  const worker=new ControlledSenseVoiceWorker();
+  const stt=new LocalSenseVoiceSTT({workerFactory:()=>worker});
+  const transcripts=[];
+  stt.on('error',()=>{});
+  stt.on('transcript',x=>transcripts.push(x));
+  stt.setSpeakerVerificationAnnotator({annotate:async()=>{throw new Error('identity unavailable');}});
+  stt.start(); await sleep(0);
+  stt.dispatchFinal(new Float32Array(32000).fill(0.2));
+  worker.completeNext('身份失败也要保留文字。');
+  await stt.drainFinals(500);
+  assert.equal(transcripts[0]?.text,'身份失败也要保留文字。');
+  assert.equal(transcripts[0]?.speakerVerification,undefined);
+  stt.stop();
+});

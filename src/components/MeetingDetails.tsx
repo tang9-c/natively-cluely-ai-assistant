@@ -10,11 +10,13 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { SkillSummary } from '../types/electron';
-import { resolveEffectiveSpeaker } from '../../shared/speakerIdentity';
+import { resolveSpeakerIdentity } from '../../shared/speakerIdentity';
 import {
     buildVisibleTranscriptRows,
     type MeetingTranscriptEntry,
 } from '../../shared/transcriptVirtualization';
+import type { MeetingEditState } from '../../shared/meetingEdits';
+import type { IdentityChoice } from './meeting/SpeakerIdentityMenu';
 import { TranscriptVirtualList } from './meeting/TranscriptVirtualList';
 
 const formatTime = (ms: number) => {
@@ -38,8 +40,8 @@ const formatTranscriptForSkill = (transcript?: Meeting['transcript']) => {
     return (transcript || [])
         .filter(entry => !['system', 'ai', 'assistant', 'model'].includes(entry.speaker?.toLowerCase()))
         .map(t => {
-            const speaker = resolveEffectiveSpeaker(t);
-            return `[${formatTime(t.timestamp)}] ${speaker === 'user' ? '我' : '对方'}: ${t.text}`;
+            const speaker = resolveSpeakerIdentity(t).label;
+            return `[${formatTime(t.timestamp)}] ${speaker}: ${t.text}`;
         })
         .join('\n');
 };
@@ -50,6 +52,7 @@ const parentPathOf = (filePath: string) => {
 };
 
 interface Meeting {
+    editState?: MeetingEditState;
     id: string;
     title: string;
     date: string;
@@ -67,7 +70,7 @@ interface Meeting {
         sections?: Array<{ title: string; bullets: string[] }>;
         // Phase 7 — PostCallWorkflow enhancements (schema v2). Backend writes
         // these via buildPostCallEnhancements(); UI renders them when present.
-        schemaVersion?: 2;
+        schemaVersion?: number;
         actionItemsStructured?: Array<{
             id: string;
             text: string;
@@ -122,6 +125,34 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
     const [meeting, setMeeting] = useState<Meeting>(initialMeeting);
+    const meetingRef = useRef(meeting);
+    const identitySavePending = useRef(false);
+    const [identitySaving, setIdentitySaving] = useState(false);
+    const [identityStatus, setIdentityStatus] = useState('');
+    const updateIdentity = async (segmentIds: string[], identity: IdentityChoice): Promise<boolean> => {
+        if (identitySavePending.current) return false;
+        identitySavePending.current = true;
+        setIdentitySaving(true);
+        try {
+            const current = meetingRef.current;
+            const result = await window.electronAPI.applyMeetingEdit({ meetingId: current.id,
+                expectedRevision: current.editState?.meetingRevision ?? 0, operation: { type: 'identity', segmentIds, identity } });
+            if (!result.ok) {
+                setIdentityStatus(result.error === 'conflict' ? '记录已变化，请重新打开后重试；所选片段已保留。' : '身份保存失败，所选片段已保留，请重试。');
+                return false;
+            }
+            meetingRef.current = result.meeting;
+            setMeeting(result.meeting);
+            setIdentityStatus('身份已修改，已有摘要可能需要修正。');
+            return true;
+        } catch {
+            setIdentityStatus('身份保存失败，所选片段已保留，请重试。');
+            return false;
+        } finally {
+            identitySavePending.current = false;
+            setIdentitySaving(false);
+        }
+    };
     const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'usage'>('summary');
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
@@ -264,8 +295,8 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
             `.trim();
         } else if (activeTab === 'transcript' && meeting.transcript) {
             textToCopy = meeting.transcript.map(t => {
-                const speaker = resolveEffectiveSpeaker(t);
-                return `[${formatTime(t.timestamp)}] ${speaker === 'user' ? '我' : '对方'}: ${t.text}`;
+                const speaker = resolveSpeakerIdentity(t).label;
+                return `[${formatTime(t.timestamp)}] ${speaker}: ${t.text}`;
             }).join('\n');
         } else if (activeTab === 'usage' && meeting.usage) {
             textToCopy = meeting.usage.map(u => `问：${u.question || ''}\n答：${u.answer || ''}`).join('\n\n');
@@ -798,10 +829,14 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
 
                         {activeTab === 'transcript' && (
                             <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                {identityStatus && <p role="status" className="mb-3 text-xs text-text-secondary">{identityStatus}</p>}
+                                {meeting.transcript?.some(entry => resolveSpeakerIdentity(entry).source === 'unknown') && <p className="mb-3 text-xs text-text-tertiary">音源不代表人物身份；旧版本曾按音源标注。可点击身份标签纠正。</p>}
                                 <TranscriptVirtualList
                                     meetingId={meeting.id}
                                     rows={visibleTranscriptRows}
                                     formatTime={formatTime}
+                                    onIdentityChange={updateIdentity}
+                                    saving={identitySaving}
                                 />
                             </motion.section>
                         )}

@@ -1,3 +1,4 @@
+import { resolveSpeakerIdentity, type SpeakerIdentitySegmentLike } from '../../../shared/speakerIdentity';
 import type { ActionArtifact } from '../dynamic-actions/DynamicActionArtifacts';
 
 export type PostCallModeType =
@@ -10,7 +11,7 @@ export type PostCallModeType =
   | 'technical-interview'
   | string;
 
-export interface PostCallTranscriptSegment {
+export interface PostCallTranscriptSegment extends SpeakerIdentitySegmentLike {
   speaker: string;
   text: string;
   timestamp: number;
@@ -221,12 +222,14 @@ export function extractStructuredActionItems(
       if (!match) continue;
       const owner = text.match(OWNER_PATTERN)?.[1];
       const deadline = match[2] ?? text.match(DEADLINE_PATTERN)?.[1] ?? text.match(ZH_DEADLINE_PATTERN)?.[0];
-      addItem(match[1] ?? text, segment.timestamp, normalizeOwner(owner), deadline);
+      addItem(match[1] ?? text, segment.timestamp, owner && /^i$/i.test(owner.trim())
+        ? (resolveSpeakerIdentity(segment).identity === 'me' ? 'Me' : '待确认')
+        : normalizeOwner(owner), deadline);
       break;
     }
 
     for (const phrase of extractChineseActionPhrases(text)) {
-      addItem(phrase, segment.timestamp, undefined, text.match(ZH_DEADLINE_PATTERN)?.[0]);
+      addItem(phrase, segment.timestamp, /我(?:来|会|负责)/.test(text) ? (resolveSpeakerIdentity(segment).identity === 'me' ? '我' : '待确认') : undefined, text.match(ZH_DEADLINE_PATTERN)?.[0]);
     }
   }
 

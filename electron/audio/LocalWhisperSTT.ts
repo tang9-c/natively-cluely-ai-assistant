@@ -3,8 +3,8 @@
  *
  * Dual-channel architecture: Natively captures Mic and System Audio as two
  * completely separate native streams. createSTTProvider() instantiates this
- * class TWICE — once per channel. No diarization model is needed; speaker
- * attribution is free from the hardware.
+ * class TWICE — once per channel. Channel routing is independent of person
+ * identity; only final task audio is eligible for speaker verification.
  *
  * STREAMING DESIGN (closes the latency gap with cloud STT):
  *
@@ -38,7 +38,7 @@ import { configureTransformersCache } from './whisper/modelManager';
 import { createWhisperWorkerConfig, modelPreloader } from './whisper/modelPreloader';
 import { localSttWorkerPool, type LocalSttWorkerLease } from './LocalSttWorkerPool';
 import type { WorkerOutMessage } from './whisper/types';
-import { BaseSTT } from './BaseSTT';
+import { BaseSTT, type TranscriptSegment } from './BaseSTT';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 export class LocalWhisperSTT extends BaseSTT {
@@ -89,6 +89,11 @@ export class LocalWhisperSTT extends BaseSTT {
     // streaming partials are never queued (they're best-effort and only fire
     // while a segment is open AND the worker is ready).
     private pendingAudio: Float32Array[] = [];
+    private acceptedAudioGenerations = new WeakMap<Float32Array, string | undefined>();
+    private pendingAudioByTaskId = new Map<string, { samples: Float32Array; generation?: string; openedAt: number }>();
+    private finalTaskOrder: string[] = [];
+    private completedFinals = new Map<string, TranscriptSegment | null>();
+    private processingFinals = new Set<string>();
 
     // Gap-flush: ensures a segment closes even if Rust SilenceSuppressor
     // stops sending audio before VAD's hangover completes.
@@ -226,6 +231,8 @@ export class LocalWhisperSTT extends BaseSTT {
 
     start(): void {
         if (this._isActive) return;
+        if (this.worker) this.beginWorkerTermination(this.worker);
+        this.pendingAudio = [];
         this.isDrainingFinals = false;
         this.drainingFinalsInFlight = 0;
         this._isActive = true;
@@ -268,7 +275,13 @@ export class LocalWhisperSTT extends BaseSTT {
         const w = this.worker;
         if (w) {
             const shouldKeepWorkerForFinals = this.isDrainingFinals && (this.pendingAudio.length > 0 || this.drainingFinalsInFlight > 0);
-            if (shouldKeepWorkerForFinals) return;
+            if (shouldKeepWorkerForFinals) {
+                this.workerTerminateTimer = setTimeout(() => {
+                    if (this.worker === w) this.beginWorkerTermination(w);
+                }, 5000);
+                this.workerTerminateTimer.unref?.();
+                return;
+            }
             this.beginWorkerTermination(w);
         }
     }
@@ -565,6 +578,7 @@ export class LocalWhisperSTT extends BaseSTT {
 
     private dispatchFinal(audio: Float32Array): void {
         if (!this.worker) return;
+        if (!this.acceptedAudioGenerations.has(audio)) this.acceptedAudioGenerations.set(audio, this.speakerVerificationAnnotator?.getGenerationToken?.());
 
         // A final pass closes the streaming window — clear agreement state so
         // the next segment starts clean.
@@ -574,18 +588,19 @@ export class LocalWhisperSTT extends BaseSTT {
         if (!this.workerReady) {
             const MAX_PENDING = 500;
             if (this.pendingAudio.length < MAX_PENDING) {
-                this.pendingAudio.push(audio.slice());
+                const queued = audio.slice();
+                this.acceptedAudioGenerations.set(queued, this.acceptedAudioGenerations.get(audio));
+                this.pendingAudio.push(queued);
             } else {
                 console.warn('[LocalWhisperSTT] Pending queue full — dropping oldest segment');
                 this.pendingAudio.shift();
-                this.pendingAudio.push(audio.slice());
+                const queued = audio.slice();
+                this.acceptedAudioGenerations.set(queued, this.acceptedAudioGenerations.get(audio));
+                this.pendingAudio.push(queued);
             }
             return;
         }
 
-        if (this.isDrainingFinals) {
-            this.drainingFinalsInFlight++;
-        }
         this.sendTranscribe(audio, false);
     }
 
@@ -593,6 +608,11 @@ export class LocalWhisperSTT extends BaseSTT {
         if (!this.worker) return;
         const taskId = `${streaming ? 's' : 't'}${++this.taskCounter}`;
         const copy = audio.slice();
+        if (!streaming) {
+            this.pendingAudioByTaskId.set(taskId, { samples: audio.slice(), generation: this.acceptedAudioGenerations.get(audio), openedAt: this.segmentOpenedAt });
+            this.finalTaskOrder.push(taskId);
+            this.drainingFinalsInFlight++;
+        }
         this.worker.postMessage(
             { type: 'transcribe', taskId, audio: copy, language: this.language, streaming },
             [copy.buffer]
@@ -632,7 +652,7 @@ export class LocalWhisperSTT extends BaseSTT {
             // After stop(), allow only the explicitly flushed final segments to
             // return during the 5s drain window; partials and unrelated worker
             // messages remain ignored on a torn-down instance.
-            if (!this._isActive && !(this.isDrainingFinals && msg.type === 'result')) return;
+            if (!this._isActive && !(this.isDrainingFinals && (msg.type === 'result' || msg.type === 'error'))) return;
 
             if (msg.type === 'partial') {
                 // Drop partials whose segment has already been finalized — the
@@ -645,33 +665,13 @@ export class LocalWhisperSTT extends BaseSTT {
                 }
                 this.handleStreamingPartial(msg.text);
             } else if (msg.type === 'result') {
-                const text = filterHallucination(msg.text);
-                if (text) {
-                    if (this.segmentOpenedAt > 0) {
-                        const dt = performance.now() - this.segmentOpenedAt;
-                        if (dt > 0 && dt < LocalWhisperSTT.LATENCY_MAX_MS) {
-                            this.recordLatency(this.finalLatencies, dt);
-                        }
-                    }
-                    this.emit('transcript', { text, isFinal: true, confidence: 0.9 });
-                }
-                // Reset segment timer regardless of emit (silent finals also close
-                // the segment). Next write() that opens a fresh VAD segment will
-                // re-stamp via the segment-id check.
-                this.segmentOpenedAt = 0;
-                if (this.isDrainingFinals) {
-                    this.drainingFinalsInFlight = Math.max(0, this.drainingFinalsInFlight - 1);
-                    if (this.drainingFinalsInFlight === 0 && this.worker) {
-                        this.beginWorkerTermination(this.worker);
-                    }
-                }
+                void this.completeFinalResult(msg.taskId, msg.text);
             } else if (msg.type === 'error') {
                 console.error('[LocalWhisperSTT] Worker error:', msg.message);
-                if (this.isDrainingFinals && msg.taskId?.startsWith('t')) {
-                    this.drainingFinalsInFlight = Math.max(0, this.drainingFinalsInFlight - 1);
-                    if (this.drainingFinalsInFlight === 0 && this.worker) {
-                        this.beginWorkerTermination(this.worker);
-                    }
+                if (msg.taskId?.startsWith('t')) {
+                    this.pendingAudioByTaskId.delete(msg.taskId);
+                    if (this.finalTaskOrder.includes(msg.taskId)) this.completedFinals.set(msg.taskId, null);
+                    this.flushCompletedFinals();
                 }
                 // If the failed task was the in-flight streaming one, unblock
                 // the loop so the next tick can fire.
@@ -708,12 +708,48 @@ export class LocalWhisperSTT extends BaseSTT {
         this.maybePushPromptToWorker();
         const queued = this.pendingAudio.splice(0);
         queued.forEach(audio => {
-            if (this.isDrainingFinals) {
-                this.drainingFinalsInFlight++;
-            }
             this.sendTranscribe(audio, false);
         });
-        if (this.isDrainingFinals && queued.length === 0 && this.drainingFinalsInFlight === 0 && this.worker) {
+        if (!this._isActive && this.isDrainingFinals && queued.length === 0 && this.drainingFinalsInFlight === 0 && this.worker) {
+            this.beginWorkerTermination(this.worker);
+        }
+    }
+
+    private async completeFinalResult(taskId: string, rawText: string): Promise<void> {
+        const audio = this.pendingAudioByTaskId.get(taskId);
+        if (!audio || this.processingFinals.has(taskId)) return;
+        this.processingFinals.add(taskId);
+        const text = filterHallucination(rawText);
+        if (text && audio.openedAt > 0) {
+            const latency = performance.now() - audio.openedAt;
+            if (latency > 0 && latency < LocalWhisperSTT.LATENCY_MAX_MS) this.recordLatency(this.finalLatencies, latency);
+        }
+        if (this.segmentOpenedAt === audio.openedAt) this.segmentOpenedAt = 0;
+        let segment: TranscriptSegment | null = text ? { text, isFinal: true, confidence: 0.9 } : null;
+        try {
+            const speakerVerification = text ? await this.speakerVerificationAnnotator?.annotate(audio.samples, audio.generation) : undefined;
+            if (segment && speakerVerification) segment.speakerVerification = speakerVerification;
+        } catch {
+            // Identity failures must preserve the recognized text.
+        } finally {
+            this.processingFinals.delete(taskId);
+            // A bounded drain may have invalidated this task while annotation was pending.
+            if (this.pendingAudioByTaskId.delete(taskId)) {
+                this.completedFinals.set(taskId, segment);
+                this.flushCompletedFinals();
+            }
+        }
+    }
+
+    private flushCompletedFinals(): void {
+        while (this.finalTaskOrder.length && this.completedFinals.has(this.finalTaskOrder[0])) {
+            const id = this.finalTaskOrder.shift()!;
+            const segment = this.completedFinals.get(id);
+            this.completedFinals.delete(id);
+            if (segment) this.emit('transcript', segment);
+            this.drainingFinalsInFlight = Math.max(0, this.drainingFinalsInFlight - 1);
+        }
+        if (!this._isActive && this.isDrainingFinals && this.drainingFinalsInFlight === 0 && this.pendingAudio.length === 0 && this.worker) {
             this.beginWorkerTermination(this.worker);
         }
     }
@@ -723,6 +759,10 @@ export class LocalWhisperSTT extends BaseSTT {
         this.workerReady = false;
         this.isDrainingFinals = false;
         this.drainingFinalsInFlight = 0;
+        this.pendingAudioByTaskId.clear();
+        this.completedFinals.clear();
+        this.processingFinals.clear();
+        this.finalTaskOrder = [];
         // Reset the sent-prompt tracker: a future spawnWorker call will get a
         // fresh worker with empty cache, so we must re-push on next ready.
         this.contextPromptSentToWorker = '';

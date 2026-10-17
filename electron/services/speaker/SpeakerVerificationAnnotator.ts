@@ -7,6 +7,7 @@ import type {
 
 export interface SpeakerVerificationAnnotatorOptions {
   getMode: () => SpeakerVerificationMode;
+  getGeneration?: () => string | number;
   service: {
     verify(samples16k: Float32Array, options?: { signal?: AbortSignal }): Promise<SpeakerVerificationResult>;
     recordLowQuality?(): void;
@@ -28,8 +29,13 @@ export class SpeakerVerificationAnnotator {
     return undefined;
   }
 
-  async annotate(samples16k: Float32Array): Promise<SpeakerVerificationMetadata | undefined> {
-    if (this.options.getMode() !== 'local') return undefined;
+  getGenerationToken(): string {
+    return `${this.options.getMode()}:${this.options.getGeneration?.() ?? ''}`;
+  }
+
+  async annotate(samples16k: Float32Array, acceptedGeneration = this.getGenerationToken()): Promise<SpeakerVerificationMetadata | undefined> {
+    if (this.options.getMode() !== 'local' || acceptedGeneration !== this.getGenerationToken()) return undefined;
+    const generation = this.options.getGeneration?.();
     if (!measureAudioQuality(samples16k, undefined, { durationKind: 'verification' }).ok) {
       try {
         this.options.service.recordLowQuality?.();
@@ -67,6 +73,7 @@ export class SpeakerVerificationAnnotator {
       }
       return undefined;
     }
+    if (this.options.getMode() !== 'local' || generation !== this.options.getGeneration?.()) return undefined;
     return result.status === 'verified' ? result.speakerVerification : undefined;
   }
 }

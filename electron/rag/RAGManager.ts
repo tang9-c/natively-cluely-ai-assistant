@@ -21,6 +21,11 @@ import {
     type MeetingSummaryEvidence,
 } from './MeetingEvidenceAssembler';
 
+function readIdentityJson<T>(value?: string | null): T | undefined {
+    if (!value) return undefined;
+    try { return JSON.parse(value) ?? undefined; } catch { return undefined; }
+}
+
 export type MeetingQueryPreparation =
     | {
         status: 'ready';
@@ -150,6 +155,11 @@ export class RAGManager {
             try {
                 const rawSegments: RawSegment[] = transcriptRows.map(row => ({
                     speaker: row.speaker ?? '发言人',
+                    speakerIdentityCorrection: readIdentityJson(row.speaker_identity_correction_json),
+                    speakerVerification: readIdentityJson(row.speaker_verification_json),
+                    rawSegmentIds: readIdentityJson(row.raw_segment_ids_json),
+                    providerSpeakerId: row.provider_speaker_id ?? undefined,
+                    diarizationProvider: row.diarization_provider ?? undefined,
                     text: row.content,
                     timestamp: row.timestampMs,
                 }));
@@ -199,11 +209,7 @@ export class RAGManager {
         }
 
         const transcriptRows = this.db.prepare(`
-            SELECT
-                id,
-                speaker,
-                timestamp_ms AS timestampMs,
-                content
+            SELECT *, timestamp_ms AS timestampMs
             FROM transcripts
             WHERE meeting_id = ?
             ORDER BY timestamp_ms ASC, id ASC
@@ -671,6 +677,7 @@ export class RAGManager {
 
             // Convert to RawSegment format
             const segments = meeting.transcript.map((t: any) => ({
+                ...t,
                 speaker: t.speaker,
                 text: t.text,
                 timestamp: t.timestamp

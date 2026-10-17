@@ -1,3 +1,4 @@
+import type { IdentityChoice } from '../meeting/SpeakerIdentityMenu';
 import type {
   DynamicActionModeEvent as ElectronDynamicActionModeEvent,
   DynamicActionPayload,
@@ -319,40 +320,21 @@ export const DynamicActionBar: React.FC<Props> = ({
     });
   }, [clearAutoTimer, clearDismissRemovalTimer]);
 
-  const confirmSpeaker = useCallback(async (
-    action: DynamicActionPayload,
-    decision: 'confirm' | 'correct',
-  ) => {
+  const confirmSpeaker = useCallback(async (action: DynamicActionPayload) => {
     const confirmation = action.speakerConfirmation;
     if (!confirmation) return;
-
-    if (decision === 'confirm') {
-      const result = await window.electronAPI?.confirmDynamicActionSpeaker?.(confirmation);
-      if (!result?.success) return;
-      setActions((prev) => prev.map((item) => {
-        if (!item.speakerConfirmation
-          || !sameSpeakerConfirmationSegment(item.speakerConfirmation, confirmation)) return item;
-        const { speakerConfirmation: _confirmation, ...confirmedAction } = item;
-        return { ...confirmedAction, uiStatus: 'candidate', autoTriggerAt: undefined };
-      }));
-      return;
-    }
-
-    const correctionAction = confirmation.speaker === 'interviewer'
-      ? 'force_me'
-      : 'force_not_me';
-    const result = await window.electronAPI?.speakerVerificationSetSessionOverride?.({
-      speaker: confirmation.speaker,
-      timestamp: confirmation.timestamp,
-      text: confirmation.text,
-      action: correctionAction,
-    });
+    const result = await window.electronAPI?.confirmDynamicActionSpeaker?.(confirmation);
     if (!result?.success) return;
+    setActions((previous) => previous.map((item) => {
+      if (!item.speakerConfirmation || !sameSpeakerConfirmationSegment(item.speakerConfirmation, confirmation)) return item;
+      const { speakerConfirmation: _confirmation, ...confirmedAction } = item;
+      return { ...confirmedAction, uiStatus: 'candidate', autoTriggerAt: undefined };
+    }));
+  }, []);
 
-    clearAutoTimer(action.id);
-    triggeringIdsRef.current.delete(action.id);
-    setActions((prev) => prev.filter((item) => item.id !== action.id));
-  }, [clearAutoTimer]);
+  useEffect(() => window.electronAPI.onSpeakerIdentityCorrected(segment => {
+    setActions(previous => previous.filter(action => action.speakerConfirmation?.segmentId !== segment.segmentId));
+  }), []);
 
   // Subscribe to push from main process
   useEffect(() => {
@@ -589,6 +571,15 @@ export const DynamicActionBar: React.FC<Props> = ({
             onAccept={accept}
             onDismiss={dismiss}
             onConfirmSpeaker={confirmSpeaker}
+            onIdentityChange={async (target, identity: IdentityChoice) => {
+              const confirmation = target.speakerConfirmation;
+              if (!confirmation) return false;
+              const result = await window.electronAPI.speakerVerificationSetSessionOverride({
+                ...(confirmation.segmentId && confirmation.sessionGeneration ? { segmentId: confirmation.segmentId, sessionGeneration: confirmation.sessionGeneration }
+                  : { speaker: confirmation.speaker, timestamp: confirmation.timestamp, text: confirmation.text }), action: identity === 'me' ? 'force_me' : identity === 'other' ? 'force_not_me' : identity === 'unknown' ? 'force_unknown' : 'clear',
+              });
+              return result.success;
+            }}
           />
         ))}
       </AnimatePresence>

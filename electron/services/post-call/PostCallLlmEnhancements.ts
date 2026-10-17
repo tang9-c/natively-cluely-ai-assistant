@@ -1,3 +1,4 @@
+import { speakerIdentityPromptLabel, SPEAKER_ATTRIBUTION_RULES } from '../../../shared/speakerIdentity';
 import type { PostCallSummaryData, PostCallTranscriptSegment } from './PostCallSummaryGenerator';
 import { QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS } from '../../llm/QCloudLlmConstants';
 
@@ -45,7 +46,7 @@ function stripJsonFences(value: string): string {
 function transcriptEvidenceWindow(transcript: PostCallTranscriptSegment[]): string {
   const lines = transcript
     .filter((segment) => segment?.text?.trim())
-    .map((segment) => `${segment.speaker || 'speaker'}: ${segment.text.trim()}`);
+    .map((segment) => `${speakerIdentityPromptLabel(segment)}: ${segment.text.trim()}`);
   if (lines.length <= 80) return lines.join('\n');
   const middle = Math.floor(lines.length / 2);
   return [
@@ -115,6 +116,8 @@ function buildPrompt(params: GeneratePostCallLlmEnhancementsParams): string {
 
 输出契约：
 - 所有用户可见内容使用简体中文。
+- ${SPEAKER_ATTRIBUTION_RULES}
+- 未确认身份的发言不能用于用户个人能力评价。
 - 每条 coachingInsight 必须有明确 evidence；没有证据就不要生成。
 - 不要把关键词命中当结论。
 - 不要生成英文标题或英文模板句。
