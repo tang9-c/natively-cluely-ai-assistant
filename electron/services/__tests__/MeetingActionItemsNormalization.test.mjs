@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeMeetingActionItems as normalize } from '../../../dist-electron/shared/meetingActionItems.js';
+import * as normalization from '../../../dist-electron/shared/meetingActionItems.js';
+const normalize=normalization.normalizeMeetingActionItems;
 test('strings only project deterministically without mutating legacy input',()=>{
  const old={actionItems:['  整理  资料。','独有任务'],keyPoints:[]};const before=JSON.stringify(old);
  assert.deepEqual(normalize(old),normalize(old));assert.equal(JSON.stringify(old),before);assert.equal(normalize(old).schemaVersion,3);
@@ -32,4 +33,11 @@ test('legacy exact action sections merge unique bullets; ordinary conclusions re
  const result=normalize({actionItems:['共同任务'],actionItemsStructured:[{id:'s',text:'结构任务'}],sections:[{title:' 行动项 ',bullets:['共同任务。','分区独有']},{title:'Next Steps',bullets:['其他行动']},{title:'会议结论',bullets:['普通结论']}]});
  assert.deepEqual(result.actionItems,['共同任务','分区独有','其他行动','结构任务']);
  assert.deepEqual(result.sections,[{title:'会议结论',bullets:['普通结论']}]);
+});
+
+test('action text validity exactly matches canonical keep/drop without broadening punctuation semantics',()=>{
+ for(const text of ['', '  ', '。', '...', '.。!！?？;；,，、', '任务。', '交付...', '…', '。 、']){
+  const kept=normalize({schemaVersion:3,actionItemsStructured:[{id:'a',text}]}).actionItemsStructured.length===1;
+  assert.equal(normalization.isValidMeetingActionText?.(text),kept,JSON.stringify(text));
+ }
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Meeting, MeetingEditRequest, MeetingEditResult, MeetingSummaryPatch } from '../../shared/meetingEdits';
-import { normalizeMeetingActionItems } from '../../shared/meetingActionItems';
+import { normalizeMeetingActionItems, isValidMeetingActionText } from '../../shared/meetingActionItems';
 
 type Field = keyof MeetingSummaryPatch;
 type Status = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict' | 'invalid';
@@ -56,7 +56,7 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
                 if (status === 'conflict') return false;
                 const batch = new Map(drafts);
                 const actions = batch.get('actionItemsStructured')?.value as MeetingSummaryPatch['actionItemsStructured'];
-                if (actions?.some(item => !item.text.trim())) { status = 'invalid'; notify(); return false; }
+                if (actions?.some(item => !isValidMeetingActionText(item.text))) { status = 'invalid'; notify(); return false; }
                 if (sectionTitleEditing && batch.has('sections')) return false;
                 if ([...batch].some(([field, draft]) => !equal(valueAt(saved, field), draft.base) && !equal(valueAt(saved, field), draft.value))) {
                     status = 'conflict'; notify(); return false;

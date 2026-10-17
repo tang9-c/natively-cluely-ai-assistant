@@ -16,6 +16,7 @@ interface ActionSummary {
 const ACTION_SECTION_TITLES = new Set(['行动项', '下一步', '后续行动', 'action items', 'next steps']);
 const isActionSection = (title: string) => ACTION_SECTION_TITLES.has(title.trim().toLowerCase());
 const taskKey = (text: string) => text.trim().replace(/\s+/g, ' ').replace(/[.。!！?？;；,，、]+$/u, '').trim();
+export const isValidMeetingActionText = (text: string): boolean => Boolean(taskKey(text));
 const compatible = (a: MeetingActionItem, b: MeetingActionItem) =>
     !(['owner', 'deadline'] as const).some(key => a[key]?.trim() && b[key]?.trim() && a[key]!.trim() !== b[key]!.trim());
 function stableId(text: string, index: number): string {
@@ -33,7 +34,7 @@ export function normalizeMeetingActionItems<T extends ActionSummary>(summary: T,
     const sections = summary.sections?.filter(section => !isActionSection(section.title));
     const result: MeetingActionItem[] = [];
     const add = (item: MeetingActionItem) => {
-        if (!taskKey(item.text)) return;
+        if (!isValidMeetingActionText(item.text)) return;
         const match = result.find(old => taskKey(old.text) === taskKey(item.text) && compatible(old, item));
         if (match) {
             if (!match.owner?.trim() && item.owner?.trim()) match.owner = item.owner;
@@ -43,7 +44,7 @@ export function normalizeMeetingActionItems<T extends ActionSummary>(summary: T,
     };
     if ((summary.schemaVersion || 0) >= 3) {
         // Do not deduplicate explicit user edits in the canonical list.
-        result.push(...structured.filter(item => taskKey(item.text)).map(item => ({ ...item })));
+        result.push(...structured.filter(item => isValidMeetingActionText(item.text)).map(item => ({ ...item })));
         if (mergeExplicitSections) sectionActions.forEach((text, index) => add({ id: stableId(taskKey(text), index), text }));
     } else {
         const remaining = [...structured];

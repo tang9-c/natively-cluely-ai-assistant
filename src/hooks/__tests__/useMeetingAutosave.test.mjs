@@ -118,3 +118,14 @@ test('review I3: summary input after failed identity keeps the retryable error a
  assert.equal(await f.controller.retry(),true);assert.equal(f.latest.title,'身份失败后修改标题');
  assert.equal(f.calls.at(-1).operation.type,'identity');assert.equal(await f.controller.flush(),true);
 });
+
+test('review I1 punctuation: canonical-discarded text cannot save or remove its draft metadata',async t=>{
+ for(const text of ['。','...','.。!！?？;；,，、','  。  ']){
+  const f=fixture(t);const item={id:'punctuation',text,owner:'甲',deadline:'周五'};
+  f.controller.patch({actionItemsStructured:[item]});assert.deepEqual(f.controller.snapshot().meeting.detailedSummary.actionItemsStructured,[item]);
+  assert.equal(await f.controller.flush(),false,`canonical-discarded ${JSON.stringify(text)} must not save`);
+  assert.equal(f.calls.length,0);assert.equal(f.controller.snapshot().status,'invalid');assert.deepEqual(f.controller.snapshot().meeting.detailedSummary.actionItemsStructured,[item]);
+  f.controller.patch({actionItemsStructured:[{...item,text:text+'补充任务。'}]});assert.equal(await f.controller.flush(),true);
+  assert.deepEqual(f.controller.snapshot().meeting.detailedSummary.actionItemsStructured,[{...item,text:text+'补充任务。'}]);
+ }
+});

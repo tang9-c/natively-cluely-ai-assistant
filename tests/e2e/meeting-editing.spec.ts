@@ -196,7 +196,7 @@ test('review I1: keyboard clear pause and replacement retain action row plus own
  const content=await eraseWithKeyboard(page,'行动项 2 内容');
  await expect(content).toBeVisible();expect(await row!.evaluate(node=>node.isConnected)).toBe(true);
  await page.waitForTimeout(750); // Deliberately cross the autosave debounce with an empty intermediate input.
- await expect(content).toBeFocused();await expect(page.getByText('行动项内容不能为空，请填写内容或使用删除。',{exact:true})).toBeVisible();
+ await expect(content).toBeFocused();await expect(page.getByText('行动项内容无效，请填写具体内容或使用删除。',{exact:true})).toBeVisible();
  await page.screenshot({path:'.tmp/v28-t4/fix-round-1/empty-action-draft-retained.png'});
  await eraseWithKeyboard(page,'行动项 2 负责人');await page.keyboard.type('乙');
  await eraseWithKeyboard(page,'行动项 2 期限');
@@ -245,4 +245,23 @@ test('review I3: failed identity then title input keeps retry and recovers copy 
  expect(saved.title).toBe('身份失败后的标题');expect(saved.transcript[0].speakerIdentityCorrection.identity).toBe('me');
  await page.getByRole('button',{name:'复制完整转录',exact:true}).click();expect(await page.evaluate(()=>(window as any).__copied[0])).toContain('我: 原始转录');
  await page.getByRole('button',{name:'返回会议列表',exact:true}).click();await expect(page.getByLabel('会议标题',{exact:true})).toBeHidden();await expect(page.getByText('身份失败后的标题',{exact:true})).toBeVisible();
+});
+
+test('review I1 punctuation: pause preserves metadata and copy plus actual return wait for valid content',async({electronApp,page})=>{
+ await seed(electronApp);await open(page);await fakeClipboard(page);
+ const row=await page.getByLabel('行动项 2 内容',{exact:true}).elementHandle();
+ const content=await eraseWithKeyboard(page,'行动项 2 内容');await page.keyboard.type('。');
+ await page.waitForTimeout(750); // Pure punctuation must stay a draft past autosave.
+ await expect(content).toBeFocused();expect(await row!.evaluate(node=>node.isConnected)).toBe(true);
+ await expect(content).toHaveText('。');await expect(page.getByLabel('行动项 2 负责人',{exact:true})).toHaveText('甲');await expect(page.getByLabel('行动项 2 期限',{exact:true})).toHaveText('周五');
+ await expect(page.getByText('行动项内容无效，请填写具体内容或使用删除。',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'复制完整摘要',exact:true}).click();expect(await page.evaluate(()=>(window as any).__copied.length)).toBe(0);
+ await page.getByRole('button',{name:'返回会议列表',exact:true}).click();await expect(content).toBeVisible();expect(await row!.evaluate(node=>node.isConnected)).toBe(true);
+ expect((await readMeeting(page)).detailedSummary.actionItemsStructured[1]).toMatchObject({id:'owned',text:'结构任务',owner:'甲',deadline:'周五'});
+ await page.screenshot({path:'.tmp/v28-t4/fix-round-2/punctuation-draft-retained.png'});
+ await content.click();await page.keyboard.type('补充任务。');
+ await page.getByRole('button',{name:'复制完整摘要',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).__copied[0])).toContain('。补充任务。');
+ expect((await readMeeting(page)).detailedSummary.actionItemsStructured[1]).toMatchObject({id:'owned',text:'。补充任务。',owner:'甲',deadline:'周五'});
+ await page.getByRole('button',{name:'返回会议列表',exact:true}).click();await expect(content).toBeHidden();
 });

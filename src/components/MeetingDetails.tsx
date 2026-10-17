@@ -354,7 +354,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                     </div>
 
                     <div role="status" aria-live="polite" className="mb-3 text-xs text-text-tertiary">
-                        {saveStatus === 'pending' ? '有未保存修改' : saveStatus === 'saving' ? '正在保存...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'invalid' ? '行动项内容不能为空，请填写内容或使用删除。' : saveStatus === 'error' ? '保存失败，输入已保留。请重试后再离开或复制导出。' : saveStatus === 'conflict' ? '记录已变化，输入已保留。请选择重新加载或保留本次修改。' : ''}
+                        {saveStatus === 'pending' ? '有未保存修改' : saveStatus === 'saving' ? '正在保存...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'invalid' ? '行动项内容无效，请填写具体内容或使用删除。' : saveStatus === 'error' ? '保存失败，输入已保留。请重试后再离开或复制导出。' : saveStatus === 'conflict' ? '记录已变化，输入已保留。请选择重新加载或保留本次修改。' : ''}
                         {saveStatus === 'error' && <button className="ml-2 underline" onClick={async () => { if (await controller.retry()) setIdentityStatus(''); }}>重试保存</button>}
                         {saveStatus === 'conflict' && <>
                             <button className="ml-2 underline" onClick={() => void controller.reload()}>重新加载</button>
