@@ -58,10 +58,10 @@ function lifecycleHarness() {
   vm.runInNewContext(compiled, context);
   const state = new context.Lifecycle();
   Object.assign(state, {
-    isMeetingActive: true, _isDraining: false, _pendingTeardown: null,
+    isMeetingActive: true, _isDraining: false, _pendingTeardown: null, _captureHealth: {},
     windowHelper: {setWindowMode(){}, resetOverlayPosition(){}},
-    getWindowHelper: () => ({getOverlayWindow: () => null}), broadcastMeetingState(){}, broadcast(){},
-    stopDefaultOutputWatcher(){}, processingHelper: {cancelAndDrain: async () => true}, clearQueues(){},
+    getWindowHelper: () => ({getOverlayWindow: () => null, flushLauncherEdits: async () => true}), broadcastMeetingState(){}, broadcast(){},
+    cancelAudioRecovery(){}, stopDefaultOutputWatcher(){}, processingHelper: {cancelAndDrain: async () => true}, clearQueues(){},
     transcriptIpcBatcher: {flush(){}, snapshotAndResetDiagnostics(){}},
     adaptivePreloadManager: {notifyMeetingStopped(){}},
     intelligenceManager: {stopMeeting: async () => 'A', resetEngine(){}, clearDynamicActionContext(){}},

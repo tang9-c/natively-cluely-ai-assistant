@@ -373,7 +373,8 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
         if (calls.length === 1) return 'Custom Title';
         return JSON.stringify({
           overview: 'overview text',
-          sections: { 'Section A': ['x', 'y'], 'Section B': [] },
+          actionItems: ['保留行动任务'],
+          sections: { '结果': ['x', 'y'], '客户背景': [], '行动项': ['保留行动任务'] },
         });
       },
     };
@@ -389,6 +390,9 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     assert.ok(final);
     assert.equal(final.title, 'Custom Title');
     assert.equal(final.detailedSummary.overview, 'overview text');
+    assert.deepEqual(final.detailedSummary.sections, [{ title: '结果', bullets: ['x', 'y'] }, { title: '客户背景', bullets: [] }, { title: '需求发现', bullets: [] }, { title: '产品', bullets: [] }, { title: '异议', bullets: [] }]);
+    assert.deepEqual(final.detailedSummary.actionItems, ['保留行动任务']);
+    assert.equal(final.detailedSummary.actionItemsStructured.filter(item => item.text === '保留行动任务').length, 1);
   });
 
   test('malformed LLM summary preserves mode sections with empty bullets', async () => {
@@ -412,10 +416,13 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     assert.ok(final);
     assert.equal(final.title, 'Custom Title');
     assert.ok(Array.isArray(final.detailedSummary.sections));
-    assert.equal(final.detailedSummary.sections.length, 6);
+    assert.deepEqual(final.detailedSummary.sections.map(section => section.title), ['结果', '客户背景', '需求发现', '产品', '异议']);
+    assert.equal(final.detailedSummary.schemaVersion, 3);
+    assert.deepEqual(final.detailedSummary.actionItems, []);
+    assert.deepEqual(final.detailedSummary.actionItemsStructured, []);
     assert.deepEqual(
       final.detailedSummary.sections.map(section => section.bullets),
-      [[], [], [], [], [], []],
+      [[], [], [], [], []],
     );
   });
 

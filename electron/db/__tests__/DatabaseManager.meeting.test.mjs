@@ -217,7 +217,7 @@ describe('DatabaseManager — saveMeeting / getMeetingDetails', () => {
     assert.equal(details.id, 'meet_1');
     assert.equal(details.title, 'Sprint Review');
     assert.equal(details.summary, 'old');
-    assert.deepEqual(details.detailedSummary, { foo: 'bar' });
+    assert.deepEqual(details.detailedSummary, { foo: 'bar', schemaVersion: 3, actionItemsStructured: [], actionItems: [] });
     assert.equal(details.transcript.length, 2);
     assert.equal(details.transcript[0].speaker, 'A');
     assert.equal(details.transcript[0].text, 'Hello.');
@@ -276,7 +276,7 @@ describe('DatabaseManager — updateMeetingTitle / updateMeetingSummary', () => 
     assert.equal(ok, true);
     const row = db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get('meet_1');
     const parsed = JSON.parse(row.summary_json);
-    assert.deepEqual(parsed.detailedSummary, { foo: 'bar', keyPoints: ['a', 'b'] });
+    assert.deepEqual(parsed.detailedSummary, { foo: 'bar', keyPoints: ['a', 'b'], schemaVersion: 3, actionItemsStructured: [], actionItems: [] });
   });
 
   it('updateMeetingSummary returns false for an unknown meeting', () => {

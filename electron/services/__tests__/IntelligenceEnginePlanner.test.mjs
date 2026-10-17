@@ -48,7 +48,7 @@ test('interim user questions trigger speculative what-to-say inference', async (
   await wait(500);
 
   assert.equal(answerCalls, 1);
-  assert.match(preparedTranscript, /\[ME\]: can you help me explain my backend experience/);
+  assert.match(preparedTranscript, /\[身份未确认\]: can you help me explain my backend experience/);
 });
 
 test('interim Chinese questions trigger speculative what-to-say inference without spaces', async () => {
@@ -97,7 +97,7 @@ test('Chinese informational cue phrases trigger speculative what-to-say inferenc
   await wait(500);
 
   assert.equal(answerCalls, 1);
-  assert.match(preparedTranscript, /\[ME\]: 考虑一下类似案例和我的经验/);
+  assert.match(preparedTranscript, /\[身份未确认\]: 考虑一下类似案例和我的经验/);
 });
 
 test('handleSuggestionTrigger stays silent for low confidence without emitting or storing history', async () => {

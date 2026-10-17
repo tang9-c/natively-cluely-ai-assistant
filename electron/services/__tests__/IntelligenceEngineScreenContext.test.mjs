@@ -224,7 +224,7 @@ test('runWhatShouldISay strips low-confidence speaker ME assertions and emits sp
   assert.equal(answer, 'Clarify ownership without assuming who spoke.');
   assert.equal(calls.length, 1);
   assert.doesNotMatch(calls[0].cleanedTranscript, /\[ME\]/);
-  assert.match(calls[0].cleanedTranscript, /\[INTERVIEWER: Candidate\]: i can own the legal review next week\./);
+  assert.match(calls[0].cleanedTranscript, /\[身份未确认\]: i can own the legal review next week\./);
   assert.ok(degradedReasons.includes('speaker_metadata_low_confidence'));
   assert.equal(traces.length, 1);
   assert.equal(traces[0].observability.speakerContext.degraded, true);

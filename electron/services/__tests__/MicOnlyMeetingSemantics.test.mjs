@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import ts from 'typescript';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,29 +87,34 @@ test('renderer treats selected STT provider as startup state instead of unconfig
   );
 });
 
-test('renderer keeps system-audio degradation visible in the summary while suppressing disruptive banners', () => {
-  const ui = read('src/components/NativelyInterface.tsx');
-  const summaryFn = ui.match(
-    /const getSttSummary = \([\s\S]*?\n\};/
-  );
+function audioHandler(name) {
+  const source = read('src/components/NativelyInterface.tsx');
+  const tree = ts.createSourceFile('NativelyInterface.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  const visit = node => {
+    if (ts.isCallExpression(node) && node.expression.getText(tree).endsWith(name)) callback = node.arguments[0];
+    ts.forEachChild(node, visit);
+  };
+  visit(tree); assert.ok(callback, `${name} callback should exist`);
+  const state = { issue: null, warning: null, expanded: false };
+  const context = {
+    captureWarningsRef: { current: {} }, sttWarningsRef: { current: {} }, micCaptureFailureRef: { current: false },
+    setSystemAudioIssue: value => { state.issue = value; }, setSystemAudioWarning: value => { state.warning = value; },
+    setIsExpanded: value => { state.expanded = value; }, clearAudioWarning() {},
+  };
+  vm.runInNewContext(ts.transpileModule(`globalThis.handler = ${callback.getText(tree)};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
+  return { handler: context.handler, state, context };
+}
 
-  assert.ok(summaryFn, 'getSttSummary should exist');
-  assert.match(summaryFn[0], /systemAudioIssue: string \| null/);
-  assert.match(
-    summaryFn[0],
-    /if \(systemAudioIssue \|\| \(!interviewerProvider && !hasInterviewerTranscript\)\) \{/,
-    'system-audio failures should keep the top-level summary in mic-only state'
-  );
-  assert.match(
-    ui,
-    /onSystemAudioPermissionDenied\?\.\(\(message: string\) => \{\s*setSystemAudioIssue\(message \|\| '系统音频未捕获'\);[\s\S]*?if \(!micCaptureFailureRef\.current && sttUserStatusRef\.current !== 'failed'\) return;/,
-    'permission-denied events should update the summary even when the banner is gated'
-  );
-  assert.match(
-    ui,
-    /if \(payload\.channel === 'mic'\) \{[\s\S]*?return;[\s\S]*?\}\s*setSystemAudioIssue\(payload\.message \|\| '系统音频未捕获'\);[\s\S]*?if \(!micCaptureFailureRef\.current && sttUserStatusRef\.current !== 'failed'\) return;/,
-    'system capture failures should update the summary even when the banner is gated'
-  );
+test('permission denial and system capture degradation update the summary with the microphone available', () => {
+  const permission = audioHandler('onSystemAudioPermissionDenied');
+  permission.handler('fixture permission denied');
+  assert.equal(permission.state.issue, 'fixture permission denied');
+  assert.equal(permission.state.warning.kind, 'screen-recording-permission');
+  const capture = audioHandler('onAudioCaptureFailed');
+  capture.handler({ channel: 'system', state: 'failed', message: 'fixture transient', terminal: false });
+  assert.equal(capture.state.issue, 'fixture transient');
+  assert.equal(capture.state.warning, null);
 });
 
 test('renderer does not report STT as unconfigured after live transcript arrives', () => {
@@ -139,7 +147,7 @@ test('renderer does not report STT as unconfigured after live transcript arrives
   );
 });
 
-test('native audio transcript handler no longer drops user transcripts outside Answer recording mode', () => {
+test('native audio transcript handler keeps user text without treating audio source as identity', () => {
   const ui = read('src/components/NativelyInterface.tsx');
   const transcriptHandler = ui.match(
     /onNativeAudioTranscriptBatch\(\(batch\) => \{[\s\S]*?\n\s*\}\),/
@@ -151,31 +159,23 @@ test('native audio transcript handler no longer drops user transcripts outside A
     /if \(transcript\.speaker === 'user'\) \{\s*return;/,
     'user microphone transcripts should no longer be dropped from live transcript rendering'
   );
-  assert.match(
-    transcriptHandler[0],
-    /const speakerLabel = transcript\.speaker === 'user' \? 'Me' : 'Interviewer';/,
-    'live transcript should preserve the Me / Interviewer role model'
-  );
+  const require = createRequire(import.meta.url);
+  const { resolveSpeakerIdentity } = require(path.join(root, 'dist-electron/shared/speakerIdentity.js'));
+  assert.equal(resolveSpeakerIdentity({ speaker: 'user' }).identity, 'unknown');
+  assert.equal(resolveSpeakerIdentity({ speaker: 'interviewer' }).identity, 'unknown');
+  assert.equal(resolveSpeakerIdentity({ speaker: 'user', speakerIdentityCorrection: { identity: 'me', source: 'user', correctedAt: 1 } }).identity, 'me');
+
 });
 
-test('system-audio warnings are gated behind microphone unavailability in renderer', () => {
-  const ui = read('src/components/NativelyInterface.tsx');
-
-  assert.match(
-    ui,
-    /if \(payload\.channel === 'mic'\) \{[\s\S]*micCaptureFailureRef\.current = true;[\s\S]*kind:\s*'microphone-capture-failure'[\s\S]*setIsExpanded\(true\);[\s\S]*return;/,
-    'microphone capture failures should be surfaced immediately instead of being silently tracked'
-  );
-  assert.match(
-    ui,
-    /if \(!micCaptureFailureRef\.current && sttUserStatusRef\.current !== 'failed'\) return;/,
-    'system-only diagnostics should stay in the background while the microphone remains usable'
-  );
-  assert.match(
-    ui,
-    /onSystemAudioPermissionDenied[\s\S]*if \(!micCaptureFailureRef\.current && sttUserStatusRef\.current !== 'failed'\) return;/,
-    'screen recording permission banners should also stay suppressed during mic-only meetings'
-  );
+test('terminal channel failures surface independently while automatic recovery stays quiet', () => {
+  for (const channel of ['system', 'mic']) {
+    const capture = audioHandler('onAudioCaptureFailed');
+    capture.handler({ channel, state: 'recovering', message: 'fixture recovering' });
+    assert.equal(capture.state.warning, null); assert.equal(capture.state.expanded, false);
+    capture.handler({ channel, state: 'failed', terminal: true, message: 'fixture terminal' });
+    assert.equal(capture.state.warning.kind, channel === 'mic' ? 'microphone-capture-failure' : 'audio-capture-failure');
+    assert.equal(capture.state.warning.message, 'fixture terminal'); assert.equal(capture.state.expanded, true);
+  }
 });
 
 test('rolling transcript chrome stays normal when only system audio is degraded', () => {
