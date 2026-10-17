@@ -272,6 +272,14 @@ export class SessionTracker {
             lastItem.role === role &&
             Math.abs(lastItem.timestamp - segment.timestamp) < 500 &&
             lastItem.text === text) {
+            const retained = this.fullTranscript.find(item => item.segmentId === lastItem.segmentId);
+            if (retained?.segmentId) {
+                this.remapSpeakerVerificationOverrideKey(incomingSegmentKey, retained.segmentId);
+                retained.rawSegmentIds = Array.from(new Set([
+                    ...(retained.rawSegmentIds ?? []), retained.segmentId,
+                    ...(segment.rawSegmentIds ?? []), incomingSegmentKey,
+                ]));
+            }
             return null;
         }
 

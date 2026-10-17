@@ -282,3 +282,38 @@ test('multiple merges keep stable alias resolution and original time',async()=>{
  const after=tracker.getFullTranscript()[0];
  assert.equal(after.segmentId,'a');assert.equal(after.timestamp,1000);assert.equal(after.text,before.text);
 });
+
+for (const deltaMs of [0, 200]) {
+  test(`duplicate finals retain stable and legacy aliases at ${deltaMs}ms without changing manual boundary`, async () => {
+    const { SessionTracker } = await loadSessionTracker();
+    const tracker = new SessionTracker();
+    const timestamp = Date.now();
+    const original = segment({ segmentId: 'dedup-a', text: '重复内容', timestamp });
+    tracker.addTranscript(original);
+    tracker.setSpeakerVerificationOverride({
+      segmentId: 'dedup-a', sessionGeneration: tracker.getSessionGeneration(), action: 'force_not_me',
+    });
+    const before = structuredClone(tracker.getFullTranscript()[0]);
+    const duplicate = segment({ segmentId: 'dedup-b', text: original.text, timestamp: timestamp + deltaMs });
+    assert.equal(tracker.addTranscript(duplicate), null);
+    const retained = tracker.getFullTranscript()[0];
+    assert.equal(tracker.getFullTranscript().length, 1);
+    assert.equal(retained.segmentId, 'dedup-a');
+    assert.equal(retained.text, before.text);
+    assert.equal(retained.timestamp, before.timestamp);
+    assert.equal(retained.editRevision, before.editRevision);
+    assert.deepEqual(retained.speakerIdentityCorrection, before.speakerIdentityCorrection);
+    const aliases = retained.rawSegmentIds;
+    const stableApplied = tracker.setSpeakerVerificationOverride({
+      segmentId: 'dedup-b', sessionGeneration: tracker.getSessionGeneration(), action: 'force_me',
+    });
+    const legacyApplied = [original, duplicate].map(target => tracker.setSpeakerVerificationOverride({
+      speaker: target.speaker, timestamp: target.timestamp, text: target.text, action: 'force_not_me',
+    }));
+    assert.deepEqual({ aliases, stableApplied, legacyApplied }, {
+      aliases: ['dedup-a', 'dedup-b'], stableApplied: true, legacyApplied: [true, true],
+    });
+    tracker.addTranscript(segment({ segmentId: 'dedup-c', text: '后续片段', timestamp: timestamp + 400 }));
+    assert.equal(tracker.getFullTranscript().length, 2);
+  });
+}

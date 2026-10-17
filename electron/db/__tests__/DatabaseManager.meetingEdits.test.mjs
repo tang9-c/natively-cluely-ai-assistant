@@ -170,3 +170,20 @@ test('ignored SQLite update cannot report edit success',t=>{
  assert.equal(result.error,'save_failed');
  assert.equal(manager.getMeetingDetails('m').transcript[0].text,'original');
 });
+test('deduplicated final alias remains editable after persisted reload', async t => {
+ const { SessionTracker } = await import('../../../dist-electron/electron/SessionTracker.js');
+ const {manager}=fixture(t);manager.migrateMeetingEdits();
+ const tracker=new SessionTracker();
+ const first={segmentId:'dedup-a',speaker:'interviewer',text:'重复虚构内容',timestamp:Date.now(),final:true};
+ tracker.addTranscript(first);
+ tracker.addTranscript({...first,segmentId:'dedup-b',timestamp:first.timestamp+100});
+ manager.saveMeeting({id:'dedup',title:'fictional',date:'2026-01-01',summary:'',transcript:tracker.getFullTranscript()},1,1000);
+ const loaded=manager.getMeetingDetails('dedup');
+ assert.equal(loaded.transcript.length,1);
+ assert.deepEqual(loaded.transcript[0].rawSegmentIds,['dedup-a','dedup-b']);
+ const result=manager.applyMeetingEdit({meetingId:'dedup',expectedRevision:0,operation:{type:'identity',segmentIds:['dedup-b'],identity:'other'}});
+ assert.equal(result.ok,true);
+ assert.equal(result.meeting.transcript[0].segmentId,'dedup-a');
+ assert.equal(result.meeting.transcript[0].timestamp,first.timestamp);
+ assert.equal(result.meeting.transcript[0].text,first.text);
+});
