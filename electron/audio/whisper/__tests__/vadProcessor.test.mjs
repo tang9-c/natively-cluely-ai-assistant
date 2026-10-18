@@ -75,8 +75,8 @@ describe('VadProcessor — push()', () => {
     vad.push(loud(WINDOW * 5));   // 5 speech frames
     const segments = vad.push(zeros(WINDOW * 10)); // 10 silent frames → hangover drains
     assert.equal(segments.length, 1);
-    // speechFrameCount accumulates both loud and hangover silent frames,
-    // so the emitted segment's durationMs reflects the total 15-window span.
+    // Duration includes the retained hangover even though only voiced frames
+    // satisfy the minimum speech requirement.
     assert.equal(segments[0].durationMs, 15 * 30);
     assert.equal(vad.isInSpeech(), false);
   });
@@ -90,12 +90,10 @@ describe('VadProcessor — push()', () => {
   });
 
   test('drops segments shorter than MIN_SPEECH_FRAMES (default 4)', () => {
-    // Bump minSpeechFrames so we can construct a burst that opens-but-doesn't-
-    // emit under the configured threshold. Speech and silent frames both
-    // accumulate into speechFrameCount, so we use a custom high threshold.
+    // A custom minimum also counts voiced frames only.
     const vad = new VadProcessor({ minSpeechFrames: 20 });
     vad.push(loud(WINDOW * 3));   // 3 speech frames
-    const after = vad.push(zeros(WINDOW * 10)); // 10 silent (hangover drains) → total 13 < 20
+    const after = vad.push(zeros(WINDOW * 10)); // 10 silent frames do not count toward the minimum
     assert.deepEqual(after, [], 'tiny burst under minSpeechFrames must not emit');
     assert.equal(vad.isInSpeech(), false);
   });
@@ -141,16 +139,16 @@ describe('VadProcessor — cross-call buffer carry', () => {
     vad.push(loud(200));
     assert.equal(vad.isInSpeech(), false); // not enough for a full window yet
     // Second push supplies the missing 280 loud samples to complete the window
-    // plus 480 more — total 2 windows of speech across the boundary.
-    const out = vad.push(loud(280 + WINDOW * 2));
+    // plus three full windows — four voiced windows across the boundary.
+    const out = vad.push(loud(280 + WINDOW * 3));
     assert.equal(vad.isInSpeech(), true);
     assert.equal(vad.currentSegmentId(), 1);
     // Close it out.
     const closed = vad.push(zeros(WINDOW * 12));
     assert.equal(closed.length, 1);
-    // 2 frames + 1 frame across the boundary = 3 windows; the cross-window
+    // 3 frames + 1 frame across the boundary = 4 windows; the cross-window
     // partial still counts as one full window once concatenated.
-    assert.ok(closed[0].durationMs >= 3 * 30);
+    assert.ok(closed[0].durationMs >= 4 * 30);
   });
 });
 
@@ -282,5 +280,48 @@ describe('VadProcessor — reset()', () => {
     vad.push(zeros(WINDOW * 12));
     const idAfter = vad.currentSegmentId();
     assert.ok(idAfter > idBefore);
+  });
+});
+
+describe('VadProcessor — minimum voiced duration excludes silence', () => {
+  for (const rmsThreshold of [0.004, 0.008]) {
+    test(`short noise plus hangover is rejected at threshold ${rmsThreshold}`, () => {
+      const vad = new VadProcessor({ rmsThreshold, hangoverFrames: 30, minSpeechFrames: 4 });
+      vad.push(loud(WINDOW));
+      assert.equal(vad.push(zeros(WINDOW * 30)).length, 0);
+    });
+    test(`finalize cannot pad short noise into speech at threshold ${rmsThreshold}`, () => {
+      const vad = new VadProcessor({ rmsThreshold, hangoverFrames: 30, minSpeechFrames: 4 });
+      vad.push(loud(WINDOW));
+      vad.push(zeros(WINDOW * 5));
+      assert.equal(vad.flush().length, 0);
+    });
+  }
+  test('four voiced frames still emit with pauses and preserve total duration', () => {
+    const vad = new VadProcessor({ hangoverFrames: 30 });
+    vad.push(loud(WINDOW * 2));
+    vad.push(zeros(WINDOW * 5));
+    vad.push(loud(WINDOW * 2));
+    const result = vad.push(zeros(WINDOW * 30));
+    assert.equal(result.length, 1);
+    assert.equal(result[0].durationMs, 1170);
+  });
+  test('soft commit does not turn a silent retained tail into new speech', () => {
+    const vad = new VadProcessor({ hangoverFrames: 30 });
+    vad.push(loud(WINDOW * 4));
+    vad.push(zeros(WINDOW * 10));
+    assert.ok(vad.softCommit());
+    assert.equal(vad.flush().length, 0);
+  });
+  test('soft commit rejects subminimum noise', () => {
+    const vad = new VadProcessor({ hangoverFrames: 30 });
+    vad.push(loud(WINDOW));
+    vad.push(zeros(WINDOW * 5));
+    assert.equal(vad.softCommit() === null, true);
+  });
+  test('max duration cannot promote sparse noise below configured minimum', () => {
+    const vad = new VadProcessor({ hangoverFrames: 600, minSpeechFrames: 4 });
+    vad.push(loud(WINDOW));
+    assert.equal(vad.push(zeros(WINDOW * 499)).length, 0);
   });
 });

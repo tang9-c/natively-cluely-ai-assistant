@@ -91,7 +91,8 @@ export class VadProcessor {
 
       if (this.inSpeech) {
         this.speechBuffer.push(window.slice());
-        this.speechFrameCount++;
+        // Only voiced frames satisfy the minimum; hangover is context, not speech.
+        if (isSpeech) this.speechFrameCount++;
         this.speechDurationMs += 30;
 
         if (!isSpeech) {
@@ -167,7 +168,7 @@ export class VadProcessor {
     if (tail.length > 0) {
       this.inSpeech = true;
       this.speechBuffer = tail;
-      this.speechFrameCount = tail.length;
+      this.speechFrameCount = tail.filter(frame => rms(frame, 0, frame.length) >= this.rmsThreshold).length;
       this.speechDurationMs = tail.length * 30;
       this.hangoverCount = this.hangoverFrames;
       // Tail-keep starts a NEW logical segment (caller should re-stamp any
@@ -209,7 +210,7 @@ export class VadProcessor {
   }
 
   private buildSegment(): SpeechSegment | null {
-    if (this.speechBuffer.length === 0) return null;
+    if (this.speechBuffer.length === 0 || this.speechFrameCount < this.minSpeechFrames) return null;
     const totalLen = this.speechBuffer.reduce((acc, f) => acc + f.length, 0);
     const combined = new Float32Array(totalLen);
     let pos = 0;
