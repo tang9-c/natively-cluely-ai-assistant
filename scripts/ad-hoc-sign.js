@@ -108,8 +108,15 @@ exports.default = async function (context) {
                     execSync(`codesign --force --entitlements "${entitlementsPath}" --sign - "${nodePath}"`, { stdio: 'inherit' });
                 } catch (error) {
                     console.error(`[Ad-Hoc Signing] Failed to sign ${file}:`, error);
+                    throw error;
                 }
             }
         }
     }
+
+    // Re-signing a module under Resources changes bytes sealed by the outer
+    // bundle. Seal the app LAST without --deep, preserving module entitlements.
+    // A second --deep pass would rewrite those nested signatures again.
+    execSync(`codesign --force --entitlements "${entitlementsPath}" --sign - "${appPath}"`, { stdio: 'inherit' });
+    execSync(`codesign --verify --deep --strict --verbose=2 "${appPath}"`, { stdio: 'inherit' });
 };

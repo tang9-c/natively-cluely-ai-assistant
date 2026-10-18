@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.7.15] - 2026-10-17
+
+### Fixes
+
+- Seal the macOS application after native module signing so the final bundle retains a valid resource signature. Native signing failures now stop packaging.
+
+### Testing
+
+- Added a real macOS codesign regression test and strict signature gates for the packaged app, extracted ZIP app, and app inside the final DMG. System permission prompts and actual capture still require device acceptance; this candidate is not approved for publication.
+
 ## [2.7.14] - 2026-10-17
 
 ### Fixes

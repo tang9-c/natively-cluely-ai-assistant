@@ -58,7 +58,20 @@ jobs:
       - name: Verify packaged ARM64 runtime and native architecture
         run: |
           set -o pipefail
+          codesign --verify --deep --strict --verbose=2 release/mac-arm64/CueUp.app
           node scripts/verify-packaged-release.mjs --path release/mac-arm64/CueUp.app --platform darwin --arch arm64 | tee release/native-architecture-report.json
+
+      - name: Verify signatures inside distributable ZIP and DMG
+        env:
+          PACKAGE_VERSION: ${{ steps.package-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          ditto -x -k "release/CueUp-${PACKAGE_VERSION}-arm64-mac.zip" "$RUNNER_TEMP/signature-zip"
+          codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/signature-zip/CueUp.app"
+          mkdir -p "$RUNNER_TEMP/signature-dmg"
+          trap 'hdiutil detach "$RUNNER_TEMP/signature-dmg" >/dev/null 2>&1 || true' EXIT
+          hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/signature-dmg" "release/CueUp-${PACKAGE_VERSION}-arm64.dmg"
+          codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/signature-dmg/CueUp.app"
 
       - name: Smoke test final ARM64 packaged runtime
         run: |
