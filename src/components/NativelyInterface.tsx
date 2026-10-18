@@ -4338,7 +4338,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                         {systemAudioWarning.source === 'stt'
                           ? '语音识别异常'
                           : systemAudioWarning.kind === 'screen-recording-permission'
-                          ? '屏幕录制权限被拒绝'
+                          ? '屏幕与系统录音权限不可用'
                           : systemAudioWarning.kind === 'screenshot-capture-failure'
                             ? '截图失败'
                             : systemAudioWarning.kind === 'microphone-capture-failure'

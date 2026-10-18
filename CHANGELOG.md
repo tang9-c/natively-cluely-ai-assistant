@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.7.14] - 2026-10-17
+
+### Fixes
+
+- Allow the first user-initiated screen capture or meeting to reach the macOS authorization prompt instead of blocking undecided permissions. Startup permission checks remain passive.
+- Clarify unavailable screen-recording permission messages in Chinese, including how to add CueUp when it is missing from System Settings.
+
+### Testing
+
+- Added isolated permission-resolution regression coverage. Real macOS authorization and system-audio capture remain subject to device acceptance; this candidate is not approved for publication.
+
 ## [2.7.13] - 2026-09-18
 
 ### Summary

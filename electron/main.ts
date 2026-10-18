@@ -243,7 +243,7 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
   switch (reason) {
     case 'screen-recording-denied':
       return isMac
-        ? 'Screen Recording is not applied to this build yet. Interviewer audio will not be captured. Open System Settings → Privacy & Security → Screen Recording, toggle CueUp off and back on, then restart the app.'
+        ? '尚未获得屏幕与系统录音权限，暂时无法采集系统音频。请在“系统设置 → 隐私与安全性 → 录屏与系统录音”中开启 CueUp；若列表中没有 CueUp，点击“＋”添加“应用程序”中的 CueUp。授权后完全退出并重新打开应用。'
         : 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
     case 'mac-screen-recording-revoked-rebuild':
       // Defense-in-depth: even though all call sites must be darwin-gated
@@ -3201,9 +3201,8 @@ export class AppState {
 
     // Check Screen Recording permission required for system audio capture
     // (CoreAudio Global Process Tap + ScreenCaptureKit both need this).
-    // NOTE: The 'not-determined' TCC dialog is triggered once at app startup
-    // (in initializeApp) so it never pops up mid-meeting here. We only act on
-    // explicit 'denied' — in that case warn the user but let the meeting continue
+    // Startup checks stay passive. This first user-initiated capture use can
+    // trigger authorization; if capture remains unavailable, warn and continue
     // with microphone-only transcription.
     if (process.platform === 'darwin') {
       const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
@@ -3215,7 +3214,7 @@ export class AppState {
           console.warn('[Main]', message);
           this.broadcastScreenTccRepairRequired('SCREEN_TCC_STALE_GRANTED', message);
         } else {
-          // Permission was explicitly denied — warn the user via the UI but do NOT
+          // Permission remains unavailable — warn the user via the UI but do NOT
           // auto-open System Settings. Forcing that window open every meeting start
           // is extremely disruptive, especially when mic transcription is still working.
           // The UI will show a non-blocking banner; the user can fix it deliberately.
@@ -3226,8 +3225,6 @@ export class AppState {
         // NOTE: Do NOT call shell.openExternal() here — it hijacks focus on every meeting
         // start. The UI banner (system-audio-permission-denied IPC event) handles this.
       }
-      // 'not-determined': Handled at startup. SCK/CoreAudio will trigger the TCC
-      // dialog itself when it first attempts to access screen content.
     }
 
     this.logSttRuntimeDiagnostics('meeting-start', 'user');

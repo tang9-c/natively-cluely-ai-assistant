@@ -17,15 +17,9 @@ const shellExecAsync = util.promisify(execShell);
 /**
  * Asserts that macOS screen recording permission is in a usable state.
  *
- * Statuses:
- *   'granted'        → OK, proceed.
- *   'denied'         → User explicitly revoked access. Throw — cannot capture.
- *   'restricted'     → MDM / parental controls. Throw — cannot fix programmatically.
- *   'not-determined' → The startup flow in initializeApp() is responsible for
- *                      triggering the one-time TCC dialog. If we reach this state
- *                      at screenshot time it means that startup dialog was dismissed
- *                      or failed. Throw a clear restart prompt rather than calling
- *                      getSources() again with no foreground window context.
+ * User-initiated capture probes actual capability and can trigger the first
+ * authorization dialog. Startup status checks remain passive. Restricted
+ * policy is never bypassed; unavailable capture produces an actionable error.
  *
  * On non-Darwin platforms this is a no-op (always passes).
  */
@@ -35,7 +29,7 @@ async function assertScreenRecordingPermission(): Promise<void> {
   // needing the app to be in the TCC whitelist (same policy as the startup check in main.ts).
   if (!app.isPackaged) return;
   const screenRecordingRebindMessage =
-    'macOS Screen Recording is not applied to this build yet. Open System Settings > Privacy & Security > Screen Recording, toggle CueUp off and back on, then restart the app.';
+    '屏幕录制权限不可用。请在“系统设置 → 隐私与安全性 → 录屏与系统录音”中开启 CueUp；若列表中没有 CueUp，点击“＋”添加“应用程序”中的 CueUp。授权后完全退出并重新打开应用。';
   const screenHealth = await resolveMacScreenPermissionHealth('screenshot helper');
 
   if (screenHealth.effectiveGranted) {

@@ -93,17 +93,6 @@ export async function resolveMacScreenPermissionHealth(
     };
   }
 
-  if (status === 'not-determined') {
-    return {
-      status,
-      capturable: false,
-      effectiveGranted: false,
-      staleGrantSuspected: false,
-      recommendedFix: 'restart-app',
-      sourceCount: 0,
-    };
-  }
-
   if (options.probeScreenSources === false) {
     return {
       status,
@@ -115,6 +104,9 @@ export async function resolveMacScreenPermissionHealth(
     };
   }
 
+  // First capture use must reach the protected API to request authorization.
+  // Status-only startup/IPC checks above remain passive; an undecided status
+  // must not prevent the very operation that can display the system prompt.
   const probe = await probeMacScreenSources(context);
 
   if (status === 'granted') {
