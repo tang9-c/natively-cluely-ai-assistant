@@ -4,7 +4,7 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
-import { prepareOfflineElectronGuard, verifyOfflineElectronGuard } from './offlineElectronGuard.mjs';
+import { offlineElectronEnv, prepareOfflineElectronGuard, verifyOfflineElectronGuard } from './offlineElectronGuard.mjs';
 
 async function findLauncherPage(electronApp: ElectronApplication): Promise<Page> {
   const deadline = Date.now() + 15_000;
@@ -69,43 +69,42 @@ export const test = base.extend<{
   // collisions when tests run back-to-back.
   electronApp: async ({}, use, testInfo) => {
     const userDataDir = path.join(
-      os.tmpdir(),
+      await fs.realpath(os.tmpdir()),
       'natively-e2e',
       `user-data-${testInfo.testId}`,
     );
     await fs.rm(userDataDir, { recursive: true, force: true });
     await fs.mkdir(userDataDir, { recursive: true });
 
-    const boundaryGuard = await prepareOfflineElectronGuard(userDataDir);
-
-    const app = await electron.launch({
-      args: ['-r', boundaryGuard, '.', `--user-data-dir=${userDataDir}`],
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        NODE_ENV: 'development',
-        ELECTRON_ENABLE_LOGGING: '1',
-        ELECTRON_E2E: '1',
-        ELECTRON_E2E_SKIP_AUDIO_START: '1',
-        ELECTRON_E2E_MEETING_PREPARATION_FIXTURES: '1',
-      },
-    });
-
-    const child = app.process();
-    await verifyOfflineElectronGuard(app, userDataDir);
+    let app: ElectronApplication | undefined;
+    let childProcess: ReturnType<ElectronApplication['process']> | undefined;
     const startupOutput: string[] = [];
-    if (testInfo.title.includes('startup quit')) {
-      child.stdout?.on('data', chunk => startupOutput.push(String(chunk)));
-      child.stderr?.on('data', chunk => startupOutput.push(String(chunk)));
+    try {
+      // Keep existing SQLite/DOCX probes working from the isolated cwd.
+      await fs.symlink(path.join(process.cwd(), 'node_modules'), path.join(userDataDir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+      const boundaryGuard = await prepareOfflineElectronGuard(userDataDir);
+      app = await electron.launch({
+        args: ['-r', boundaryGuard, process.cwd(), `--user-data-dir=${userDataDir}`],
+        // main.ts loads dotenv at module evaluation; an empty cwd avoids the real .env.
+        cwd: userDataDir,
+        env: offlineElectronEnv(userDataDir),
+      });
+      const child = app.process();
+      childProcess = child;
+      if (testInfo.title.includes('startup quit')) {
+        child.stdout?.on('data', chunk => startupOutput.push(String(chunk)));
+        child.stderr?.on('data', chunk => startupOutput.push(String(chunk)));
+      }
+      await verifyOfflineElectronGuard(app, userDataDir);
+      await use(app);
+    } finally {
+      if (app && childProcess) await closeElectronApp(app, childProcess);
+      if (testInfo.title.includes('startup quit')) {
+        await fs.mkdir(path.join(process.cwd(), '.tmp/v28-t7'), { recursive: true });
+        await fs.writeFile(path.join(process.cwd(), '.tmp/v28-t7/startup-main.log'), startupOutput.join(''));
+      }
+      await fs.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
     }
-    await use(app);
-
-    await closeElectronApp(app, child);
-    if (testInfo.title.includes('startup quit')) {
-      await fs.mkdir(path.join(process.cwd(), '.tmp/v28-t7'), { recursive: true });
-      await fs.writeFile(path.join(process.cwd(), '.tmp/v28-t7/startup-main.log'), startupOutput.join(''));
-    }
-    await fs.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
   },
 
   // Reuse the first (launcher) window created by the Electron app.

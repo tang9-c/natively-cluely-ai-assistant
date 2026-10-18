@@ -137,7 +137,7 @@ test('conflict retains local input and explicit keep survives delayed generation
  await page.getByRole('button',{name:'保留本次修改',exact:true}).click();await expect(page.getByText('已保存',{exact:true})).toBeVisible();
  await electronApp.evaluate(({app,BrowserWindow}: any)=>{
   const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'generation-fixture.cjs'));
-  const db=Object.create(require('./dist-electron/electron/db/DatabaseManager.js').DatabaseManager.prototype);
+  const db=Object.create(require(require('node:path').join(app.getAppPath(),'dist-electron/electron/db/DatabaseManager.js')).DatabaseManager.prototype);
   db.db=new (require('better-sqlite3'))(require('node:path').join(app.getPath('userData'),'natively.db'));
   db.mergeGeneratedMeetingResult({id:'editing-fixture',title:'编辑测试会议',summary:'late',detailedSummary:{overview:'迟到生成',actionItems:['迟到任务'],keyPoints:['生成要点']}},0);
   db.db.close();
