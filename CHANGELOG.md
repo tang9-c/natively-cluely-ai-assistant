@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.7.16] - 2026-10-18
+
+### Fixes
+
+- Count only voiced frames toward the minimum speech duration, preventing brief noise followed by silence from being sent to local speech recognition. Preserve trailing context and validate retained tails and forced segments.
+
+### Testing
+
+- Passed 84 focused regression tests. Fixed-noise input no longer produces spurious text in either local SenseVoice channel; isolated system-audio speech remains intact. Microphone speech, broader noise robustness, and final candidate device acceptance remain pending. This candidate is not approved for publication.
+
 ## [2.7.15] - 2026-10-17
 
 ### Fixes
