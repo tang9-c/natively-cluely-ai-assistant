@@ -110,7 +110,7 @@ function quitHarness(state) {
   let callback; let quits = 0; let cleanups = 0;
   Object.assign(state, {setQuitting(value){this._isQuitting = value;}, disposeIdleResources: async () => {cleanups++;}, getRAGManager: () => null});
   const start = source.indexOf('let quitCleanupPromise:');
-  const end = source.indexOf('// app.dock?.hide()', start);
+  const end = source.indexOf('\n  appState.createWindow()', start);
   const code = ts.transpileModule(source.slice(start, end), {compilerOptions: {target: ts.ScriptTarget.ES2022}}).outputText;
   vm.runInNewContext(code, {app: {on: (name, cb) => {callback = cb;}, quit: () => {quits++;}}, appState: state,
     OllamaManager: {getInstance: () => ({stop(){}})}, console: {log(){}, error(){}}, require: name => {

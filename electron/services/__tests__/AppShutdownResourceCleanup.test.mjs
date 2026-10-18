@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 const source = fs.readFileSync(path.join(root, 'electron/main.ts'), 'utf8');
 const start = source.indexOf('app.on("before-quit"');
-const end = source.indexOf('// app.dock?.hide()', start);
+const end = source.indexOf('\n  appState.createWindow()', start);
 const shutdownSource = source.slice(start, end);
 
 test('before-quit releases shared screenshot, image, and RAG resources', () => {

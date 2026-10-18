@@ -4657,6 +4657,95 @@ async function initializeApp() {
     console.warn('[Init] STT pre-warm threw (non-fatal):', err);
   }
 
+  // Install app quit handling before window close barriers can intercept a startup quit.
+  let quitCleanupPromise: Promise<void> | null = null;
+  let quitCleanupComplete = false;
+
+  // Scrub API keys from memory on quit to minimize exposure window
+  app.on("before-quit", (event) => {
+    if (quitCleanupComplete) return;
+
+    event.preventDefault();
+    if (quitCleanupPromise) return;
+
+    console.log("App is quitting, cleaning up resources...");
+    appState.setQuitting(true);
+    quitCleanupPromise = (async () => {
+      try {
+        if (!await appState.getWindowHelper().flushLauncherEdits()) throw new Error('meeting_edit_save_incomplete');
+        await appState.finishMeetingBeforeQuit();
+      } catch {
+        // Keep credentials and capture resources available for an explicit retry.
+        appState.setQuitting(false);
+        quitCleanupPromise = null;
+        return;
+      }
+
+      const cleanupTasks: Promise<unknown>[] = [appState.disposeIdleResources()];
+      const cleanupTaskNames = ['idle-resources'];
+
+      // ROUND 2 FIX (#9): synchronously stop the CGEventTap worker thread
+      // BEFORE V8 starts tearing down. The tap callback holds an
+      // Arc<ThreadsafeFunction> that calls into napi from a non-V8 thread;
+      // if V8 is mid-teardown when the callback runs, napi's release path
+      // crashes. stop() joins the worker, guaranteeing no in-flight callbacks
+      // remain by the time we return.
+      //
+      // Dispose CropperWindowHelper to clean up IPC listeners and prevent memory leaks
+      // This is critical to prevent resource leaks and ensure proper cleanup
+      if (appState?.cropperWindowHelper) {
+        appState.cropperWindowHelper.dispose();
+      }
+
+      // Kill Ollama if we started it
+      OllamaManager.getInstance().stop();
+
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        CredentialsManager.getInstance().scrubMemory();
+        appState.processingHelper.getLLMHelper().scrubKeys();
+        console.log('[Main] Credentials scrubbed from memory on quit');
+      } catch (e) {
+        console.error('[Main] Failed to scrub credentials on quit:', e);
+      }
+
+      // Clean up screenshot queues to prevent residual PNG files on disk.
+      // Use the live AppState helper; constructing a new ScreenshotHelper would
+      // only clear a new empty queue.
+      try {
+        appState.clearQueues();
+        console.log('[Main] Screenshot queues cleared on quit');
+      } catch (e) {
+        console.error('[Main] Failed to clear screenshot queues on quit:', e);
+      }
+
+      try {
+        const { getImageOptimizer } = require('./services/screen/ImageOptimizer');
+        cleanupTasks.push(getImageOptimizer().cleanupAll());
+        cleanupTaskNames.push('optimized-images');
+      } catch {
+        console.error('[Main] Failed to start optimized image cleanup on quit');
+      }
+
+      const ragManager = appState.getRAGManager();
+      if (ragManager) {
+        cleanupTasks.push(ragManager.dispose());
+        cleanupTaskNames.push('rag-resources');
+      }
+
+      const results = await Promise.allSettled(cleanupTasks);
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error('[Main] Async quit cleanup failed', { task: cleanupTaskNames[index] });
+        }
+      });
+      quitCleanupComplete = true;
+      app.quit();
+    })();
+    void quitCleanupPromise;
+  })
+
+
   appState.createWindow()
 
   // Always create the tray as a recovery path — the user needs a way to restore a
@@ -4760,94 +4849,6 @@ async function initializeApp() {
       app.quit()
     }
   })
-
-  let quitCleanupPromise: Promise<void> | null = null;
-  let quitCleanupComplete = false;
-
-  // Scrub API keys from memory on quit to minimize exposure window
-  app.on("before-quit", (event) => {
-    if (quitCleanupComplete) return;
-
-    event.preventDefault();
-    if (quitCleanupPromise) return;
-
-    console.log("App is quitting, cleaning up resources...");
-    appState.setQuitting(true);
-    quitCleanupPromise = (async () => {
-      try {
-        if (!await appState.getWindowHelper().flushLauncherEdits()) throw new Error('meeting_edit_save_incomplete');
-        await appState.finishMeetingBeforeQuit();
-      } catch {
-        // Keep credentials and capture resources available for an explicit retry.
-        appState.setQuitting(false);
-        quitCleanupPromise = null;
-        return;
-      }
-
-      const cleanupTasks: Promise<unknown>[] = [appState.disposeIdleResources()];
-      const cleanupTaskNames = ['idle-resources'];
-
-      // ROUND 2 FIX (#9): synchronously stop the CGEventTap worker thread
-      // BEFORE V8 starts tearing down. The tap callback holds an
-      // Arc<ThreadsafeFunction> that calls into napi from a non-V8 thread;
-      // if V8 is mid-teardown when the callback runs, napi's release path
-      // crashes. stop() joins the worker, guaranteeing no in-flight callbacks
-      // remain by the time we return.
-      //
-      // Dispose CropperWindowHelper to clean up IPC listeners and prevent memory leaks
-      // This is critical to prevent resource leaks and ensure proper cleanup
-      if (appState?.cropperWindowHelper) {
-        appState.cropperWindowHelper.dispose();
-      }
-
-      // Kill Ollama if we started it
-      OllamaManager.getInstance().stop();
-
-      try {
-        const { CredentialsManager } = require('./services/CredentialsManager');
-        CredentialsManager.getInstance().scrubMemory();
-        appState.processingHelper.getLLMHelper().scrubKeys();
-        console.log('[Main] Credentials scrubbed from memory on quit');
-      } catch (e) {
-        console.error('[Main] Failed to scrub credentials on quit:', e);
-      }
-
-      // Clean up screenshot queues to prevent residual PNG files on disk.
-      // Use the live AppState helper; constructing a new ScreenshotHelper would
-      // only clear a new empty queue.
-      try {
-        appState.clearQueues();
-        console.log('[Main] Screenshot queues cleared on quit');
-      } catch (e) {
-        console.error('[Main] Failed to clear screenshot queues on quit:', e);
-      }
-
-      try {
-        const { getImageOptimizer } = require('./services/screen/ImageOptimizer');
-        cleanupTasks.push(getImageOptimizer().cleanupAll());
-        cleanupTaskNames.push('optimized-images');
-      } catch {
-        console.error('[Main] Failed to start optimized image cleanup on quit');
-      }
-
-      const ragManager = appState.getRAGManager();
-      if (ragManager) {
-        cleanupTasks.push(ragManager.dispose());
-        cleanupTaskNames.push('rag-resources');
-      }
-
-      const results = await Promise.allSettled(cleanupTasks);
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          console.error('[Main] Async quit cleanup failed', { task: cleanupTaskNames[index] });
-        }
-      });
-      quitCleanupComplete = true;
-      app.quit();
-    })();
-    void quitCleanupPromise;
-  })
-
 
 
   // app.dock?.hide() // REMOVED: User wants Dock icon visible
