@@ -125,8 +125,8 @@ export async function resolveMacScreenPermissionHealth(
       status,
       capturable: false,
       effectiveGranted: false,
-      staleGrantSuspected: true,
-      recommendedFix: 'reset-tcc',
+      staleGrantSuspected: !probe.error,
+      recommendedFix: probe.error ? 'open-settings' : 'reset-tcc',
       sourceCount: probe.sourceCount,
       error: probe.error,
     };
@@ -339,8 +339,8 @@ export async function repairMacTccPermissions(scope: TccRepairScope): Promise<Tc
       success: false,
       bundleId,
       commandsRun,
-      requiresRestart: false,
-      error: error instanceof Error ? error.message : String(error),
+      requiresRestart: commandsRun.length > 0,
+      error: `${commandsRun.length > 0 ? '部分权限已重置，仍需重启并重新授权。' : ''}${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

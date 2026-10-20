@@ -937,22 +937,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         deviceFallbackNotice.reason &&
         screenRecordingFallbackReasons.has(deviceFallbackNotice.reason),
     );
+    const canRepairScreenTcc = isKnownScreenRecordingFallback && deviceFallbackNotice?.reason === 'screen-recording-stale-grant';
     const [isRepairingScreenTcc, setIsRepairingScreenTcc] = useState(false);
     const handleRepairScreenTcc = useCallback(async () => {
         if (isRepairingScreenTcc) return;
         setIsRepairingScreenTcc(true);
         try {
             const result = await window.electronAPI?.repairTccPermission?.('screen');
-            if (!result?.success) {
+            if (!result?.success && !result?.requiresRestart) {
                 window.alert(result?.error || '权限缓存修复失败，请手动在系统设置中重新授予权限。');
                 return;
             }
 
-            const shouldRestart = window.confirm('权限缓存已清理。立即重启 CueUp 以重新触发 macOS 授权吗？');
+            const shouldRestart = window.confirm(`${result.error ? result.error + '\n' : '权限缓存已清理。'}立即重启 CueUp 吗？重启后请开始会议，并按系统提示重新授权。`);
             if (shouldRestart) {
                 await window.electronAPI?.restartAfterTccRepair?.();
             } else {
-                window.alert('权限缓存已清理。请手动重启 CueUp 以重新触发 macOS 授权。');
+                window.alert(`${result.error || '权限缓存已清理。'}请手动重启 CueUp，然后开始会议以重新授权。`);
             }
         } finally {
             setIsRepairingScreenTcc(false);
@@ -2832,24 +2833,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     )}
                                                 </div>
                                                 <button
-                                                    onClick={isKnownScreenRecordingFallback
-                                                        ? handleRepairScreenTcc
-                                                        : () => {
-                                                            // Clear stale localStorage so the next meeting starts clean.
-                                                            if (deviceFallbackNotice.kind === 'input') {
-                                                                localStorage.removeItem('preferredInputDeviceId');
-                                                                setSelectedInput('default');
-                                                            } else {
-                                                                localStorage.removeItem('preferredOutputDeviceId');
-                                                                setSelectedOutput('default');
-                                                            }
-                                                            setDeviceFallbackNotice(null);
-                                                        }}
+                                                    onClick={() => {
+                                                        if (isKnownScreenRecordingFallback) {
+                                                            if (canRepairScreenTcc) void handleRepairScreenTcc();
+                                                            else if (isMac) window.electronAPI.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+                                                            return;
+                                                        }
+                                                        // Clear stale localStorage so the next meeting starts clean.
+                                                        if (deviceFallbackNotice.kind === 'input') {
+                                                            localStorage.removeItem('preferredInputDeviceId');
+                                                            setSelectedInput('default');
+                                                        } else {
+                                                            localStorage.removeItem('preferredOutputDeviceId');
+                                                            setSelectedOutput('default');
+                                                        }
+                                                        setDeviceFallbackNotice(null);
+                                                    }}
                                                     disabled={isKnownScreenRecordingFallback && isRepairingScreenTcc}
                                                     className="shrink-0 text-[11px] font-medium text-text-primary hover:text-accent-primary transition-colors px-2 py-0.5 rounded-md bg-bg-elevated hover:bg-bg-input"
                                                 >
                                                     {isKnownScreenRecordingFallback
-                                                        ? isRepairingScreenTcc ? '修复中...' : '修复并重启'
+                                                        ? isRepairingScreenTcc ? '修复中...' : canRepairScreenTcc ? '修复并重启' : '打开设置'
                                                         : '重置'}
                                                 </button>
                                             </div>

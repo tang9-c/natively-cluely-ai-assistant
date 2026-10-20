@@ -5654,8 +5654,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('permissions:restart-after-repair', async () => {
-    app.relaunch();
-    setImmediate(() => app.exit(0));
+    appState.restartAfterPermissionRepair = true;
+    setImmediate(() => app.quit());
     return { success: true };
   });
 

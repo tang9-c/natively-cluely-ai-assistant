@@ -1335,7 +1335,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ? 'microphone'
         : 'screen';
       const result = await window.electronAPI?.repairTccPermission?.(scope);
-      if (!result?.success) {
+      if (!result?.success && !result?.requiresRestart) {
         setSystemAudioWarning((prev) =>
           prev
             ? {
@@ -1347,7 +1347,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         return;
       }
 
-      const shouldRestart = window.confirm('权限缓存已清理。立即重启 CueUp 以重新触发 macOS 授权吗？');
+      const shouldRestart = window.confirm(`${result.error ? result.error + '\n' : '权限缓存已清理。'}立即重启 CueUp 吗？重启后请开始会议，并按系统提示重新授权。`);
       if (shouldRestart) {
         await window.electronAPI?.restartAfterTccRepair?.();
       } else {
@@ -1355,7 +1355,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           prev
             ? {
                 ...prev,
-                message: '权限缓存已清理。请手动重启 CueUp 以重新触发 macOS 授权。',
+                message: `${result.error || '权限缓存已清理。'}请手动重启 CueUp，然后开始会议以重新授权。`,
               }
             : prev,
         );
@@ -4374,14 +4374,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                         >
                           打开设置
                         </button>
-                        <button
-                          onClick={handleRepairTccPermission}
-                          data-action={systemAudioRepairAction}
-                          disabled={isRepairingTcc}
-                          className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm disabled:opacity-60"
-                        >
-                          {isRepairingTcc ? '修复中...' : '修复权限并重启'}
-                        </button>
+                        {systemAudioWarning.recommendedFix === 'reset-tcc' && (
+                          <button
+                            onClick={handleRepairTccPermission}
+                            data-action={systemAudioRepairAction}
+                            disabled={isRepairingTcc}
+                            className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm disabled:opacity-60"
+                          >
+                            {isRepairingTcc ? '修复中...' : '修复权限并重启'}
+                          </button>
+                        )}
                       </>
                     ) : systemAudioWarning.kind === 'screenshot-capture-failure' ? null : systemAudioWarning.recommendedFix === 'reset-tcc' || systemAudioWarning.staleGrantSuspected ? (
                       <button

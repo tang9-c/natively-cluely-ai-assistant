@@ -478,6 +478,7 @@ export class AppState {
   private _pendingMeetingSave: Promise<void> | null = null;
   private _meetingStartInFlight: Promise<void> | null = null;
   private _isQuitting: boolean = false;
+  public restartAfterPermissionRepair = false;
   private _verboseLogging: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
   // session. Reset on every reconfigureAudio / new pipeline build so the next
@@ -4674,6 +4675,7 @@ async function initializeApp() {
       } catch {
         // Keep credentials and capture resources available for an explicit retry.
         appState.setQuitting(false);
+        appState.restartAfterPermissionRepair = false;
         quitCleanupPromise = null;
         return;
       }
@@ -4737,6 +4739,7 @@ async function initializeApp() {
         }
       });
       quitCleanupComplete = true;
+      if (appState.restartAfterPermissionRepair) app.relaunch();
       app.quit();
     })();
     void quitCleanupPromise;

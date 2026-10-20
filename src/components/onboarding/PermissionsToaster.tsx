@@ -120,8 +120,12 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     setRepairing(true);
     try {
       const result = await window.electronAPI?.repairTccPermission?.('screen');
-      if (result?.success && result.requiresRestart) {
-        const shouldRestart = window.confirm('权限缓存已清理。立即重启 CueUp 以重新触发 macOS 授权吗？');
+      if (!result?.success && !result?.requiresRestart) {
+        window.alert(result?.error || '权限重置失败，请在系统设置中检查授权。');
+        return;
+      }
+      if (result.requiresRestart) {
+        const shouldRestart = window.confirm(`${result.error ? result.error + '\n' : '权限缓存已清理。'}立即重启 CueUp 吗？重启后请开始会议，并按系统提示重新授权。`);
         if (shouldRestart) {
           await window.electronAPI?.restartAfterTccRepair?.();
         }
