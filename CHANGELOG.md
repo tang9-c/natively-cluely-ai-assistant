@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.7.17] - 2026-10-23
+
+### Fixes
+
+- Route macOS permission-repair restarts through the existing edit and meeting save barriers. Cancel the restart when saving fails, report partial permission resets, and direct ordinary permission denials to System Settings instead of resetting grants.
+- Avoid classifying temporary screen-source enumeration errors as stale authorization.
+- Remove full-transcript formatting from summary and transcript keystrokes, retain unchanged transcript references, and cache row timestamps. Generate transcript Skill input from the latest saved snapshot after flushing edits.
+
+### Testing
+
+- Permission-repair and shutdown regression checks passed 83 tests; editing and transcript regression checks passed 29 tests. Nine isolated Electron UI scenarios passed, including 5,000-row typing, failed-save retry, reopen, immediate copy, Word output, and synthetic composition events.
+- Fresh-device authorization, actual permission-repair restart and system-audio capture, real input methods, and final candidate device acceptance remain pending. This candidate is not approved for publication.
+
 ## [2.7.16] - 2026-10-18
 
 ### Fixes

@@ -1,48 +1,27 @@
 ## 发布摘要
 
-CueUp 2.7.11 提升了销售会议实时辅助的召回准确性，并修复动态动作卡片重复和重载后丢失的问题。
-
-## 改进
-
-- 覆盖明确的价格、竞品对比、实施周期、数据迁移风险、产品演示、会后资料和折扣问题。
-- 竞品对比不再依赖 Salesforce 等特定产品名称，可识别通用的明确对比请求。
-- 区分“ROI 怎么计算”和“有没有 ROI 案例”，避免返回答非所问的案例内容。
-- 存量用户仍使用旧官方默认值时，会安全升级 Sales 意图词；用户自行修改的内容保持不变。
+CueUp 2.7.17 改善摘要与转录的编辑流畅度，并完善 macOS 权限重置和重启时的保存保护。当前为待验收候选草稿。
 
 ## 修复
 
-- 分裂 final 转录形成完整语义后，界面会替换旧卡片，不再同时显示已经失效的重复卡片。
-- 会议浮窗加载或重新挂载后，会恢复 Main 中仍然有效的动态动作卡片。
+- 权限修复后的重启先保存编辑内容与会议；保存失败会取消重启，保留应用供重试。
+- 部分权限重置失败时明确提示已完成的操作及后续步骤；普通未授权引导打开系统设置，减少不必要的授权重置。
+- 临时屏幕探测异常不再直接判为授权记录失效。
+- 摘要与转录编辑时不再反复生成整场转录全文，复用未变数据并缓存转录时间标签。
+- 复制和运行转录技能前等待保存，技能使用最新保存的文字。
 
-## 测试与质量
+## 测试与验收范围
 
-- 明确区分状态机 fixture 测试和真实决策路径测试，避免将 oracle 结果误认为线上准确率。
-- 增加使用生产说话人角色的销售场景，以及常见客户问题、ROI 计算和竞品对比回归测试。
+权限与退出相关83项回归、编辑相关29项回归及9项隔离Electron界面测试通过，覆盖5000段转录下的编辑、保存失败重试、重开、立即输出和合成中文输入事件。
 
-## ⚠️ macOS 安装说明（未签名版本）
+新安装包的真实授权、权限重置后重启、系统音频采集、真实输入法及其他实机验收仍待完成。隔离测试不代表全部实机验收通过；暂不正式发布。
 
-请根据设备架构下载对应的 `.zip` 或 `.dmg` 文件（Apple Silicon 或 Intel）。
+## macOS 安装说明
 
-如果看到“应用已损坏”提示：
+请按设备架构选择Apple Silicon（arm64）或Intel安装包。macOS包使用ad-hoc签名，未进行Developer ID签名或Apple公证；请参照随包提供的 `INSTALL-UNSIGNED-MACOS.txt`。
 
-- **对于 `.zip` 文件：**
-  1. 将应用移动到“应用程序”文件夹。
-  2. 打开终端并执行：`xattr -cr /Applications/CueUp.app`
+## Windows 安装说明
 
-- **对于 `.dmg` 文件：**
-  1. 打开终端并执行：
-     ```bash
-     xattr -cr ~/Downloads/CueUp-<version>-arm64.dmg
-     # Intel Mac 请执行：
-     xattr -cr ~/Downloads/CueUp-<version>-x64.dmg
-     ```
-  2. 打开下载的 CueUp `.dmg` 并完成安装。
-  3. 打开终端并执行：`xattr -cr /Applications/CueUp.app`
+Windows包未配置Authenticode证书签名。SmartScreen可能提示无法识别发布者；请核对安装包来源并按系统提示操作。
 
-## ⚠️ Windows 安装说明（未签名版本）
-
-运行 Windows 安装程序时，Microsoft Defender SmartScreen 可能提示“Windows 已保护你的电脑”，并阻止未知应用启动。
-
-由于这是未签名版本，此提示属于正常现象。点击 **更多信息**，然后点击 **仍要运行** 即可。
-
-详细变更请参阅仓库中的 [CHANGELOG.md](https://github.com/tang9-c/natively-cluely-ai-assistant/blob/main/CHANGELOG.md)。
+详细变更见 [CHANGELOG.md](https://github.com/tang9-c/natively-cluely-ai-assistant/blob/ci/intel-mac-workflow/CHANGELOG.md)。
