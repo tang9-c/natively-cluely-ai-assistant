@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { resolveSpeakerIdentity } from '../../../shared/speakerIdentity';
 import { SpeakerIdentityMenu, type IdentityChoice } from './SpeakerIdentityMenu';
@@ -22,6 +22,7 @@ export const TranscriptRow = React.memo(function TranscriptRow({
   formatTime, onTextChange, onTextBlur, onIdentityChange, onSelect, selecting, selected, onToggle, saving,
 }: TranscriptRowProps) {
   const { entry } = row;
+  const timeLabel = useMemo(() => entry.timestamp ? formatTime(entry.timestamp) : '0:00', [entry.timestamp, formatTime]);
   const [editing, setEditing] = useState(false);
   const [selection, setSelection] = useState<{ start: number; end: number; variant: string } | null>(null);
   const [canonical, setCanonical] = useState('');
@@ -47,7 +48,7 @@ export const TranscriptRow = React.memo(function TranscriptRow({
           onChange={identity => onIdentityChange([entry.segmentId!], identity)} onSelect={onSelect} />
           : <span className="text-xs font-semibold text-text-secondary">{resolveSpeakerIdentity(entry).label}</span>}
         <span className="font-mono text-xs text-text-tertiary">
-          {entry.timestamp ? formatTime(entry.timestamp) : '0:00'}
+          {timeLabel}
         </span>
       </div>
       {editing && editable ? <>

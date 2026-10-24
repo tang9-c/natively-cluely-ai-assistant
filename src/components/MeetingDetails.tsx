@@ -154,8 +154,7 @@ const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProp
         () => buildVisibleTranscriptRows(meeting.transcript),
         [meeting.transcript],
     );
-    const transcriptMarkdown = formatTranscriptForSkill(meeting.transcript);
-    const canRunTranscriptSkill = activeTab === 'transcript' && transcriptMarkdown.trim().length > 0;
+    const canRunTranscriptSkill = activeTab === 'transcript' && visibleTranscriptRows.length > 0;
     const visibleCoachingInsights = getVisibleCoachingInsights(meeting.detailedSummary);
     const visibleFollowUpDraft = getVisibleFollowUpDraft(meeting.detailedSummary);
     const followUpDraftNotice = hasManuallyEditedActions(meeting.editState) ? '（行动项已修改，草稿未自动更新）' : '';
@@ -278,7 +277,7 @@ const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProp
                 skillId: skill.id,
                 meetingId: meeting.id,
                 meetingTitle: meeting.title,
-                transcriptMarkdown,
+                transcriptMarkdown: formatTranscriptForSkill(meeting.transcript),
             });
 
             if (!result?.success || !result.filePath) {

@@ -170,3 +170,14 @@ for(const draft of ['none','summary','text'])test(`final I1: queued flush cannot
  assert.equal(await f.controller.retry(),true);assert.deepEqual(f.calls.at(-1).operation,operation);
  assert.equal(await f.controller.flush(),true);assert.equal(f.controller.snapshot().status,'saved');
 });
+
+test('summary input retains unchanged transcript identity; text drafts copy only the edited segment',t=>{
+ const initial=meeting();initial.transcript.push({segmentId:'other',text:'keep'});
+ const controller=createMeetingAutosave(initial,{applyMeetingEdit:async()=>{throw Error('unexpected save');},getMeetingDetails:async()=>initial});
+ t.after(()=>controller.dispose());const original=controller.snapshot().meeting.transcript;
+ controller.patch({overview:'typing summary'});
+ assert.equal(controller.snapshot().meeting.transcript,original,'summary keystrokes must not invalidate transcript derivations');
+ controller.text('seg','corrected');const edited=controller.snapshot().meeting.transcript;
+ assert.notEqual(edited,original);assert.equal(edited[0].text,'corrected');assert.equal(original[0].text,'original');
+ assert.equal(edited[1],original[1],'unchanged segments retain their references');
+});

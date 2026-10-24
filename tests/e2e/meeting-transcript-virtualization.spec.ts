@@ -218,3 +218,29 @@ test('T5 blank transcript drafts remain editable and cannot silently delete a se
  expect((await page.evaluate(()=>window.electronAPI.getMeetingDetails('virtual-100')))?.transcript?.[0].text).toContain('segment-100-0');
  await row.getByRole('textbox',{name:'编辑转录'}).fill('补充有效虚构转录');await expect(page.getByText('已保存',{exact:true})).toBeVisible();
 });
+
+test('transcript typing with 5000 rows avoids repeated formatting and immediate copy saves the latest text',async({electronApp,page})=>{
+ await seedTranscriptMeetings(electronApp);await openTranscript(page,5000);
+ const row=page.locator('[data-transcript-row-key="segment:virtual-5000-segment-1"]');
+ await row.locator('p').click();const input=row.getByRole('textbox',{name:'编辑转录'});await input.fill('纠正转录');
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await page.evaluate(()=>{
+  const original=Date.prototype.toLocaleTimeString;(window as any).__transcriptTimeFormats=0;
+  Date.prototype.toLocaleTimeString=function(...args: any[]){(window as any).__transcriptTimeFormats++;return original.apply(this,args as any);};
+  (window as any).__restoreTranscriptClock=()=>{Date.prototype.toLocaleTimeString=original;};
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(text: string)=>{(window as any).__fastTranscriptCopy=text;}}});
+ });
+ try {
+  await input.pressSequentially(' fast transcript typing',{delay:3});
+  expect(await page.evaluate(()=>(window as any).__transcriptTimeFormats)).toBe(0);
+ } finally {await page.evaluate(()=>(window as any).__restoreTranscriptClock());}
+ const expected=await input.inputValue();
+ await page.getByRole('button',{name:'复制完整转录',exact:true}).click();
+ const copied=await page.evaluate(()=>(window as any).__fastTranscriptCopy);
+ expect(copied).toContain(expected);expect(copied).toContain('segment-5000-4999');
+ const saved=await page.evaluate(()=>window.electronAPI.getMeetingDetails('virtual-5000'));
+ expect(saved?.transcript?.[1].text).toBe(expected);expect(saved?.transcript?.[1].originalContent).toBe('segment-5000-1');
+ expect(saved?.transcript?.[2].text).toBe('segment-5000-2');
+ await page.getByRole('button',{name:'摘要',exact:true}).click();
+ await page.getByRole('button',{name:'转录',exact:true}).click();await expect(row.locator('p')).toHaveText(expected);
+});

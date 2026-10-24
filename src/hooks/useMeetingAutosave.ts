@@ -28,11 +28,11 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
     const listeners = new Set<() => void>();
     const notify = () => listeners.forEach(listener => listener());
     const view = () => {
-        const meeting = { ...saved, transcript: saved.transcript?.map(entry => ({ ...entry })), detailedSummary: { ...saved.detailedSummary! } };
+        const meeting = { ...saved, detailedSummary: { ...saved.detailedSummary! } };
         for (const [field, draft] of drafts) {
             if (field.startsWith('text:')) {
-                const entry = meeting.transcript?.find(entry => entry.segmentId === field.slice(5));
-                if (entry) entry.text = draft.value as string;
+                meeting.transcript = meeting.transcript?.map(entry => entry.segmentId === field.slice(5)
+                    ? { ...entry, text: draft.value as string } : entry);
             } else if (field === 'title') meeting.title = draft.value as string;
             else (meeting.detailedSummary as any)[field] = draft.value;
         }

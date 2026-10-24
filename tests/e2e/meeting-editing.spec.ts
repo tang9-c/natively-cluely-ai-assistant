@@ -687,3 +687,24 @@ test('T7 final M1 only generated summaries show revision stale feedback',async({
  await open(page);await page.getByRole('button',{name:'转录',exact:true}).click();
  await expect(page.getByText('记录已修改，摘要可能需要调整。',{exact:true})).toBeVisible();
 });
+
+test('summary typing with 5000 transcript rows avoids hidden formatting and still saves before leaving',async({electronApp,page})=>{
+ await seed(electronApp,5000);await open(page);
+ const block=page.getByLabel('摘要正文',{exact:true});await block.click();
+ await page.evaluate(()=>{
+  const original=Date.prototype.toLocaleTimeString;
+  (window as any).__summaryTimeFormats=0;
+  Date.prototype.toLocaleTimeString=function(...args: any[]){(window as any).__summaryTimeFormats++;return original.apply(this,args as any);};
+  (window as any).__restoreSummaryClock=()=>{Date.prototype.toLocaleTimeString=original;};
+ });
+ const typed=' summary editing remains responsive';
+ try {
+  await block.pressSequentially(typed,{delay:5});
+  expect(await page.evaluate(()=>(window as any).__summaryTimeFormats)).toBe(0);
+ } finally {await page.evaluate(()=>(window as any).__restoreSummaryClock());}
+ const expected=await block.innerText();
+ await page.getByRole('button',{name:'转录',exact:true}).click();
+ const saved=await readMeeting(page);expect(saved.detailedSummary.overview).toBe(expected);expect(saved.transcript).toHaveLength(5000);
+ await page.getByRole('button',{name:'摘要',exact:true}).click();
+ await expect(page.getByLabel('摘要正文',{exact:true})).toContainText(typed.trim());
+});
