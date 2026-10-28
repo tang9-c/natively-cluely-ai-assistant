@@ -4,6 +4,8 @@
 
 > DEVICE-01 后续状态：源码已修复，生产资源回归及本地重新打包的 ARM64 候选包原生点击复验通过，见文末修复记录。以上失败结论继续适用于原来下载的公开 2.7.18；本轮没有替换已发布附件或 `/Applications/CueUp.app`。完整首次会议仍未验收。
 
+> 正式发布更新：DEVICE-01 修复已于 2026-10-28 随 [2.7.19](https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.19-sha-8dee78b) 发布，三平台构建与附件核对通过。下文“未发布”是此前本地候选阶段的历史记录；没有把本报告的 2.7.18 候选原生点击当作正式 2.7.19 下载后验收。详见[2.7.19 发布记录](../testing/2.7.19-build-release.md)。
+
 ## 安装与证据边界
 
 - 实机 macOS 26.1，Apple Silicon ARM64。使用正式 Release `v2.7.18-sha-85a6ca0` 的 `CueUp-2.7.18-arm64.dmg`，不是开发态 Electron 或仓库内旧构建。

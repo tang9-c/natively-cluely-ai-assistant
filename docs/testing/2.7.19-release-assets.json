@@ -1,0 +1,94 @@
+{
+  "version": "2.7.19",
+  "tag": "v2.7.19-sha-8dee78b",
+  "sourceCommit": "8dee78b7fa07c7432c54bea51a5c16a8b1d4e9e5",
+  "releaseUrl": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.19-sha-8dee78b",
+  "publishedAt": "2026-10-28T07:53:39Z",
+  "digestSource": "GitHub release asset upload metadata; binaries not downloaded and rehashed locally in this release turn",
+  "assets": [
+    {
+      "name": "CueUp-2.7.19-arm64-mac.zip",
+      "bytes": 307165324,
+      "digest": "sha256:5fbb9e9bf14264ca42111e8a24ccff3bcbd0d13c2506ed478080772c574ae41d",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-2.7.19-arm64-mac.zip"
+    },
+    {
+      "name": "CueUp-2.7.19-arm64-mac.zip.blockmap",
+      "bytes": 310033,
+      "digest": "sha256:44eac541c462ba94d3d19d63d70620b0a96682fdb82242c49d25216fc3b2a48c",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-2.7.19-arm64-mac.zip.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.19-arm64.dmg",
+      "bytes": 322094940,
+      "digest": "sha256:015150459aa30d5b9f38fe79248fb23a8eb2bab22980b4a5fee15b9f5a8ec54d",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-2.7.19-arm64.dmg"
+    },
+    {
+      "name": "CueUp-2.7.19-arm64.dmg.blockmap",
+      "bytes": 339031,
+      "digest": "sha256:a60dbdb647c55b3b3b07439c6e2f4144f406c6f278f62e14eb21e7971fe7ff08",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-2.7.19-arm64.dmg.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.19-mac.zip",
+      "bytes": 311987132,
+      "digest": "sha256:38813edc73079bbf505a31a10144e4ea2dee769967f38b11ddc5ac5eaa4eaa64",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-2.7.19-mac.zip"
+    },
+    {
+      "name": "CueUp-2.7.19-mac.zip.blockmap",
+      "bytes": 317130,
+      "digest": "sha256:6061c9cb5ed02624cfd94cbff64595c27632eefc9de45d59c7fb39696ad2e89b",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-2.7.19-mac.zip.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.19.dmg",
+      "bytes": 326894549,
+      "digest": "sha256:c8b7b274e825082be74b14dbdac9314fe17e2b802c905d967ca17621a0e1bfee",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-2.7.19.dmg"
+    },
+    {
+      "name": "CueUp-2.7.19.dmg.blockmap",
+      "bytes": 341222,
+      "digest": "sha256:6d5d3dacc15f2850cbf42b75b6e7ff1027e27818b79927c3f1da2357d84640e0",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-2.7.19.dmg.blockmap"
+    },
+    {
+      "name": "CueUp-Setup-2.7.19.exe",
+      "bytes": 272229733,
+      "digest": "sha256:76c92555b3f4f8913d68af662a33fd79ad8914f7774e43842857920a9f961b8d",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-Setup-2.7.19.exe"
+    },
+    {
+      "name": "CueUp-Setup-2.7.19.exe.blockmap",
+      "bytes": 283872,
+      "digest": "sha256:81fe5a1a8dd2b126d4f64995d4744288af041445fb6e0569565d0043847eecb0",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp-Setup-2.7.19.exe.blockmap"
+    },
+    {
+      "name": "CueUp.2.7.19.exe",
+      "bytes": 271984909,
+      "digest": "sha256:61ba7abcaf9719168af1039fbc967a7cfa21ed290a8ab2e99ee00ec3382ff3ca",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/CueUp.2.7.19.exe"
+    },
+    {
+      "name": "INSTALL-UNSIGNED-MACOS.txt",
+      "bytes": 595,
+      "digest": "sha256:b0eeda2281edaff805ad3658e54ecb592622de839c23b5966c730d705ffb52b9",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/INSTALL-UNSIGNED-MACOS.txt"
+    },
+    {
+      "name": "latest.yml",
+      "bytes": 342,
+      "digest": "sha256:a9b2efb98c74be7197b34a7e7ea2e8d1b3db9bca2fdb608ad515fda2cb1cbc46",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/latest.yml"
+    },
+    {
+      "name": "OPEN-UNSIGNED-CUEUP-MAC.sh",
+      "bytes": 712,
+      "digest": "sha256:dbe354af3d4ef3af24174e920a1198ba53347b6cf939560659d57c76d93e02e4",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.19-sha-8dee78b/OPEN-UNSIGNED-CUEUP-MAC.sh"
+    }
+  ]
+}

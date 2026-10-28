@@ -850,3 +850,6 @@ E2E 对 P2、P3、P4、P4a、P5 运行 1200×800 亮色和 600×400 暗色/reduc
 ## 16. DEVICE-01 修复发布为 2.7.19
 
 2026-10-28 用户授权远程构建 Apple Silicon、Intel Mac、Windows x64 并正式发布。版本升级为 2.7.19，采用仓库现有 draft 汇总流程，在核对同一提交、平台成功结果和完整附件后公开。实际执行及最终发布状态见[2.7.19 发布记录](../testing/2.7.19-build-release.md)。历史 2.7.18 失败与本地候选验证保持原始范围，未执行的人工验收和 SEC-01 已接受风险状态不变。
+
+
+2.7.19 发布结果：三平台在 `8dee78b7fa07c7432c54bea51a5c16a8b1d4e9e5` 构建全部 success，14 个附件及更新文件核对完成，六个主要公开下载地址返回 200。已正式发布 [CueUp 2.7.19](https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.19-sha-8dee78b) 并设为 Latest；发布记录和附件清单已保存。其他 T13 人工验收仍不勾选。
