@@ -129,3 +129,5 @@ E2E 每次启动先验证离线 guard：userData/appData/home/documents/session/
 发布候选只包含初始设置相关源码、测试、方案、验收证据和版本记录；其他已有研究、路线图文档及临时文件不纳入本次提交。远程分别执行 Apple Silicon、Intel Mac、Windows x64 工作流，核对同一提交的构建结果与发布附件后再公开 Release。实际构建链接、结果及发布地址以本节后续记录为准。
 
 发布前复验：`npm test` 3,382/3,382 通过（181 suites，0 fail/skip）；指定五份 Electron E2E 50/50 通过（2.5 分钟）；`npm run typecheck:electron`、`npx tsc --noEmit` 通过；欢迎页内容检查 4/4 通过。截图回归重新生成后的 53 张图片尺寸已核对，清单字节数与 SHA-256 已同步。日志在本地 `.tmp/onboarding-t13/release-*.log`，不随源码提交。
+
+三平台远程构建已通过并正式发布 2.7.18，发布标签指向 `85a6ca091e0cce4b59d3dc79c24a47e6198e3ab0`。14 个附件齐全，GitHub Latest 已指向该正式版本。详细构建、附件、签名范围及风险记录见[2.7.18 发布记录](../testing/2.7.18-build-release.md)。这补充了当前发行包的自动化检查；上文未执行的人工验收项目仍保持未验收。
