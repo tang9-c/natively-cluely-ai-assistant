@@ -1,0 +1,121 @@
+{
+  "date": "2026-10-27",
+  "version": "2.7.18",
+  "sourceCommit": "85a6ca091e0cce4b59d3dc79c24a47e6198e3ab0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "isPackaged": true,
+  "syntheticFixtures": false,
+  "profile": "isolated fresh userData; OS TCC and HOME remain real",
+  "result": "failed_first_welcome_transition; subsequent_flow_partially_verified",
+  "findings": [
+    "DEVICE-01"
+  ],
+  "screenshots": [
+    {
+      "file": "01-welcome.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 85156,
+      "sha256": "375e57ce0858614b17e2e39be8c93d3a698f8e4627267c4161b6120ff0f4cdcd"
+    },
+    {
+      "file": "02-welcome-after-start.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 85089,
+      "sha256": "cc7adddde1244e7aca9ae3516cd710221a8bedc93a14c00bb1685c1c981c6aa2"
+    },
+    {
+      "file": "03-overview-after-restart.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 70338,
+      "sha256": "ab434a00b31f9bf1ee9c7525034b2d8e12756de49301dc04dc317b0481bdbc1d"
+    },
+    {
+      "file": "04-permissions.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 69972,
+      "sha256": "c3878b0cdd359568faa1579f72f48e7eab6dae8531b77863fc8bcb484cd0889b"
+    },
+    {
+      "file": "05-microphone-check.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 66641,
+      "sha256": "77f9368c89893842e6a69bc585ca66122e34d8c143e9b6aca92eeab53e592a9f"
+    },
+    {
+      "file": "06-speech-default.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 64915,
+      "sha256": "1d3292868023cc10a9bd6e15eb7121c8d90f3f9e4e1ef2078cd8ad95acf535fa"
+    },
+    {
+      "file": "07-model-download.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 64476,
+      "sha256": "edd45a28f2374bff11898e5d84c0a41d0b7ed6233b08f7c2182e1b3ff8fddee2"
+    },
+    {
+      "file": "08-ai-required-key.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 76277,
+      "sha256": "ab1aff9a0cfa4af5c618f170ba63ce2cf79bdf1a81b765d910a9a874765dfc17"
+    },
+    {
+      "file": "09-ai-provisioning.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 60882,
+      "sha256": "e0a6d564c92e105234214a615a2541976c3b4fc173364bbddec3af5d84dade65"
+    },
+    {
+      "file": "10-speech-verified.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 63988,
+      "sha256": "de052c8acc16b0a2e2aff8e463535c0e5c0e1921f49845389ffcfa4b3f64a878"
+    },
+    {
+      "file": "11-ready-missing-ai.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 81377,
+      "sha256": "0980fce9503ad9ca21ab02a1c824eb197201f461bb11761fdd0933688b580b1e"
+    },
+    {
+      "file": "12-unsaved-dialog.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 66729,
+      "sha256": "dec2a9de7f798c34e030a60f9870b2bb06587bfd14c0e2b5f1b0730cee2afcea"
+    },
+    {
+      "file": "13-home-resume.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 77570,
+      "sha256": "86aa7a8e55041fe6f57b84499ffaa7f737ebfd67223005f81369c554801fa1b1"
+    },
+    {
+      "file": "14-launcher-gate-ai.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 71180,
+      "sha256": "3cf6610a34a1c30495a36e20d1f292e325eb57f4eb2ec267218e7d1532859d3d"
+    },
+    {
+      "file": "15-history-after-restart.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 64846,
+      "sha256": "2351ca0d37bf6a796a51b5882011f3b45f5ba32f33ffbb9412bce8d9f58c2748"
+    }
+  ]
+}

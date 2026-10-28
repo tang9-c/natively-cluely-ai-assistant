@@ -61,6 +61,8 @@ test.describe('首次安装引导界面', () => {
     await page.getByRole('button', { name: '开始设置', exact: true }).click();
     await expect(page.getByRole('heading', { name: /开始前/ })).toBeVisible();
     await expect(page.getByRole('button', { name: '开始设置', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /先完成初始设置/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '正在读取…', exact: true })).toHaveCount(0);
     await page.screenshot({ path: '.tmp/onboarding-t09-overview-light.png' });
     await expect(page.getByText('此检查不会录音，也不会自动发送会议内容。')).toBeVisible();
     await page.getByRole('button', { name: '稍后继续', exact: true }).click();

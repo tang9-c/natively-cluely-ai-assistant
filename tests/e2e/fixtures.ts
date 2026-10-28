@@ -66,16 +66,17 @@ interface AppSession {
   page: Page;
   restart(): Promise<{ electronApp: ElectronApplication; page: Page }>;
 }
-interface OnboardingOptions { onboardingMode: OnboardingMode; onboardingScenario: OnboardingScenario }
+interface OnboardingOptions { onboardingMode: OnboardingMode; onboardingScenario: OnboardingScenario; rendererMode: 'development' | 'production' }
 export const test = base.extend<OnboardingOptions & {
   _session: AppSession;
   electronApp: ElectronApplication;
   page: Page;
   restartApp: () => Promise<{ electronApp: ElectronApplication; page: Page }>;
 }>({
+  rendererMode: ['development', { option: true }],
   onboardingMode: ['existing', { option: true }],
   onboardingScenario: ['none', { option: true }],
-  _session: async ({ onboardingMode, onboardingScenario }, use, testInfo) => {
+  _session: async ({ onboardingMode, onboardingScenario, rendererMode }, use, testInfo) => {
     const userDataDir = path.join(await fs.realpath(os.tmpdir()), 'natively-e2e', `user-data-${testInfo.testId}`);
     await fs.rm(userDataDir, { recursive: true, force: true });
     await fs.mkdir(userDataDir, { recursive: true });
@@ -89,7 +90,7 @@ export const test = base.extend<OnboardingOptions & {
       const start = async () => {
         const app = await electron.launch({
           args: ['-r', boundaryGuard, process.cwd(), `--user-data-dir=${userDataDir}`], cwd: userDataDir,
-          env: { ...offlineElectronEnv(userDataDir), ...(onboardingScenario === 'none' ? {} : {
+          env: { ...offlineElectronEnv(userDataDir), NODE_ENV: rendererMode, ...(onboardingScenario === 'none' ? {} : {
             ELECTRON_E2E_ONBOARDING_FIXTURES: '1', ELECTRON_E2E_ONBOARDING_SCENARIO: onboardingScenario,
           }) },
         });

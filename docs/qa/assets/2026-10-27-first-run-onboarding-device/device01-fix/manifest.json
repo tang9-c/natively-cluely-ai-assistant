@@ -1,0 +1,46 @@
+{
+  "finding": "DEVICE-01",
+  "status": "fixed_in_unreleased_local_candidate",
+  "versionLabel": "2.7.18 (local modified candidate, not public release)",
+  "sourceBase": "4bd96c9327c809a88048923a547b8b772d79cf73",
+  "appSourceSha256": "17bbeff1bad97b4163463269068d79698e8ac4d771c9f9c4bf4ce39eb9c679e8",
+  "syntheticFixtures": false,
+  "actualPackagedNativeClicks": true,
+  "originalReleaseUnchanged": true,
+  "packageBoundary": {
+    "packagedRendererMatchesBuild": true,
+    "rendererAsset": "assets/index-xEoopojy.js",
+    "asarSha256": "445b27449bcfe9a0e783a034ad83904264ca0fa967423318b3f878ae1894594e",
+    "fixtureImplementationAbsent": true
+  },
+  "screenshots": [
+    {
+      "file": "01-candidate-welcome.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 87044,
+      "sha256": "ae991e6dcf202bcf9eea749f88ee696cb990f6d13c97affa8856946ba13c2a1a"
+    },
+    {
+      "file": "02-candidate-overview.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 65297,
+      "sha256": "c7ccc3975130561096e37543dd4c3343668f323de87e2748fed5d8a6c2972ee6"
+    },
+    {
+      "file": "03-candidate-permissions.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 72493,
+      "sha256": "07700e6390ee3be8ab4aa70cb6f390b5b12d3c22f076ad1458c319d9dec1ee9f"
+    },
+    {
+      "file": "04-candidate-home.jpg",
+      "width": 1200,
+      "height": 800,
+      "bytes": 77729,
+      "sha256": "cc97eb4335bedd78d8a7d8fb68534a4b6a0f73a3fef0871708d525ba6bba5136"
+    }
+  ]
+}
