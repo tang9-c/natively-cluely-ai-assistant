@@ -1,3 +1,4 @@
+import FirstMeetingHint from './onboarding/FirstMeetingHint';
 import { resolveSpeakerIdentity } from '../../shared/speakerIdentity';
 import { LiveSpeakerIdentity } from './meeting/LiveSpeakerIdentity';
 import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
@@ -4302,6 +4303,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                     </div>
                     <p className="text-[11px] text-red-600/70 dark:text-red-400/60 leading-snug pl-[26px]">
                       {meetingStartStatus.message || '会议音频启动失败，请检查麦克风权限后重试。'}
+                      <button className="ml-2 underline underline-offset-2" onClick={() => { void window.electronAPI.openOnboarding({ step: 'permissions' }); }}>检查初始设置</button>
                     </p>
                   </div>
                   <button
@@ -4351,6 +4353,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                     <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
                       {systemAudioWarning.message}
                     </p>
+                    {systemAudioWarning.kind !== 'screenshot-capture-failure' && <button className="ml-[26px] text-[11px] underline underline-offset-2" onClick={() => { void window.electronAPI.openOnboarding({ step: systemAudioWarning.source === 'stt' ? 'speech' : 'permissions' }); }}>{systemAudioWarning.source === 'stt' ? '检查语音设置' : '检查权限/设备'}</button>}
                     {systemAudioWarning.kind === 'audio-capture-failure' && systemAudioWarning.backend ? (
                       <p className="text-[10px] uppercase tracking-[0.12em] text-yellow-700/65 dark:text-yellow-400/55 leading-snug pl-[26px]">
                         后端: {systemAudioWarning.backend}
@@ -4495,6 +4498,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                 }}
               />
 
+              <FirstMeetingHint suppressed={!!systemAudioWarning || meetingStartStatus?.phase === 'failed' || !!sttUserError || !!interviewerSttIndicatorError} />
               {/* Rolling Transcript Bar — includes STT status indicator inline */}
               {(showTranscript && rollingTranscript) ||
               interviewerSttIndicatorStatus !== 'connected' ||

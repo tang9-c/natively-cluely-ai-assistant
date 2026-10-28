@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import type { ValidationTarget, OnboardingProgress } from '../../shared/onboarding';
 import fs from 'fs';
 import path from 'path';
 import { sanitizeSenseVoiceTerms, validateSenseVoiceTerms } from '../audio/sensevoice/termCorrection';
@@ -6,6 +7,7 @@ import { mergeSenseVoiceTermCorrections, DEFAULT_SENSEVOICE_TERM_CORRECTIONS } f
 import type { SenseVoiceTermCorrectionConfig, SenseVoiceTermEntry } from '../audio/sensevoice/types';
 
 export interface AppSettings {
+    onboarding?: OnboardingProgress;
     // Only boot-critical or non-encrypted settings should live here.
     // In the future, other non-secret data like 'language' or 'theme'
     // can be moved here from CredentialsManager to allow early boot access.
@@ -85,6 +87,41 @@ export class SettingsManager {
     private static instance: SettingsManager;
     private settings: AppSettings = {};
     private settingsPath: string;
+    private configurationListeners = new Set<(target: ValidationTarget) => void>();
+    private loadFailed = false;
+
+    public hasLoadError(): boolean { return this.loadFailed; }
+
+    public onConfigurationChanged(callback: (target: ValidationTarget) => void): () => void {
+        this.configurationListeners.add(callback);
+        return () => { this.configurationListeners.delete(callback); };
+    }
+
+    private notifyConfigurationChanged(target: ValidationTarget): void {
+        let failure: unknown;
+        for (const listener of this.configurationListeners) {
+            try { listener(target); } catch (error) { failure ??= error; }
+        }
+        if (failure) throw failure;
+    }
+
+    public patchProviderDataScopes(patch: AppSettings['providerDataScopes']): void {
+        this.setProviderDataScopes(patch, { mode: 'patch' });
+    }
+
+    public setProviderDataScopes(scopes: AppSettings['providerDataScopes'], options?: { mode: 'replace' | 'patch' }): void {
+        if (!scopes || typeof scopes !== 'object' || Array.isArray(scopes)
+            || (options !== undefined && options?.mode !== 'replace' && options?.mode !== 'patch')) {
+            throw new Error('invalid_scopes');
+        }
+        const sanitized: NonNullable<AppSettings['providerDataScopes']> = {};
+        for (const key of ['transcript', 'screenshots', 'reference_files', 'profile_history', 'embeddings', 'post_call_summary'] as const) {
+            if (typeof scopes[key] === 'boolean') sanitized[key] = scopes[key];
+        }
+        this.set('providerDataScopes', options?.mode === 'patch'
+            ? { ...this.get('providerDataScopes'), ...sanitized } : sanitized);
+    }
+
 
     private constructor() {
         if (!app.isReady()) {
@@ -118,6 +155,15 @@ export class SettingsManager {
                 Reflect.deleteProperty(this.settings, key);
             }
             throw error;
+        }
+        if (key === 'providerDataScopes') {
+            const before = previousValue as AppSettings['providerDataScopes'];
+            const after = value as AppSettings['providerDataScopes'];
+            if ((before?.transcript !== false) !== (after?.transcript !== false)) this.notifyConfigurationChanged('ai');
+        } else if (previousValue !== value) {
+            if (['localWhisperModel', 'localWhisperPerChannelEnabled', 'localWhisperModelMic', 'localWhisperModelSystem'].includes(key)) {
+                this.notifyConfigurationChanged('stt');
+            } else if (key.startsWith('codexCli')) this.notifyConfigurationChanged('ai');
         }
     }
 
@@ -251,12 +297,14 @@ export class SettingsManager {
                 } catch (parseError) {
                     console.error('[SettingsManager] Failed to parse settings.json. Continuing with empty settings. Error:', parseError);
                     this.settings = {};
+                    this.loadFailed = true;
                 }
                 console.log('[SettingsManager] Settings loaded');
             }
         } catch (e) {
             console.error('[SettingsManager] Failed to read settings file:', e);
             this.settings = {};
+            this.loadFailed = true;
         }
     }
 

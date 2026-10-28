@@ -278,3 +278,11 @@ test('stream: AbortSignal aborts an in-flight stream and returns without throwin
   for await (const _ of gen) { /* drain */ }
   assert.ok(Date.now() - t0 < 2000);
 });
+
+test('onboarding inference never promotes executable presence to a verified model response', async () => {
+  const config = CodexCliService.normalizeConfig({ enabled: true, path: '/not-executed', model: 'selected' });
+  const result = await CodexCliService.validateInference(config, new AbortController().signal);
+  assert.equal(result.success, false); assert.equal(result.errorCode, 'unsupported_check');
+  const abort = new AbortController(); abort.abort();
+  assert.equal((await CodexCliService.validateInference(config, abort.signal)).errorCode, 'timeout');
+});

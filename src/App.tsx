@@ -1,7 +1,8 @@
+import type { MeetingStartResult } from '../shared/onboarding';
 import React, { useState, useEffect, useCallback } from "react" // forcing refresh
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ToastProvider, ToastViewport } from "./components/ui/toast"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AlertCircle } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
@@ -46,7 +47,12 @@ const PermissionsToaster = React.lazy(() =>
   })),
 );
 
+import { useOnboarding } from './hooks/useOnboarding';
+import OnboardingFlow from './components/onboarding/OnboardingFlow';
+import OnboardingResumeCard from './components/onboarding/OnboardingResumeCard';
+
 const App: React.FC = () => {
+  const reduceMotion = useReducedMotion();
   const isLightTheme = useResolvedTheme() === 'light';
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
@@ -100,16 +106,8 @@ const App: React.FC = () => {
     };
   }, [isLauncherWindow, isOverlayWindow, isDefault]);
 
-  // State
-  // One-shot first-run startup sequence. Once the user dismisses it (or any
-  // future code flips the flag), it never appears again on subsequent launches.
-  const [showStartup, setShowStartup] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('natively_seen_startup_v1') !== 'true';
-    } catch {
-      return true;
-    }
-  });
+  const onboarding = useOnboarding(isLauncherWindow || isDefault);
+  const showStartup = onboarding.isOpen && onboarding.showWelcome;
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
@@ -167,40 +165,7 @@ const App: React.FC = () => {
   useEffect(() => {
     // Clean up old local storage
     localStorage.removeItem('useLegacyAudioBackend');
-    let onboardingCancelled = false;
 
-    // ── Onboarding ──────────────────────────────────
-    if (isLauncherWindow || isDefault) {
-      const permsShown = localStorage.getItem('natively_perms_shown_v1');
-      if (!permsShown) {
-        const maybeShowPermissionsToaster = async () => {
-          try {
-            const permissions = await window.electronAPI?.checkPermissions?.();
-            const micGranted =
-              permissions?.microphone === 'granted' ||
-              permissions?.microphoneHealth?.effectiveGranted === true;
-            const permissionsAlreadyGranted = permissions?.platform === 'darwin'
-              ? micGranted &&
-                permissions?.screenHealth?.effectiveGranted === true &&
-                permissions?.systemAudioHealth?.effectiveGranted === true
-              : micGranted;
-
-            if (permissionsAlreadyGranted) {
-              localStorage.setItem('natively_perms_shown_v1', '1');
-              return;
-            }
-          } catch (error) {
-            console.warn('[App] Failed to preflight permissions toaster state:', error);
-          }
-
-          if (!onboardingCancelled) {
-            setShowPermissionsToaster(true);
-          }
-        };
-
-        void maybeShowPermissionsToaster();
-      }
-    }
 
     // Listen for open-settings-tab events from other windows (e.g. overlay Modes button)
     const removeOpenSettingsTab = window.electronAPI?.onOpenSettingsTab?.((tab: string) => {
@@ -236,7 +201,7 @@ const App: React.FC = () => {
     }
 
     return () => {
-      onboardingCancelled = true;
+
       if (removeProgress) removeProgress();
       if (removeComplete) removeComplete();
       if (removeWarning) removeWarning();
@@ -244,6 +209,49 @@ const App: React.FC = () => {
       if (removeOpenModesManager) removeOpenModesManager();
     }
   }, []);
+
+  useEffect(() => {
+    let onboardingCancelled = false;
+    // ── Onboarding ──────────────────────────────────
+    if ((isLauncherWindow || isDefault) && onboarding.status === 'ready' && onboarding.snapshot?.progress.origin === 'existing' && !onboarding.isOpen) {
+      const permsShown = localStorage.getItem('natively_perms_shown_v1');
+      if (!permsShown) {
+        const maybeShowPermissionsToaster = async () => {
+          try {
+            const permissions = await window.electronAPI?.checkPermissions?.();
+            const micGranted =
+              permissions?.microphone === 'granted' ||
+              permissions?.microphoneHealth?.effectiveGranted === true;
+            const permissionsAlreadyGranted = permissions?.platform === 'darwin'
+              ? micGranted &&
+                permissions?.screenHealth?.effectiveGranted === true &&
+                permissions?.systemAudioHealth?.effectiveGranted === true
+              : micGranted;
+
+            if (permissionsAlreadyGranted) {
+              localStorage.setItem('natively_perms_shown_v1', '1');
+              return;
+            }
+          } catch (error) {
+            console.warn('[App] Failed to preflight permissions toaster state:', error);
+          }
+
+          if (!onboardingCancelled) {
+            setShowPermissionsToaster(true);
+          }
+        };
+
+        void maybeShowPermissionsToaster();
+      }
+    }
+
+    return () => { onboardingCancelled = true; };
+  }, [isLauncherWindow, isDefault, onboarding.status, onboarding.snapshot?.progress.origin, onboarding.isOpen]);
+  useEffect(() => {
+    if (onboarding.isOpen) {
+      setIsSettingsOpen(false); setIsModesOpen(false); setIsProfileOpen(false); setIsResearchPanelOpen(false); setShowPermissionsToaster(false);
+    }
+  }, [onboarding.isOpen]);
 
   // Listen for overlay opacity changes — scoped to overlay window only
   useEffect(() => {
@@ -293,7 +301,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleStartMeeting = async (): Promise<boolean> => {
+  const handleStartMeeting = async (): Promise<MeetingStartResult> => {
     try {
       localStorage.setItem('natively_last_meeting_start', Date.now().toString());
       const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
@@ -326,14 +334,14 @@ const App: React.FC = () => {
         // Window swap happens inside main's startMeeting() now (before the
         // meeting-state broadcast) to avoid a blue→green CTA flash on the
         // launcher. No follow-up setWindowMode IPC needed here.
-        return true;
+        return result;
       } else {
         console.error("Failed to start meeting:", result.error);
-        return false;
+        return result;
       }
     } catch (err) {
       console.error("Failed to start meeting:", err);
-      return false;
+      return { success: false, errorCode: 'network_error' };
     }
   };
 
@@ -367,6 +375,14 @@ const App: React.FC = () => {
       window.electronAPI.setWindowMode('launcher');
     });
   };
+
+  // Origin is resolved before the welcome page or legacy launcher can mount.
+  if ((isLauncherWindow || isDefault) && onboarding.status === 'loading') return AppFallback;
+  if ((isLauncherWindow || isDefault) && onboarding.status === 'error' && !onboarding.snapshot) return (
+    <div className="flex h-full items-center justify-center bg-bg-primary p-8 text-text-primary no-drag"><div className="space-y-4" role="alert">
+      <p>{onboarding.error}</p><button className="rounded-lg border border-border-muted px-4 py-2" onClick={onboarding.retry}>重试</button>
+    </div></div>
+  );
 
   // Render Logic
   if (isSettingsWindow) {
@@ -446,12 +462,9 @@ const App: React.FC = () => {
           <motion.div
             key="startup"
             initial={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 1.1, pointerEvents: "none", transition: { duration: 0.6, ease: "easeInOut" } }}
+            exit={{ opacity: 0, scale: 1.1, pointerEvents: "none", transition: { duration: reduceMotion ? 0 : 0.6, ease: "easeInOut" } }}
           >
-            <StartupSequence onComplete={() => {
-              try { localStorage.setItem('natively_seen_startup_v1', 'true'); } catch {}
-              setShowStartup(false);
-            }} />
+            <StartupSequence pending={onboarding.pending} error={onboarding.error} onComplete={() => { void onboarding.begin(); }} />
           </motion.div>
         ) : (
           <motion.div
@@ -463,9 +476,11 @@ const App: React.FC = () => {
           >
             <QueryClientProvider client={queryClient}>
               <ToastProvider>
-                <div id="launcher-container" className="h-full w-full relative">
+                <div id="launcher-container" className="h-full w-full relative" style={{ display: onboarding.isOpen ? 'none' : undefined }}>
                   <Launcher
                     onStartMeeting={handleStartMeeting}
+                    suppressLegacyOnboarding={onboarding.isOpen || onboarding.snapshot?.progress.origin !== 'existing'}
+                    onboardingCard={onboarding.error ? <div role="alert" className="rounded-xl border border-amber-500/30 bg-bg-elevated p-3 text-xs text-text-primary">{onboarding.error} <button className="ml-2 underline" onClick={onboarding.retry}>重试</button></div> : onboarding.snapshot ? <OnboardingResumeCard snapshot={onboarding.snapshot} onContinue={() => onboarding.open({ step: onboarding.snapshot?.meeting.recoveryStep })} /> : null}
                     onOpenSettings={(tab = 'general') => openSettingsExclusive(tab)}
                     onOpenProfile={() => openProfileExclusive()}
                     onOpenModes={() => openModesExclusive()}
@@ -476,10 +491,14 @@ const App: React.FC = () => {
                     ollamaPullMessage={ollamaPullMessage}
                   />
                 </div>
+                {onboarding.isOpen && !isSettingsOpen && onboarding.snapshot && <OnboardingFlow snapshot={onboarding.snapshot} pending={onboarding.pending} error={onboarding.error}
+                  refresh={onboarding.refresh} registerFormGuard={onboarding.registerFormGuard} onStartMeeting={handleStartMeeting}
+                  confirmLeave={onboarding.confirmLeave} onResolveLeave={onboarding.resolveLeave} onNavigate={onboarding.navigate} onDefer={onboarding.defer}
+                  onOpenSettings={tab => { void onboarding.openSettings(() => openSettingsExclusive(tab)); }} />}
                 <SettingsOverlay
                   isOpen={isSettingsOpen}
                   onClose={() => {
-                    setIsSettingsOpen(false);
+                    void onboarding.refresh().then(() => setIsSettingsOpen(false));
                   }}
                   initialTab={settingsInitialTab}
                 />
@@ -613,7 +632,7 @@ const App: React.FC = () => {
 
       {/* Permissions toaster — first ever launch */}
       <PermissionsToaster
-        isOpen={showPermissionsToaster}
+        isOpen={showPermissionsToaster && !onboarding.isOpen && onboarding.snapshot?.progress.origin === 'existing'}
         onDismiss={() => {
           localStorage.setItem('natively_perms_shown_v1', '1');
           setShowPermissionsToaster(false);

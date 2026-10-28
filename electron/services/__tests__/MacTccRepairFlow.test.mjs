@@ -95,20 +95,17 @@ test('permissions toaster uses effective screen health instead of only raw scree
   assert.doesNotMatch(toaster, /setScrStatus\(p\.screen\s+as PermStatus\)/);
 });
 
-test('startup permissions toaster is skipped when effective permissions are already granted', () => {
-  const app = read('src/App.tsx');
-  const onboardingBlock = app.match(/\/\/ ── Onboarding[\s\S]*?\/\/ Listen for open-settings-tab/);
-
-  assert.ok(onboardingBlock, 'App onboarding startup block should be present');
-  assert.match(onboardingBlock[0], /checkPermissions\?\.\(\)/);
-  assert.match(onboardingBlock[0], /screenHealth\?\.effectiveGranted/);
-  assert.match(onboardingBlock[0], /systemAudioHealth\?\.effectiveGranted/);
-  assert.match(onboardingBlock[0], /localStorage\.setItem\('natively_perms_shown_v1', '1'\)/);
-  assert.doesNotMatch(
-    onboardingBlock[0],
-    /if \(!permsShown\)\s*{\s*\/\/ First ever launch[\s\S]*?setShowPermissionsToaster\(true\);[\s\S]*?}/,
-    'missing localStorage marker must not unconditionally show the permissions toaster',
-  );
+test('startup permissions toaster is skipped when effective permissions are already granted', async () => {
+  const { appPermissionEffect } = await import('./helpers/onboardingRuntime.mjs');
+  let shown = 0, reads = 0; const markers = [];
+  const onboarding = { status: 'ready', isOpen: false, snapshot: { progress: { origin: 'existing' } } };
+  const effect = appPermissionEffect({ onboarding, isLauncherWindow: true, isDefault: false,
+    localStorage: { getItem: () => null, setItem: (...args) => markers.push(args) }, setShowPermissionsToaster: () => shown++,
+    window: { electronAPI: { checkPermissions: async () => { reads++; return { microphone: 'granted', platform: 'darwin',
+      microphoneHealth: { effectiveGranted: true }, screenHealth: { effectiveGranted: true }, systemAudioHealth: { effectiveGranted: true } }; } } } });
+  const cleanup = effect(); await new Promise(setImmediate);
+  assert.equal(reads, 1); assert.equal(shown, 0); assert.deepEqual(markers, [['natively_perms_shown_v1', '1']]); cleanup();
+  onboarding.snapshot.progress.origin = 'fresh'; effect(); await new Promise(setImmediate); assert.equal(reads, 1); assert.equal(shown, 0);
 });
 
 test('startup does not trigger the macOS Screen Recording TCC prompt', () => {
@@ -128,19 +125,14 @@ test('startup does not trigger the macOS Screen Recording TCC prompt', () => {
   );
 });
 
-test('permissions check reports screen status without probing screen sources', () => {
-  const ipcHandlers = read('electron/ipcHandlers.ts');
-  const permissionsCheck = ipcHandlers.match(/safeHandle\('permissions:check'[\s\S]*?\n\s*\}\);/);
-
-  assert.ok(permissionsCheck, 'permissions:check handler should be present');
-  assert.match(
-    permissionsCheck[0],
-    /resolveMacScreenPermissionHealth\('permissions ipc check',\s*\{ probeScreenSources: false \}\)/,
-    'permissions:check should use status-only screen health to avoid triggering Screen Recording TCC at startup',
-  );
-  assert.match(
-    permissionsCheck[0],
-    /resolveMacSystemAudioPermissionHealth\('permissions ipc check',\s*'unknown',\s*\{ probeScreenSources: false \}\)/,
-    'system audio health in permissions:check should also avoid screen source probing',
-  );
+test('permissions check reports screen status without probing screen sources', async () => {
+  const { localIpcFunction, ipcHandler } = await import('./helpers/onboardingRuntime.mjs'); const calls = [];
+  const readPermissionSnapshot = localIpcFunction('readPermissionSnapshot', { appState: {}, process: { platform: 'darwin' },
+    systemPreferences: { getMediaAccessStatus: () => 'granted' },
+    resolveMacScreenPermissionHealth: async (...args) => { calls.push(args); return { effectiveGranted: true }; },
+    resolveMacSystemAudioPermissionHealth: async (...args) => { calls.push(args); return { effectiveGranted: true }; },
+    resolveMacMicrophonePermissionHealth: () => ({ effectiveGranted: true }) });
+  const handler = ipcHandler('permissions:check', { readPermissionSnapshot });
+  assert.equal((await handler()).platform, 'darwin');
+  assert.equal(calls.length, 2); assert.equal(calls[0][1].probeScreenSources, false); assert.equal(calls[1][2].probeScreenSources, false);
 });

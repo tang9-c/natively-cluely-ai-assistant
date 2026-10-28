@@ -1,3 +1,5 @@
+import type { OnboardingAPI, MeetingStartResult } from '../shared/onboarding';
+import type { AudioTestResult, AudioTestState } from '../shared/onboarding';
 import type { MeetingEditRequest, MeetingEditResult } from '../shared/meetingEdits';
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ModeEventContext } from './llm';
@@ -113,7 +115,7 @@ type MeetingStartStatus = {
   message?: string;
 };
 
-interface ElectronAPI {
+interface ElectronAPI extends OnboardingAPI {
   meetingPreparationSave: (input: MeetingPreparationSaveInput) => Promise<MeetingPreparationRecord>;
   meetingPreparationGet: (id: string) => Promise<MeetingPreparationRecord | null>;
   meetingPreparationList: () => Promise<MeetingPreparationRecord[]>;
@@ -211,7 +213,7 @@ interface ElectronAPI {
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setDoubaoLlmApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setDoubaoEmbeddingModel: (model: string) => Promise<{ success: boolean; error?: string }>;
-  setNativelyApiKey: (apiKey: string, options?: { selectAsDefault?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  setNativelyApiKey: (apiKey: string, options?: { selectAsDefault?: boolean; deferValidation?: boolean }) => Promise<{ success: boolean; error?: string }>;
   getStoredCredentials: () => Promise<{
     hasGeminiKey: boolean;
     hasGroqKey: boolean;
@@ -499,7 +501,7 @@ interface ElectronAPI {
   }>;
 
   // Meeting Lifecycle
-  startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>;
+  startMeeting: (metadata?: any) => Promise<MeetingStartResult>;
   endMeeting: () => Promise<{ success: boolean; error?: string }>;
   benchmarkInjectTranscript: (
     payload: NativeAudioTranscriptPayload,
@@ -635,8 +637,9 @@ interface ElectronAPI {
   testBusinessSystemKnowledgeSource: (input: any) => Promise<{ success: boolean; status?: string; sourceName?: string; error?: string; message?: string; detailCode?: string; toolCount?: number }>;
 
   // Audio Test
-  startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
-  stopAudioTest: () => Promise<{ success: boolean }>;
+  startAudioTest: (deviceId?: string, operationId?: string) => Promise<AudioTestResult>;
+  stopAudioTest: (operationId?: string) => Promise<{ success: boolean }>;
+  onAudioTestState: (callback: (state: AudioTestState) => void) => () => void;
   onAudioTestLevel: (callback: (level: number) => void) => () => void;
 
   // Database
@@ -890,7 +893,7 @@ interface ElectronAPI {
     profile_history?: boolean;
     embeddings?: boolean;
     post_call_summary?: boolean;
-  }) => Promise<{ success: boolean; error?: string }>;
+  }, options?: { mode: 'replace' | 'patch' }) => Promise<{ success: boolean; error?: string }>;
   onProviderDataScopesChanged: (
     callback: (scopes: {
       transcript?: boolean;
@@ -1056,6 +1059,20 @@ export const PROCESSING_EVENTS = {
 
 // Expose the Electron API to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
+  getOnboardingState: selection => ipcRenderer.invoke('get-onboarding-state', selection),
+  updateOnboardingProgress: action => ipcRenderer.invoke('update-onboarding-progress', action),
+  validateOnboardingService: input => ipcRenderer.invoke('validate-onboarding-service', input),
+  onOnboardingStateChanged: callback => {
+    const listener = (_event: unknown, snapshot: Parameters<typeof callback>[0]) => callback(snapshot);
+    ipcRenderer.on('onboarding-state-changed', listener);
+    return () => { ipcRenderer.removeListener('onboarding-state-changed', listener); };
+  },
+  openOnboarding: input => ipcRenderer.invoke('open-onboarding', input),
+  onOpenOnboarding: callback => {
+    const listener = (_event: unknown, input: Parameters<typeof callback>[0]) => callback(input);
+    ipcRenderer.on('open-onboarding', listener);
+    return () => { ipcRenderer.removeListener('open-onboarding', listener); };
+  },
   meetingPreparationSave: (input: MeetingPreparationSaveInput) =>
     ipcRenderer.invoke('meeting-preparation-save', input),
   meetingPreparationGet: (id: string) => ipcRenderer.invoke('meeting-preparation-get', id),
@@ -1341,7 +1358,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
   setDoubaoLlmApiKey: (apiKey: string) => ipcRenderer.invoke('set-doubao-llm-api-key', apiKey),
   setDoubaoEmbeddingModel: (model: string) => ipcRenderer.invoke('set-doubao-embedding-model', model),
-  setNativelyApiKey: (apiKey: string, options?: { selectAsDefault?: boolean }) => ipcRenderer.invoke('set-natively-api-key', apiKey, options),
+  setNativelyApiKey: (apiKey: string, options?: { selectAsDefault?: boolean; deferValidation?: boolean }) => ipcRenderer.invoke('set-natively-api-key', apiKey, options),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
 
   // Permissions
@@ -1999,8 +2016,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   testBusinessSystemKnowledgeSource: (input: any) => ipcRenderer.invoke('business-system:test-source', input),
 
   // Audio Test
-  startAudioTest: (deviceId?: string) => ipcRenderer.invoke('start-audio-test', deviceId),
-  stopAudioTest: () => ipcRenderer.invoke('stop-audio-test'),
+  startAudioTest: (deviceId?: string, operationId?: string) => ipcRenderer.invoke('start-audio-test', deviceId, operationId),
+  stopAudioTest: (operationId?: string) => ipcRenderer.invoke('stop-audio-test', operationId),
+  onAudioTestState: (callback: (state: AudioTestState) => void) => {
+    const subscription = (_event: unknown, state: AudioTestState) => callback(state);
+    ipcRenderer.on('audio-test-state', subscription);
+    return () => { ipcRenderer.removeListener('audio-test-state', subscription); };
+  },
   onAudioTestLevel: (callback: (level: number) => void) => {
     const subscription = (_: any, level: number) => callback(level);
     ipcRenderer.on('audio-test-level', subscription);
@@ -2286,7 +2308,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   getProviderDataScopes: () => ipcRenderer.invoke('get-provider-data-scopes'),
-  setProviderDataScopes: (scopes: any) => ipcRenderer.invoke('set-provider-data-scopes', scopes),
+  setProviderDataScopes: (scopes, options) => ipcRenderer.invoke('set-provider-data-scopes', scopes, options),
   onProviderDataScopesChanged: (callback: (scopes: any) => void) => {
     const subscription = (_: any, scopes: any) => callback(scopes);
     ipcRenderer.on('provider-data-scopes-changed', subscription);

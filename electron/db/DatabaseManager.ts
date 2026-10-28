@@ -379,6 +379,16 @@ export class DatabaseManager {
         return DatabaseManager.instance;
     }
 
+    /** Existence-only upgrade evidence; demo seed data is never user activity. */
+    public hasNonDemoMeeting(): boolean {
+        if (!this.db) throw new Error('onboarding_database_unavailable');
+        try {
+            return !!this.db.prepare('SELECT 1 FROM meetings WHERE id != ? LIMIT 1').get('demo-meeting');
+        } catch {
+            throw new Error('onboarding_meeting_evidence_unavailable');
+        }
+    }
+
     /** True when the underlying SQLite database opened successfully. */
     public isAvailable(): boolean {
         return this.db !== null;

@@ -1517,27 +1517,38 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     // Use the native mic test path so device IDs stay consistent with the meeting runtime.
     useEffect(() => {
         if (isOpen && activeTab === 'audio') {
+            const operationId = crypto.randomUUID();
+            let disposed = false;
+            let testRunning = false;
+            let interrupted = false;
             const unsubscribe = window.electronAPI?.onAudioTestLevel?.((level) => {
-                setMicLevel(Math.max(0, Math.min(100, level * 100)));
+                if (testRunning) setMicLevel(Math.max(0, Math.min(100, level * 100)));
             });
-
-            window.electronAPI?.startAudioTest(selectedInput || undefined).catch((error) => {
-                console.error("Error starting native microphone test:", error);
-                setMicLevel(0);
+            const unsubscribeState = window.electronAPI?.onAudioTestState?.((state) => {
+                if (state.operationId !== operationId || disposed) return;
+                testRunning = state.status === 'running';
+                if (!testRunning) { interrupted = true; setMicLevel(0); }
             });
+            window.electronAPI?.startAudioTest(selectedInput || undefined, operationId).then((result) => {
+                if (disposed || interrupted) return;
+                testRunning = result.success;
+                if (!result.success) setMicLevel(0);
+                else if (result.usedDefaultFallback) setDeviceFallbackNotice({
+                    kind: 'input', requested: selectedInput || null, actual: '系统默认麦克风',
+                });
+            }).catch(() => { if (!disposed) { testRunning = false; setMicLevel(0); } });
 
             return () => {
+                disposed = true;
+                testRunning = false;
                 unsubscribe?.();
-                window.electronAPI?.stopAudioTest?.().catch((error) => {
-                    console.error("Error stopping native microphone test:", error);
-                });
+                unsubscribeState?.();
+                void window.electronAPI?.stopAudioTest?.(operationId).catch(() => {});
                 setMicLevel(0);
             };
         } else {
             setMicLevel(0);
-            window.electronAPI?.stopAudioTest?.().catch((error) => {
-                console.error("Error stopping native microphone test:", error);
-            });
+            void window.electronAPI?.stopAudioTest?.().catch(() => {});
         }
     }, [isOpen, activeTab, selectedInput]);
 
@@ -1663,6 +1674,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             >
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
+                                    <button aria-label="初始设置" onClick={() => { void window.electronAPI.openOnboarding().then(result => { if (result.success) onClose(); }); }}
+                                        className="no-drag mb-5 flex w-full items-center justify-between rounded-xl border border-border-muted bg-bg-elevated px-4 py-3 text-left text-sm font-medium text-text-primary hover:bg-bg-item-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary">
+                                        初始设置 <span className="text-xs font-normal text-text-secondary">查看声音与 AI 设置</span>
+                                    </button>
                                     <div className="space-y-3.5">
                                         {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
                                         <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isMousePassthrough ? 'shadow-lg shadow-sky-500/10' : ''}`}>

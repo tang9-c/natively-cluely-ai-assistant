@@ -3,8 +3,11 @@
  */
 
 import { app } from 'electron';
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import type { ValidationTarget } from '../../shared/onboarding';
+import { redactForLog } from '../utils/redactForLog';
 import { parseSafeHttpsUrl } from '../security/NetworkTargetPolicy';
 import type {
     BusinessSystemCredentialInput,
@@ -12,7 +15,7 @@ import type {
     BusinessSystemKnowledgeSourcePublic,
 } from './business-system/BusinessSystemTypes';
 
-const DEFAULT_CHAT_MODEL_ID = 'doubao-seed-2-0-lite-260215';
+export const DEFAULT_CHAT_MODEL_ID = 'doubao-seed-2-0-lite-260215';
 
 export interface CustomProvider {
     id: string;
@@ -28,6 +31,7 @@ export interface CurlProvider {
 }
 
 export interface StoredCredentials {
+    credentialVersions?: Record<string, string>;
     geminiApiKey?: string;
     groqApiKey?: string;
     openaiApiKey?: string;
@@ -82,6 +86,50 @@ export interface NativelyApiKeySaveOptions {
 export class CredentialsManager {
     private static instance: CredentialsManager;
     private credentials: StoredCredentials = {};
+    private configurationListeners = new Set<(target: ValidationTarget) => void>();
+    private loadFailed = false;
+
+    public hasLoadError(): boolean { return this.loadFailed; }
+
+    public onConfigurationChanged(callback: (target: ValidationTarget) => void): () => void {
+        this.configurationListeners.add(callback);
+        return () => { this.configurationListeners.delete(callback); };
+    }
+
+    public getCredentialVersion(key: keyof StoredCredentials): string | undefined {
+        return this.credentials.credentialVersions?.[key];
+    }
+
+    public ensureCredentialVersion(key: keyof StoredCredentials): void {
+        if (this.credentials[key] && !this.getCredentialVersion(key)) this.commitConfiguration({ [key]: this.credentials[key] });
+    }
+
+    private notifyConfigurationChanged(targets: Set<ValidationTarget>): void {
+        let failure: unknown;
+        for (const target of targets) for (const listener of this.configurationListeners) {
+            try { listener(target); } catch (error) { failure ??= error; }
+        }
+        if (failure) throw failure;
+    }
+
+    private commitConfiguration(patch: Partial<StoredCredentials>): void {
+        const next = { ...this.credentials, ...patch, credentialVersions: { ...this.credentials.credentialVersions } };
+        const targets = new Set<ValidationTarget>();
+        const aiKeys = new Set(['geminiApiKey', 'groqApiKey', 'openaiApiKey', 'claudeApiKey', 'doubaoLlmApiKey',
+            'defaultModel', 'aiResponseLanguage', 'customProviders', 'curlProviders']);
+        for (const key of Object.keys(patch) as (keyof StoredCredentials)[]) {
+            const secret = key.endsWith('ApiKey') || key === 'googleServiceAccountPath' || key === 'customProviders' || key === 'curlProviders';
+            const changed = JSON.stringify(patch[key]) !== JSON.stringify(this.credentials[key]);
+            if (!changed && !(secret && patch[key] && !next.credentialVersions[key])) continue;
+            if (secret) next.credentialVersions[key] = randomUUID();
+            if (aiKeys.has(key) || key.endsWith('PreferredModel') || key === 'nativelyApiKey') targets.add('ai');
+            if (!aiKeys.has(key) && !key.endsWith('PreferredModel')) targets.add('stt');
+        }
+        this.saveCredentials(next);
+        this.credentials = next;
+        this.notifyConfigurationChanged(targets);
+    }
+
     private readonly businessSystemCredentialRevisions = new Map<string, number>();
 
     private constructor() {
@@ -135,26 +183,22 @@ export class CredentialsManager {
     public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice' {
         const provider = this.credentials.sttProvider || 'none';
         if (provider === 'doubao') {
-            this.credentials.sttProvider = 'doubao-auc';
-            this.saveCredentials();
+            this.commitConfiguration({ sttProvider: 'doubao-auc' });
             console.log('[CredentialsManager] Self-healed sttProvider: doubao→doubao-auc (Doubao AUC is the implemented STT path)');
             return 'doubao-auc';
         }
         if (provider === 'natively') {
             if (this.getNativelyApiKey()) {
-                this.credentials.sttProvider = 'qcloud-stt';
-                this.saveCredentials();
+                this.commitConfiguration({ sttProvider: 'qcloud-stt' });
                 console.log('[CredentialsManager] Migrated STT provider: natively→qcloud-stt (QCLOUD API speech channel)');
                 return 'qcloud-stt';
             }
-            this.credentials.sttProvider = 'local-sensevoice';
-            this.saveCredentials();
+            this.commitConfiguration({ sttProvider: 'local-sensevoice' });
             console.log('[CredentialsManager] Migrated STT provider: natively→local-sensevoice (QCLOUD API key missing)');
             return 'local-sensevoice';
         }
         if (provider === 'qcloud-stt' && !this.getNativelyApiKey()) {
-            this.credentials.sttProvider = 'local-sensevoice';
-            this.saveCredentials();
+            this.commitConfiguration({ sttProvider: 'local-sensevoice' });
             console.log('[CredentialsManager] Migrated STT provider: qcloud-stt→local-sensevoice (QCLOUD API key missing)');
             return 'local-sensevoice';
         }
@@ -285,32 +329,27 @@ export class CredentialsManager {
     // =========================================================================
 
     public setGeminiApiKey(key: string): void {
-        this.credentials.geminiApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ geminiApiKey: key });
         console.log('[CredentialsManager] Gemini API Key updated');
     }
 
     public setGroqApiKey(key: string): void {
-        this.credentials.groqApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ groqApiKey: key });
         console.log('[CredentialsManager] Groq API Key updated');
     }
 
     public setOpenaiApiKey(key: string): void {
-        this.credentials.openaiApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ openaiApiKey: key });
         console.log('[CredentialsManager] OpenAI API Key updated');
     }
 
     public setClaudeApiKey(key: string): void {
-        this.credentials.claudeApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ claudeApiKey: key });
         console.log('[CredentialsManager] Claude API Key updated');
     }
 
     public setGoogleServiceAccountPath(filePath: string): void {
-        this.credentials.googleServiceAccountPath = filePath;
-        this.saveCredentials();
+        this.commitConfiguration({ googleServiceAccountPath: filePath });
         console.log('[CredentialsManager] Google Service Account path updated');
     }
 
@@ -318,26 +357,22 @@ export class CredentialsManager {
         if (provider === 'doubao') {
             provider = 'doubao-auc';
         }
-        this.credentials.sttProvider = provider;
-        this.saveCredentials();
+        this.commitConfiguration({ sttProvider: provider });
         console.log(`[CredentialsManager] STT Provider set to: ${provider}`);
     }
 
     public setDeepgramApiKey(key: string): void {
-        this.credentials.deepgramApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ deepgramApiKey: key });
         console.log('[CredentialsManager] Deepgram API Key updated');
     }
 
     public setGroqSttApiKey(key: string): void {
-        this.credentials.groqSttApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ groqSttApiKey: key });
         console.log('[CredentialsManager] Groq STT API Key updated');
     }
 
     public setOpenAiSttApiKey(key: string): void {
-        this.credentials.openAiSttApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ openAiSttApiKey: key });
         console.log('[CredentialsManager] OpenAI STT API Key updated');
     }
 
@@ -346,68 +381,57 @@ export class CredentialsManager {
         // to the default api.openai.com endpoint with a simple truthiness check.
         const trimmed = url.trim();
         if (trimmed) parseSafeHttpsUrl(trimmed);
-        this.credentials.openAiSttBaseUrl = trimmed || undefined;
-        this.saveCredentials();
+        this.commitConfiguration({ openAiSttBaseUrl: trimmed || undefined });
         console.log('[CredentialsManager] OpenAI STT Base URL updated', { custom: Boolean(trimmed) });
     }
 
     public setGroqSttModel(model: string): void {
-        this.credentials.groqSttModel = model;
-        this.saveCredentials();
+        this.commitConfiguration({ groqSttModel: model });
         console.log(`[CredentialsManager] Groq STT Model set to: ${model}`);
     }
 
     public setElevenLabsApiKey(key: string): void {
-        this.credentials.elevenLabsApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ elevenLabsApiKey: key });
         console.log('[CredentialsManager] ElevenLabs API Key updated');
     }
 
     public setAzureApiKey(key: string): void {
-        this.credentials.azureApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ azureApiKey: key });
         console.log('[CredentialsManager] Azure API Key updated');
     }
 
     public setAzureRegion(region: string): void {
-        this.credentials.azureRegion = region;
-        this.saveCredentials();
+        this.commitConfiguration({ azureRegion: region });
         console.log(`[CredentialsManager] Azure Region set to: ${region}`);
     }
 
     public setIbmWatsonApiKey(key: string): void {
-        this.credentials.ibmWatsonApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ ibmWatsonApiKey: key });
         console.log('[CredentialsManager] IBM Watson API Key updated');
     }
 
     public setIbmWatsonRegion(region: string): void {
-        this.credentials.ibmWatsonRegion = region;
-        this.saveCredentials();
+        this.commitConfiguration({ ibmWatsonRegion: region });
         console.log(`[CredentialsManager] IBM Watson Region set to: ${region}`);
     }
 
     public setSonioxApiKey(key: string): void {
-        this.credentials.sonioxApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ sonioxApiKey: key });
         console.log('[CredentialsManager] Soniox API Key updated');
     }
 
     public setDoubaoApiKey(key: string): void {
-        this.credentials.doubaoApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ doubaoApiKey: key });
         console.log('[CredentialsManager] Doubao API Key updated');
     }
 
     public setDoubaoAucApiKey(key: string): void {
-        this.credentials.doubaoApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ doubaoApiKey: key });
         console.log('[CredentialsManager] Doubao AUC API Key updated');
     }
 
     public setDoubaoLlmApiKey(key: string): void {
-        this.credentials.doubaoLlmApiKey = key;
-        this.saveCredentials();
+        this.commitConfiguration({ doubaoLlmApiKey: key });
         console.log('[CredentialsManager] Doubao LLM API Key updated');
     }
 
@@ -425,19 +449,16 @@ export class CredentialsManager {
     }
 
     public setSttLanguage(language: string): void {
-        this.credentials.sttLanguage = language;
-        this.saveCredentials();
+        this.commitConfiguration({ sttLanguage: language });
         console.log(`[CredentialsManager] STT Language set to: ${language}`);
     }
 
     public setAiResponseLanguage(language: string): void {
-        this.credentials.aiResponseLanguage = language;
-        this.saveCredentials();
+        this.commitConfiguration({ aiResponseLanguage: language });
         console.log(`[CredentialsManager] AI Response Language set to: ${language}`);
     }
     public setDefaultModel(model: string): void {
-        this.credentials.defaultModel = model;
-        this.saveCredentials();
+        this.commitConfiguration({ defaultModel: model });
         console.log(`[CredentialsManager] Default Model set to: ${model}`);
     }
 
@@ -455,24 +476,25 @@ export class CredentialsManager {
 
     public setNativelyApiKey(key: string, options?: NativelyApiKeySaveOptions): void {
         const trimmed = key.trim();
-        this.credentials.nativelyApiKey = trimmed || undefined;
+        const next = { ...this.credentials };
+        next.nativelyApiKey = trimmed || undefined;
 
-        if (trimmed && this.shouldPromoteQCloudDefault(this.credentials.defaultModel, options)) {
-            this.credentials.defaultModel = 'natively';
+        if (trimmed && this.shouldPromoteQCloudDefault(next.defaultModel, options)) {
+            next.defaultModel = 'natively';
             console.log('[CredentialsManager] Auto-set default model to QCLOUD');
         } else if (!trimmed) {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
-            if (this.credentials.defaultModel === 'natively') {
-                this.credentials.defaultModel = DEFAULT_CHAT_MODEL_ID;
+            if (next.defaultModel === 'natively') {
+                next.defaultModel = DEFAULT_CHAT_MODEL_ID;
                 console.log('[CredentialsManager] QCLOUD key cleared — reset default model to Doubao');
             }
-            if (this.credentials.sttProvider === 'qcloud-stt' || this.credentials.sttProvider === 'natively') {
-                this.credentials.sttProvider = 'local-sensevoice';
+            if (next.sttProvider === 'qcloud-stt' || next.sttProvider === 'natively') {
+                next.sttProvider = 'local-sensevoice';
                 console.log('[CredentialsManager] QCLOUD key cleared — migrated STT provider to local-sensevoice');
             }
         }
 
-        this.saveCredentials();
+        this.commitConfiguration({ nativelyApiKey: next.nativelyApiKey, defaultModel: next.defaultModel, sttProvider: next.sttProvider });
         console.log('[CredentialsManager] QCLOUD key updated');
     }
 
@@ -483,31 +505,20 @@ export class CredentialsManager {
 
     public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', modelId: string): void {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
-        (this.credentials as any)[key] = modelId;
-        this.saveCredentials();
+        this.commitConfiguration({ [key]: modelId });
         console.log(`[CredentialsManager] ${provider} preferred model set to: ${modelId}`);
     }
 
     public saveCustomProvider(provider: CustomProvider): void {
-        if (!this.credentials.customProviders) {
-            this.credentials.customProviders = [];
-        }
-        // Check if exists, update if so
-        const index = this.credentials.customProviders.findIndex(p => p.id === provider.id);
-        if (index !== -1) {
-            this.credentials.customProviders[index] = provider;
-        } else {
-            this.credentials.customProviders.push(provider);
-        }
-        this.saveCredentials();
-        console.log(`[CredentialsManager] Custom Provider '${provider.name}' saved`);
+        const providers = this.credentials.customProviders ?? [];
+        const next = providers.some(p => p.id === provider.id)
+            ? providers.map(p => p.id === provider.id ? { ...provider } : p) : [...providers, { ...provider }];
+        this.commitConfiguration({ customProviders: next });
     }
 
     public deleteCustomProvider(id: string): void {
         if (!this.credentials.customProviders) return;
-        this.credentials.customProviders = this.credentials.customProviders.filter(p => p.id !== id);
-        this.saveCredentials();
-        console.log(`[CredentialsManager] Custom Provider '${id}' deleted`);
+        this.commitConfiguration({ customProviders: this.credentials.customProviders.filter(p => p.id !== id) });
     }
 
     public getCurlProviders(): CurlProvider[] {
@@ -603,24 +614,15 @@ export class CredentialsManager {
     }
 
     public saveCurlProvider(provider: CurlProvider): void {
-        if (!this.credentials.curlProviders) {
-            this.credentials.curlProviders = [];
-        }
-        const index = this.credentials.curlProviders.findIndex(p => p.id === provider.id);
-        if (index !== -1) {
-            this.credentials.curlProviders[index] = provider;
-        } else {
-            this.credentials.curlProviders.push(provider);
-        }
-        this.saveCredentials();
-        console.log(`[CredentialsManager] Curl Provider '${provider.name}' saved`);
+        const providers = this.credentials.curlProviders ?? [];
+        const next = providers.some(p => p.id === provider.id)
+            ? providers.map(p => p.id === provider.id ? { ...provider } : p) : [...providers, { ...provider }];
+        this.commitConfiguration({ curlProviders: next });
     }
 
     public deleteCurlProvider(id: string): void {
         if (!this.credentials.curlProviders) return;
-        this.credentials.curlProviders = this.credentials.curlProviders.filter(p => p.id !== id);
-        this.saveCredentials();
-        console.log(`[CredentialsManager] Curl Provider '${id}' deleted`);
+        this.commitConfiguration({ curlProviders: this.credentials.curlProviders.filter(p => p.id !== id) });
     }
 
     // ── Free Trial ─────────────────────────────────────────────
@@ -659,11 +661,12 @@ export class CredentialsManager {
     }
 
     public clearAll(): void {
-        this.scrubMemory();
         const credentialsPath = this.credentialsFilePath();
         if (fs.existsSync(credentialsPath)) {
             fs.unlinkSync(credentialsPath);
         }
+        this.scrubMemory();
+        this.notifyConfigurationChanged(new Set(['stt', 'ai']));
         console.log('[CredentialsManager] All credentials cleared');
     }
 
@@ -698,15 +701,15 @@ export class CredentialsManager {
         return path.join(app.getPath('userData'), 'credentials.enc');
     }
 
-    private saveCredentials(): void {
+    private saveCredentials(candidate: StoredCredentials = this.credentials): void {
+        const destination = this.credentialsFilePath();
+        const temporary = destination + '.tmp';
         try {
-            fs.writeFileSync(
-                this.credentialsFilePath(),
-                JSON.stringify(this.credentials, null, 2),
-                'utf8'
-            );
+            fs.writeFileSync(temporary, JSON.stringify(candidate, null, 2), { encoding: 'utf8', mode: 0o600 });
+            fs.renameSync(temporary, destination);
         } catch (error) {
-            console.error('[CredentialsManager] Failed to save credentials:', error);
+            try { fs.unlinkSync(temporary); } catch { /* Preserve the original write failure. */ }
+            console.error('[CredentialsManager] Failed to save credentials:', redactForLog([{ error }]));
             throw error;
         }
     }
@@ -725,6 +728,7 @@ export class CredentialsManager {
         } catch (error) {
             console.error('[CredentialsManager] Failed to load credentials:', error);
             this.credentials = {};
+            this.loadFailed = true;
         }
     }
 }

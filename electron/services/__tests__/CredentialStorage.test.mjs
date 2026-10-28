@@ -11,9 +11,9 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('CredentialsManager persists credentials as plaintext JSON', () => {
+test('diagnostic: existing credential format is plaintext JSON (accepted non-blocking risk SEC-01)', () => {
   const source = read('electron/services/CredentialsManager.ts');
-  const saveStart = source.indexOf('    private saveCredentials(): void');
+  const saveStart = source.indexOf('    private saveCredentials(');
   const saveEnd = source.indexOf('    private loadCredentials(): void', saveStart);
   const saveSource = source.slice(saveStart, saveEnd);
 

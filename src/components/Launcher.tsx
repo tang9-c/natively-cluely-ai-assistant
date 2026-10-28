@@ -1,3 +1,4 @@
+import type { MeetingStartResult } from '../../shared/onboarding';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Telescope, X, Play } from 'lucide-react';
 import mainui from "../UI_comp/mainui.png";
@@ -41,7 +42,9 @@ interface Meeting {
 }
 
 interface LauncherProps {
-    onStartMeeting: () => Promise<boolean> | boolean;
+    suppressLegacyOnboarding?: boolean;
+    onboardingCard?: React.ReactNode;
+    onStartMeeting: () => Promise<MeetingStartResult>;
     onOpenSettings: (tab?: string) => void;
     onOpenProfile?: () => void;
     onOpenModes?: () => void;
@@ -77,7 +80,7 @@ const formatTime = (dateStr: string) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 };
 
-const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onOpenResearch, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
+const Launcher: React.FC<LauncherProps> = ({ suppressLegacyOnboarding = false, onboardingCard, onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onOpenResearch, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [isStartingMeeting, setIsStartingMeeting] = useState(false);
@@ -100,11 +103,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [showModesOnboarding, setShowModesOnboarding] = useState(false);
     const [showProfileOnboarding, setShowProfileOnboarding] = useState(false);
 
+    const suppressLegacyRef = useRef(suppressLegacyOnboarding);
+    suppressLegacyRef.current = suppressLegacyOnboarding;
+    useEffect(() => { if (suppressLegacyOnboarding) { setShowModesOnboarding(false); setShowProfileOnboarding(false); } }, [suppressLegacyOnboarding]);
     const shouldShowProfileOnboarding = () =>
-        localStorage.getItem('natively_seen_profile_onboarding_v1') !== 'true';
+        !suppressLegacyRef.current && localStorage.getItem('natively_seen_profile_onboarding_v1') !== 'true';
 
     const shouldShowModesOnboarding = () =>
-        localStorage.getItem('natively_seen_modes_onboarding_v5') !== 'true';
+        !suppressLegacyRef.current && localStorage.getItem('natively_seen_modes_onboarding_v5') !== 'true';
 
     const dismissProfileOnboarding = () => {
         setShowProfileOnboarding(false);
@@ -184,7 +190,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         setIsStartingMeeting(true);
         try {
             const started = await Promise.resolve(onStartMeeting());
-            if (started !== false) {
+            if (started.success) {
                 analytics.trackCommandExecuted('start_natively_cta');
             }
         } finally {
@@ -740,6 +746,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                             {/* TOP SECTION: Grey Background (Scrolls with content) */}
                             <section className={`${isLight ? 'bg-bg-primary' : 'bg-bg-elevated'} px-8 pt-6 pb-8 border-b border-border-subtle shrink-0`}>
                                 <div className="max-w-4xl mx-auto space-y-6">
+                                    {onboardingCard}
                                     {/* 1.5. Hero Header (Title + Controls + CTA) */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">

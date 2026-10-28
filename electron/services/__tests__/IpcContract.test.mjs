@@ -211,43 +211,20 @@ test('get-provider-data-scopes IPC channel is wired through main, preload, and r
   );
 });
 
-test('set-provider-data-scopes IPC channel is wired through main, preload, and renderer types', () => {
-  const ipc = read('electron/ipcHandlers.ts');
-  const preload = read('electron/preload.ts');
-  const types = read('src/types/electron.d.ts');
-
-  // 1. main process: handler validates scopes arg is an object and rejects invalid input
-  assert.match(
-    ipc,
-    /safeHandle\(\s*['"]set-provider-data-scopes['"]\s*,\s*async\s*\(\s*_,\s*scopes:\s*Record<string,\s*boolean>\s*\)\s*=>/,
-    'ipcHandlers.ts must register set-provider-data-scopes with Record<string,boolean> arg',
-  );
-  assert.match(
-    ipc,
-    /safeHandle\(\s*['"]set-provider-data-scopes['"][\s\S]{0,400}?['"]invalid_scopes['"]/,
-    'set-provider-data-scopes handler must reject non-object scopes with invalid_scopes error',
-  );
-
-  // 2. preload
-  assert.match(
-    preload,
-    /setProviderDataScopes:\s*\(\s*scopes:\s*(?:Record<string,\s*boolean>|any)\s*\)\s*=>\s*ipcRenderer\.invoke\(\s*['"]set-provider-data-scopes['"]\s*,\s*scopes\s*\)\s*,/,
-    'preload.ts must expose setProviderDataScopes invoking channel with scopes',
-  );
-
-  // 3. types: channel name traceability (RED: absent today)
-  assert.match(
-    types,
-    /set-provider-data-scopes/,
-    'src/types/electron.d.ts must reference channel name "set-provider-data-scopes"',
-  );
-
-  // 4. types: setter returns Promise<{success: boolean; error?: string}>
-  assert.match(
-    types,
-    /setProviderDataScopes:\s*\(\s*scopes:\s*\{[^}]*transcript[^}]*\}\s*\)\s*=>\s*Promise<\s*\{\s*success:\s*boolean\s*;\s*error\?:\s*string\s*\}\s*>\s*;/,
-    'src/types/electron.d.ts must declare setProviderDataScopes returning Promise<{success:boolean;error?:string}>',
-  );
+test('set-provider-data-scopes IPC preserves optional patch contract and rejects invalid input', async () => {
+  const { ipcHandler } = await import('./helpers/onboardingRuntime.mjs');
+  const messages = []; let saved = { screenshots: false, transcript: true };
+  const handler = ipcHandler('set-provider-data-scopes', {
+    SettingsManager: { getInstance: () => ({ get: () => saved, setProviderDataScopes: (patch, options) => { saved = options?.mode === 'patch' ? { ...saved, ...patch } : { ...patch }; } }) },
+    appState: { getRAGManager: () => null }, broadcast: (...args) => messages.push(args),
+  });
+  for (const input of [null, false, [], 'invalid']) assert.equal((await handler({}, input)).success, false);
+  assert.equal((await handler({}, { transcript: false }, { mode: 'patch' })).success, true);
+  assert.deepEqual(saved, { screenshots: false, transcript: false });
+  assert.deepEqual(messages.at(-1), ['provider-data-scopes-changed', saved]);
+  const preload = read('electron/preload.ts'), types = read('src/types/electron.d.ts');
+  assert.match(preload, /ipcRenderer\.invoke\('set-provider-data-scopes', scopes, options\)/);
+  assert.match(types, /setProviderDataScopes:[^\n]+options\?:[^\n]+Promise<\{ success: boolean; error\?: string \}>/);
 });
 
 test('get-screen-understanding-mode IPC channel is wired through main, preload, and renderer types', () => {

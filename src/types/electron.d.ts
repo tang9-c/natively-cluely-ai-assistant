@@ -1,3 +1,5 @@
+import type { OnboardingAPI, MeetingStartResult } from '../../shared/onboarding';
+import type { AudioTestResult, AudioTestState } from '../../shared/onboarding';
 import type { MeetingEditRequest, MeetingEditResult } from '../../shared/meetingEdits';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 import type { DynamicActionAvailabilityEvent } from '../../shared/dynamicActionAvailability'
@@ -473,7 +475,7 @@ export interface LauncherAd {
   builtin?: boolean
 }
 
-export interface ElectronAPI {
+export interface ElectronAPI extends OnboardingAPI {
   // @ipc-channel meeting-preparation-save
   meetingPreparationSave: (input: MeetingPreparationSaveInput) => Promise<MeetingPreparationRecord>
   // @ipc-channel meeting-preparation-get
@@ -650,10 +652,11 @@ export interface ElectronAPI {
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel set-doubao-api-key
   setDoubaoApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setDoubaoLlmApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel set-doubao-embedding-model
   setDoubaoEmbeddingModel: (model: string) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel set-natively-api-key
-  setNativelyApiKey: (apiKey: string, options?: { selectAsDefault?: boolean }) => Promise<{ success: boolean; error?: string }>
+  setNativelyApiKey: (apiKey: string, options?: { selectAsDefault?: boolean; deferValidation?: boolean }) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel get-stored-credentials
   getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDoubaoKey?: boolean; hasDoubaoLlmKey?: boolean; geminiKey?: string; groqKey?: string; openaiKey?: string; claudeKey?: string; doubaoKey?: string; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasSttDoubaoKey?: boolean; hasDoubaoSttKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; doubaoPreferredModel?: string; doubaoEmbeddingModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; sttDoubaoKey?: string; openAiSttBaseUrl?: string }>
   // Permissions
@@ -755,6 +758,7 @@ export interface ElectronAPI {
   onLocalModelsDownloadProgress: (callback: (data: { modelId: string; progress: number }) => void) => () => void
   onLocalModelsDownloadComplete: (callback: (data: { modelId: string }) => void) => () => void
   onLocalModelsDownloadError: (callback: (data: { modelId: string; error: string }) => void) => () => void
+  localWhisperSetModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel local-whisper-get-channel-config
   localWhisperGetChannelConfig: () => Promise<{ enabled: boolean; micModelId: string; systemModelId: string; globalModelId: string }>
   // @ipc-channel local-whisper-set-channel-config
@@ -915,7 +919,7 @@ export interface ElectronAPI {
 
   // Meeting Lifecycle
   // @ipc-channel start-meeting
-  startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>
+  startMeeting: (metadata?: any) => Promise<MeetingStartResult>
   // @ipc-channel end-meeting
   endMeeting: () => Promise<{ success: boolean; error?: string }>
   // @ipc-channel benchmark:inject-transcript
@@ -1059,9 +1063,10 @@ export interface ElectronAPI {
 
   // Audio Test
   // @ipc-channel start-audio-test
-  startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
+  startAudioTest: (deviceId?: string, operationId?: string) => Promise<AudioTestResult>;
   // @ipc-channel stop-audio-test
-  stopAudioTest: () => Promise<{ success: boolean }>;
+  stopAudioTest: (operationId?: string) => Promise<{ success: boolean }>;
+  onAudioTestState: (callback: (state: AudioTestState) => void) => () => void;
   onAudioTestLevel: (callback: (level: number) => void) => () => void;
 
   // Database
@@ -1218,7 +1223,7 @@ export interface ElectronAPI {
   // @ipc-channel fetch-provider-models
   fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', apiKey: string) => Promise<{ success: boolean; models?: {id: string, label: string}[]; error?: string }>
   // @ipc-channel set-provider-preferred-model
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', modelId: string) => Promise<void>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', modelId: string) => Promise<{ success: boolean; error?: string }>
 
   // Overlay Opacity (Stealth Mode)
   // @ipc-channel set-overlay-opacity
@@ -1245,7 +1250,7 @@ export interface ElectronAPI {
   // @ipc-channel get-provider-data-scopes
   getProviderDataScopes: () => Promise<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>;
   // @ipc-channel set-provider-data-scopes
-  setProviderDataScopes: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  setProviderDataScopes: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }, options?: { mode: 'replace' | 'patch' }) => Promise<{ success: boolean; error?: string }>;
   onProviderDataScopesChanged: (callback: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => void) => () => void;
   // @ipc-channel get-screen-understanding-mode
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
