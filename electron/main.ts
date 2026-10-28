@@ -1,3 +1,4 @@
+import type { OnboardingFixture } from './test/onboardingFixtures';
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen } from "electron"
 import * as crypto from "crypto"
 import path from "path"
@@ -390,6 +391,14 @@ try {
 }
 
 import { CredentialsManager } from "./services/CredentialsManager"
+import { createOnboardingService, prepareOnboardingCredentials } from './services/onboarding/OnboardingConfiguration';
+import { OnboardingValidation, createSpeechExecutor, createAiExecutor } from './services/onboarding/OnboardingValidation';
+import { AudioTestSession } from './audio/AudioTestSession';
+import type { AudioTestResult, OnboardingErrorCode } from '../shared/onboarding';
+import { OnboardingError } from './services/onboarding/OnboardingService';
+import type { OnboardingService } from './services/onboarding/OnboardingService';
+import { deriveFirstRunStartDecision } from '../shared/onboarding';
+import type { OnboardingMeetingEvent, OnboardingStep } from '../shared/onboarding';
 import { SettingsManager } from "./services/SettingsManager"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { extractReleaseSemver, ReleaseNotesManager, selectMacDmgAsset } from "./update/ReleaseNotesManager"
@@ -414,6 +423,11 @@ interface MeetingEchoTranscriptDiagnostic {
 }
 
 export class AppState {
+  public onboardingFixture: OnboardingFixture | null = null;
+  public onboardingService: OnboardingService | null = null
+  public onboardingValidation: OnboardingValidation | null = null
+  public testSavedSttConnection: ((provider: string, signal?: AbortSignal) => Promise<{ success: boolean; errorCode?: OnboardingErrorCode }>) | null = null
+
   private static instance: AppState | null = null
 
   private windowHelper: WindowHelper
@@ -531,7 +545,7 @@ export class AppState {
     this.adaptivePreloadManager = new AdaptivePreloadManager({
       preload: selection => this.preloadSelectedLocalStt(selection),
       release: () => this.releasePreloadedLocalStt(),
-      isHeavyWorkActive: () => this.isHeavyIndexingActive(),
+      isHeavyWorkActive: () => this.isHeavyIndexingActive() || !!this.onboardingValidation?.isBusy('stt') || !!this.onboardingService?.hasActiveDownloads(),
     });
 
     // 2. Initialize Helpers with loaded state
@@ -1105,8 +1119,8 @@ export class AppState {
   // New Property for System Audio & Microphone
   private systemAudioCapture: SystemAudioCapture | null = null;
   private microphoneCapture: MicrophoneCapture | null = null;
-  private audioTestCapture: MicrophoneCapture | null = null; // For audio settings test
-  private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
+  private audioTestSession: AudioTestSession | null = null;
+  private get audioTestCapture(): boolean { return this.audioTestSession?.isActive ?? false; }
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
   private preparationDictation: {
@@ -1298,7 +1312,9 @@ export class AppState {
     this._meetingEchoTranscriptDiagnostics[speaker] = current;
   }
 
-  private routeTranscriptPayload(transcriptPayload: NativeAudioTranscriptPayload): void {
+  private routeTranscriptPayload(transcriptPayload: NativeAudioTranscriptPayload, synthetic = false, generation = this._onboardingMeetingGeneration): void {
+    if (this.isMeetingActive) this.recordOnboardingMeetingEvent({ kind: 'transcript', generation,
+      synthetic: synthetic || this._onboardingMeetingSynthetic, hasNonEmptyText: !!transcriptPayload.text.trim() });
     const receivedAt = transcriptPayload.timestamp ?? Date.now();
     const speaker = transcriptPayload.speaker === 'user' ? 'user' : 'interviewer';
     const routedPayload = {
@@ -1355,7 +1371,7 @@ export class AppState {
     if (!this.isMeetingActive && !this._isDraining) {
       throw new Error('Cannot inject transcript without an active meeting');
     }
-    this.routeTranscriptPayload(payload);
+    this.routeTranscriptPayload(payload, true);
     return { success: true };
   }
 
@@ -1447,7 +1463,7 @@ export class AppState {
         rawSegmentIds: segment.rawSegmentIds
       };
 
-      this.routeTranscriptPayload(transcriptPayload);
+      if ((speaker === 'user' ? this.googleSTT_User : this.googleSTT) === stt) this.routeTranscriptPayload(transcriptPayload);
     });
 
     this.broadcast('stt-status', {
@@ -2058,10 +2074,24 @@ export class AppState {
   }
 
   public async disposeIdleResources(): Promise<void> {
+    await this.stopAudioTest();
     this.transcriptIpcBatcher.dispose();
     this.longMeetingRuntimeProbe?.dispose();
     this.longMeetingRuntimeProbe = null;
     await this.adaptivePreloadManager.disposeIdleResources();
+  }
+
+  public isOnboardingBusy(): boolean {
+    return this.isMeetingActive || !!this._meetingStartInFlight || this._isDraining || !!this.preparationDictation || !!this.audioTestCapture;
+  }
+
+  public async prepareLocalModelMutation(modelId: string): Promise<void> {
+    if (this.isOnboardingBusy() || this.onboardingValidation?.isBusy('stt') || this.onboardingService?.isDownloadActive(modelId)) {
+      throw new Error('busy');
+    }
+    this.adaptivePreloadManager.notifyPreloadedResourceInvalidated();
+    await this.releasePreloadedLocalStt();
+    if (this.isOnboardingBusy() || this.onboardingValidation?.isBusy('stt') || this.onboardingService?.isDownloadActive(modelId)) throw new Error('busy');
   }
 
   private async preloadSelectedLocalStt(selection: LocalSttPreloadSelection): Promise<void> {
@@ -2096,35 +2126,24 @@ export class AppState {
       return;
     }
 
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error('SenseVoice adaptive preload timed out'));
-      }, 60_000);
-      const cleanup = () => {
-        clearTimeout(timeout);
-        lease.off('message', onMessage);
-        lease.off('error', onError);
-      };
-      const onMessage = (message: { type?: string }) => {
-        if (message.type !== 'ready') return;
-        cleanup();
-        resolve();
-      };
-      const onError = (error: Error) => {
-        cleanup();
-        reject(error);
-      };
-      lease.on('message', onMessage);
-      lease.on('error', onError);
-    }).then(retainCrashListener).catch(async error => {
+    const abort = new AbortController();
+    this.adaptiveSenseVoicePreloadAbort = abort;
+    const timer = setTimeout(() => abort.abort(), 60_000);
+    try { await lease.waitUntilReady(abort.signal); retainCrashListener(); }
+    catch (error) {
       if (this.adaptiveSenseVoiceLease === lease) this.adaptiveSenseVoiceLease = null;
       await lease.release();
       throw error;
-    });
+    } finally {
+      clearTimeout(timer);
+      if (this.adaptiveSenseVoicePreloadAbort === abort) this.adaptiveSenseVoicePreloadAbort = null;
+    }
   }
 
+  private adaptiveSenseVoicePreloadAbort: AbortController | null = null;
   private async releasePreloadedLocalStt(): Promise<void> {
+    this.adaptiveSenseVoicePreloadAbort?.abort();
+    this.adaptiveSenseVoicePreloadAbort = null;
     const lease = this.adaptiveSenseVoiceLease;
     this.adaptiveSenseVoiceLease = null;
     if (lease && this.adaptiveSenseVoiceErrorHandler) {
@@ -2931,98 +2950,38 @@ export class AppState {
   /** Keep the user request visible when conflict resolution chooses another mic. */
   private _lastRequestedInputSelectionId: string | undefined = undefined;
 
-  public async startAudioTest(deviceId?: string): Promise<void> {
-    // P2-12: guard against two concurrent calls both passing the async permission check
-    // before either has created a capture — the second call would orphan the first capture.
-    if (this._audioTestStarting) return;
-    // Block audio test while a meeting is live. Both code paths construct
-    // their own MicrophoneCapture instance against the same device; on Windows
-    // cpal grants exclusive access, so the second open silently degrades, and
-    // on macOS the meeting's capture and the test capture compete for the
-    // same input handle — symptom: meeting transcript stalls until the test
-    // is closed. Reject the request loudly via the IPC error path so the
-    // renderer can disable the Test button instead of letting the user think
-    // their mic is broken.
-    if (this.isMeetingActive) {
-      throw new Error('Audio test is unavailable while a meeting is active. End the meeting first, then test your microphone.');
+  public startAudioTest(deviceId?: string, operationId?: string, owner?: Electron.WebContents): Promise<AudioTestResult> {
+    return this._startAudioTestImpl(deviceId, operationId, owner);
+  }
+
+  private _startAudioTestImpl(deviceId?: string, operationId?: string, owner?: Electron.WebContents): Promise<AudioTestResult> {
+    if (!this.audioTestSession) {
+      this.audioTestSession = new AudioTestSession({
+        isBusy: () => this.isMeetingActive || !!this._meetingStartInFlight || this._isDraining || !!this.preparationDictation,
+        requestPermission: () => this.onboardingFixture ? Promise.resolve(true) : ensureMacMicrophoneAccess('audio test'),
+        createCapture: id => this.onboardingFixture ? this.onboardingFixture.createCapture(id) : new MicrophoneCapture(id),
+        onData: chunk => this.emitAudioTestLevel(chunk),
+        onState: (ownerId, state) => {
+          const sender = require('electron').webContents.fromId(ownerId);
+          if (sender && !sender.isDestroyed()) sender.send('audio-test-state', state);
+        },
+      });
     }
-    this._audioTestStarting = true;
-    try {
-      await this._startAudioTestImpl(deviceId);
-    } finally {
-      this._audioTestStarting = false;
+    return this.audioTestSession.start(deviceId, owner ?? { id: 0, isDestroyed: () => false }, operationId);
+  }
+
+  private emitAudioTestLevel(chunk: Buffer): void {
+    let sum = 0, count = 0;
+    for (let i = 0; i + 1 < chunk.length; i += 20) { const value = chunk.readInt16LE(i); sum += value * value; count++; }
+    if (!count) return;
+    const level = Math.min(Math.sqrt(sum / count) / 10000, 1);
+    for (const win of [this.settingsWindowHelper.getSettingsWindow(), this.getWindowHelper().getLauncherWindow(), this.getWindowHelper().getOverlayWindow()]) {
+      if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send('audio-test-level', level);
     }
   }
 
-  private async _startAudioTestImpl(deviceId?: string): Promise<void> {
-    console.log(`[Main] Starting Audio Test on device: ${deviceId || 'default'}`);
-    this.stopAudioTest(); // Stop any existing test
-
-    if (!(await ensureMacMicrophoneAccess('audio test'))) {
-      throw new Error(formatPermissionMessage('mic-denied'));
-    }
-
-    const attachAudioTestListeners = (capture: MicrophoneCapture) => {
-      capture.on('data', (chunk: Buffer) => {
-        const targets = [
-          this.settingsWindowHelper.getSettingsWindow(),
-          this.getWindowHelper().getLauncherWindow(),
-          this.getWindowHelper().getOverlayWindow(),
-        ].filter((win): win is BrowserWindow => !!win && !win.isDestroyed());
-
-        if (targets.length === 0) return;
-
-        let sum = 0;
-        const step = 10;
-        const len = chunk.length;
-
-        for (let i = 0; i < len; i += 2 * step) {
-          const val = chunk.readInt16LE(i);
-          sum += val * val;
-        }
-
-        const count = len / (2 * step);
-        if (count > 0) {
-          const rms = Math.sqrt(sum / count);
-          const level = Math.min(rms / 10000, 1.0);
-          for (const target of targets) {
-            target.webContents.send('audio-test-level', level);
-          }
-        }
-      });
-
-      capture.on('error', (err: Error) => {
-        console.error('[Main] AudioTest Error:', err);
-      });
-    };
-
-    try {
-      this.audioTestCapture = new MicrophoneCapture(deviceId || undefined);
-      attachAudioTestListeners(this.audioTestCapture);
-      this.audioTestCapture.start();
-    } catch (err) {
-      console.warn('[Main] Failed to start audio test on preferred device. Falling back to default.', err);
-      // RC-02 fix: explicitly stop and null the failed capture before creating
-      // the fallback to prevent a brief double-microphone-capture window.
-      try { this.audioTestCapture?.stop(); } catch { /* ignore errors on already-failed capture */ }
-      this.audioTestCapture = null;
-      try {
-        this.audioTestCapture = new MicrophoneCapture();
-        attachAudioTestListeners(this.audioTestCapture);
-        this.audioTestCapture.start();
-      } catch (fallbackErr) {
-        console.error('[Main] Failed to start audio test:', fallbackErr);
-        throw fallbackErr;
-      }
-    }
-  }
-
-  public stopAudioTest(): void {
-    if (this.audioTestCapture) {
-      console.log('[Main] Stopping Audio Test');
-      this.audioTestCapture.stop();
-      this.audioTestCapture = null;
-    }
+  public stopAudioTest(ownerId?: number, operationId?: string): Promise<void> {
+    return this.audioTestSession?.stop(ownerId, operationId) ?? Promise.resolve();
   }
 
   public finalizeMicSTT(): void {
@@ -3127,26 +3086,89 @@ export class AppState {
     return { success: true };
   }
 
+  private _onboardingMeetingGeneration = 0;
+  private _onboardingMeetingSynthetic = false;
+  private pendingOnboardingNavigation: { step?: OnboardingStep } | null = null;
+  private onboardingReadyContents: number | null = null;
+
+  public markOnboardingRendererReady(): void {
+    const launcher = this.windowHelper.getLauncherWindow();
+    if (!launcher || launcher.isDestroyed()) return;
+    const contents = launcher.webContents;
+    if (this.onboardingReadyContents !== contents.id) {
+      this.onboardingReadyContents = contents.id;
+      contents.once('did-start-loading', () => { this.onboardingReadyContents = null; });
+    }
+    if (this.pendingOnboardingNavigation) this.openOnboarding(this.pendingOnboardingNavigation);
+  }
+
+  public openOnboarding(input: { step?: OnboardingStep } = {}): void {
+    this.pendingOnboardingNavigation = input;
+    this.windowHelper.setWindowMode('launcher');
+    const launcher = this.windowHelper.getLauncherWindow();
+    if (!launcher || launcher.isDestroyed() || launcher.webContents.isDestroyed()) return;
+    // The first get follows renderer subscriptions. did-finish-load alone can
+    // precede the lazy React bundle, so retain the last request until that handshake.
+    if (this.onboardingReadyContents !== launcher.webContents.id || launcher.webContents.isLoadingMainFrame()) return;
+    launcher.webContents.send('open-onboarding', this.pendingOnboardingNavigation);
+    this.pendingOnboardingNavigation = null;
+  }
+
+  private recordOnboardingMeetingEvent(event: OnboardingMeetingEvent): void {
+    try { this.onboardingService?.recordMeetingEvent(event); }
+    catch { /* A progress write failure never rolls back the actual meeting. Snapshot carries diagnostics. */ }
+  }
+
   public async startMeeting(metadata?: any): Promise<void> {
-    if (this._isQuitting) return;
-    if (this.preparationDictation) await this.cancelPreparationDictation();
     if (this._isQuitting) return;
     if (this.isMeetingActive) {
       this.windowHelper.setWindowMode('overlay', true);
       this.broadcastMeetingState();
       return;
     }
-
-    if (this._meetingStartInFlight) {
-      return this._meetingStartInFlight;
-    }
-
-    this._meetingStartInFlight = this.startMeetingInternal(metadata);
-    try {
-      await this._meetingStartInFlight;
-    } finally {
-      this._meetingStartInFlight = null;
-    }
+    if (this._meetingStartInFlight) return this._meetingStartInFlight;
+    const operation = Promise.resolve().then(async () => {
+      await this.stopAudioTest();
+      if (this.preparationDictation) await this.cancelPreparationDictation();
+      if (this._isQuitting) return;
+      if (this.onboardingService) {
+        let snapshot;
+        try {
+          snapshot = await this.onboardingService.refreshChecks({
+            inputDeviceId: metadata?.audio?.inputDeviceId || undefined,
+            outputDeviceId: metadata?.audio?.outputDeviceId || undefined,
+          });
+        } catch (error) {
+          if ((error as { code?: string }).code !== 'schema_unsupported') {
+            this.openOnboarding();
+            throw error;
+          }
+          // Unknown future progress is read-only and must not lock out the legacy app.
+        }
+        const decision = snapshot ? deriveFirstRunStartDecision(snapshot) : { allowed: true };
+        if (!decision.allowed) {
+          this.openOnboarding({ step: decision.recoveryStep });
+          const errorCode = decision.recoveryStep === 'permissions' ? 'permission_denied' : 'credentials_missing';
+          throw Object.assign(new OnboardingError(errorCode), { recoveryStep: decision.recoveryStep });
+        }
+      }
+      const generation = ++this._onboardingMeetingGeneration;
+      this._onboardingMeetingSynthetic = process.env.ELECTRON_E2E_SKIP_AUDIO_START === '1'
+        || process.env.CUEUP_LONG_MEETING_BENCHMARK === '1' || metadata?.synthetic === true || metadata?.demo === true;
+      this.onboardingService?.beginMeeting(generation);
+      try {
+        await this.startMeetingInternal(metadata);
+        if (this.onboardingService && !this.isMeetingActive && !this._isQuitting) throw new OnboardingError('device_missing');
+      }
+      catch (error) {
+        this.recordOnboardingMeetingEvent({ kind: 'failed', generation, synthetic: this._onboardingMeetingSynthetic,
+          errorCode: 'permission_denied', recoveryStep: 'permissions' });
+        throw error;
+      }
+    });
+    this._meetingStartInFlight = operation;
+    try { await operation; }
+    finally { if (this._meetingStartInFlight === operation) this._meetingStartInFlight = null; }
   }
 
   private async startMeetingInternal(metadata?: any): Promise<void> {
@@ -3241,6 +3263,7 @@ export class AppState {
     this.windowHelper.setWindowMode('overlay');
 
     this.isMeetingActive = true;
+    this.recordOnboardingMeetingEvent({ kind: 'entered', generation: this._onboardingMeetingGeneration, synthetic: this._onboardingMeetingSynthetic });
     this.adaptivePreloadManager.notifyMeetingStarted();
     this.broadcastMeetingState()
     this.broadcast('meeting-start-status', { phase: 'ready' });
@@ -3287,7 +3310,7 @@ export class AppState {
     this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
     this.getWindowHelper().getLauncherWindow()?.webContents.send('session-reset');
 
-    if (process.env.ELECTRON_E2E_SKIP_AUDIO_START === '1') {
+    if (!app.isPackaged && process.env.ELECTRON_E2E === '1' && process.env.ELECTRON_E2E_SKIP_AUDIO_START === '1') {
       console.log('[Main] E2E mode: skipping native audio pipeline start.');
       return;
     }
@@ -3297,6 +3320,7 @@ export class AppState {
     // without waiting for SCK/audio initialization (which takes 5-7 seconds).
     // setTimeout(0) ensures setWindowMode IPC is processed first.
     const audioMeetingGeneration = this.intelligenceManager.getSessionGeneration();
+    const onboardingGeneration = this._onboardingMeetingGeneration;
     setTimeout(async () => {
       // BUG-02 fix: a fast start→stop sequence can call endMeeting() before
       // this callback fires, leaving isMeetingActive=false. If that happened,
@@ -3347,29 +3371,35 @@ export class AppState {
           const micRate = this.microphoneCapture?.getSampleRate() || 48000;
           console.log(`[Main][debug] Audio pipeline: input=${requestedInput} output=${requestedOutput} backend=${backend} sysRate=${sysRate}Hz micRate=${micRate}Hz`);
         }
+        this.recordOnboardingMeetingEvent({ kind: 'audio-started', generation: onboardingGeneration, synthetic: this._onboardingMeetingSynthetic });
         console.log('[Main] Audio pipeline started successfully.');
       } catch (err) {
-        if (audioMeetingGeneration !== this.intelligenceManager.getSessionGeneration()) return;
-        console.error('[Main] Error initializing audio pipeline:', err);
-        // Notify UI so user knows microphone/audio failed to start
-        const message = (err as Error).message || 'Audio pipeline failed to start';
-        this.isMeetingActive = false;
-        this.adaptivePreloadManager.notifyMeetingStopped();
-        this.broadcastMeetingState();
-        this.windowHelper.setWindowMode('launcher');
-        try {
-          this.systemAudioCapture?.stop();
-          this.microphoneCapture?.stop();
-          this.googleSTT?.stop();
-          this.googleSTT_User?.stop();
-          this.stopDefaultOutputWatcher();
-        } catch (cleanupError) {
-          console.warn('[Main] Partial audio startup cleanup failed:', cleanupError);
-        }
-        this.broadcast('meeting-audio-error', message);
-        this.broadcast('meeting-start-status', { phase: 'failed', message });
+        this.handleMeetingAudioStartupFailure(err, onboardingGeneration, audioMeetingGeneration);
       }
     }, 0); // Defer to next event loop tick — ensures IPC response reaches renderer before audio init
+  }
+
+  private handleMeetingAudioStartupFailure(err: unknown, onboardingGeneration: number, audioMeetingGeneration: string): void {
+    if (audioMeetingGeneration !== this.intelligenceManager.getSessionGeneration()) return;
+    console.error('[Main] Error initializing audio pipeline:', _redactForLog([err]));
+    // Notify UI so user knows microphone/audio failed to start
+    const message = '音频启动失败，请检查权限和设备后重试。';
+    this.isMeetingActive = false;
+    this.adaptivePreloadManager.notifyMeetingStopped();
+    this.broadcastMeetingState();
+    this.windowHelper.setWindowMode('launcher');
+    try {
+      this.systemAudioCapture?.stop();
+      this.microphoneCapture?.stop();
+      this.googleSTT?.stop();
+      this.googleSTT_User?.stop();
+      this.stopDefaultOutputWatcher();
+    } catch (cleanupError) {
+      console.warn('[Main] Partial audio startup cleanup failed:', cleanupError);
+    }
+    this.broadcast('meeting-audio-error', message);
+    this.recordOnboardingMeetingEvent({ kind: 'failed', generation: onboardingGeneration, synthetic: this._onboardingMeetingSynthetic, errorCode: 'device_missing', recoveryStep: 'permissions' });
+    this.broadcast('meeting-start-status', { phase: 'failed', message, errorCode: 'device_missing', recoveryStep: 'permissions' });
   }
 
   public async endMeeting(): Promise<void> {
@@ -3414,6 +3444,7 @@ export class AppState {
     // the 250 ms STT drain finishes. The transcript handler keys off
     // `_isDraining` instead so trailing finals are still accepted.
     this.isMeetingActive = false;
+    this.recordOnboardingMeetingEvent({ kind: 'ended', generation: this._onboardingMeetingGeneration, synthetic: this._onboardingMeetingSynthetic });
     this._audioCaptureEpoch++;
     this.cancelAudioRecovery();
     this._isDraining = true;
@@ -4605,6 +4636,71 @@ async function initializeApp() {
 
   // 4. Initialize State
   const appState = AppState.getInstance()
+  if (!app.isPackaged && process.env.ELECTRON_E2E === '1' && process.env.ELECTRON_E2E_ONBOARDING_FIXTURES === '1') {
+    // Dynamic path keeps test adapters out of bundled production entry points.
+    const fixtures = require(path.join(__dirname, 'test', 'onboardingFixtures.js'));
+    appState.onboardingFixture = fixtures.createOnboardingFixture(process.env.ELECTRON_E2E_ONBOARDING_SCENARIO,
+      { e2e: true, enabled: true, packaged: app.isPackaged });
+    (globalThis as any).__onboardingE2ECounters = appState.onboardingFixture!.counters;
+  }
+  appState.onboardingService = createOnboardingService({
+    settings: SettingsManager.getInstance(),
+    credentials: credentialsManagerSingleton,
+    database: DatabaseManager.getInstance(),
+    runtimeVersion: app.getVersion(),
+    readConfiguration: appState.onboardingFixture?.readConfiguration,
+    readChecks: appState.onboardingFixture?.readChecks,
+    saveProgress: appState.onboardingFixture?.scenario === 'defer-save-failed' ? progress => {
+      if (appState.onboardingFixture!.rejectProgress(progress)) throw new Error('fixture_storage_failed');
+      SettingsManager.getInstance().set('onboarding', progress);
+    } : appState.onboardingFixture?.saveProgress,
+    now: appState.onboardingFixture?.now,
+  });
+  if (appState.onboardingFixture?.scenario === 'download-running') {
+    appState.onboardingService.updateDownload({ modelId: 'fixture-sensevoice', status: 'running', progress: 42 });
+  }
+
+  const speechExecutor = createSpeechExecutor({
+    isCached: (provider, modelId) => {
+      if (provider === 'local-sensevoice') return require('./audio/sensevoice/modelManager').isSenseVoiceModelCached(modelId);
+      return require('./audio/whisper/modelManager').isModelCached(modelId, require('./audio/whisper/inferenceConfig').resolveInferenceConfig().dtype);
+    },
+    modelIds: (provider, modelId) => {
+      const settings = SettingsManager.getInstance();
+      return provider === 'local-whisper' && settings.get('localWhisperPerChannelEnabled')
+        ? [settings.get('localWhisperModelMic') || modelId, settings.get('localWhisperModelSystem') || modelId] : [modelId];
+    },
+    acquireLease: (provider, modelId) => {
+      const config = provider === 'local-sensevoice'
+        ? require('./audio/sensevoice/LocalSenseVoiceSTT').createSenseVoiceWorkerConfig({ modelId })
+        : require('./audio/whisper/modelPreloader').createWhisperWorkerConfig(modelId);
+      return require('./audio/LocalSttWorkerPool').localSttWorkerPool.acquire(config, 'mic');
+    },
+    testSavedConnection: (provider, signal) => appState.testSavedSttConnection
+      ? appState.testSavedSttConnection(provider, signal)
+      : Promise.resolve({ success: false, errorCode: 'unsupported_check' }),
+  });
+  const aiExecutor = createAiExecutor({
+    readSavedConfig: () => {
+      const check = appState.onboardingService!.getSnapshot().checks.ai;
+      const settings = SettingsManager.getInstance();
+      return { provider: check.provider!, modelId: check.modelId!, apiKey: credentialsManagerSingleton.getDoubaoLlmApiKey(),
+        transcriptAllowed: settings.get('providerDataScopes')?.transcript !== false,
+        codex: require('./services/CodexCliService').CodexCliService.normalizeConfig({
+          enabled: settings.get('codexCliEnabled'), path: settings.get('codexCliPath'), model: settings.get('codexCliModel'),
+          timeoutMs: settings.get('codexCliTimeoutMs'), sandboxMode: settings.get('codexCliSandboxMode'),
+        }) };
+    },
+    validateCodex: (config, signal) => require('./services/CodexCliService').CodexCliService.validateInference(config, signal),
+  });
+  appState.onboardingValidation = new OnboardingValidation({
+    now: appState.onboardingFixture?.now,
+    service: appState.onboardingService,
+    isBusy: () => appState.isOnboardingBusy(),
+    prepare: target => prepareOnboardingCredentials({ credentials: credentialsManagerSingleton, settings: SettingsManager.getInstance() }, target),
+    execute: (target, check, signal) => appState.onboardingFixture ? appState.onboardingFixture.execute(target, check, signal)
+      : target === 'stt' ? speechExecutor(check, signal) : aiExecutor(check, signal),
+  });
 
   // Explicitly load credentials into helpers
   appState.processingHelper.loadStoredCredentials();

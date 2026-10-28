@@ -27,7 +27,9 @@ test('startMeeting uses an in-flight guard and delegates to startMeetingInternal
   );
   assert.match(body, /if \(this\.isMeetingActive\)/);
   assert.match(body, /if \(this\._meetingStartInFlight\)/);
-  assert.match(body, /this\._meetingStartInFlight = this\.startMeetingInternal\(metadata\)/);
+  assert.match(body, /const operation = Promise\.resolve\(\)\.then/);
+  assert.match(body, /this\._meetingStartInFlight = operation/);
+  assert.match(body, /await this\.startMeetingInternal\(metadata\)/);
 });
 
 test('startMeetingInternal shows starting UI before preflight but does not mark meeting active early', () => {

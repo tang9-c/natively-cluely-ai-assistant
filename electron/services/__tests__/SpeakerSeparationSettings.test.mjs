@@ -90,7 +90,7 @@ test('legacy Doubao STT provider is normalized to Doubao AUC', () => {
     const credentials = read('electron/services/CredentialsManager.ts');
 
     assert.match(credentials, /provider === 'doubao'/);
-    assert.match(credentials, /sttProvider = 'doubao-auc'/);
+    assert.match(credentials, /commitConfiguration\(\{ sttProvider: 'doubao-auc' \}\)/);
 });
 
 test('transcript persistence preserves optional speaker diarization metadata', () => {

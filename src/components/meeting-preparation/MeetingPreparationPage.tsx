@@ -1,3 +1,4 @@
+import type { MeetingStartResult } from '../../../shared/onboarding';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
@@ -29,7 +30,7 @@ interface MeetingPreparationPageProps {
   onBack: () => void;
   onOpenResearch: () => void;
   onOpenSettings: (tab?: string) => void;
-  onStartMeeting: () => Promise<boolean> | boolean;
+  onStartMeeting: () => Promise<MeetingStartResult>;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
@@ -479,7 +480,8 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
       setError('推荐模式不可用，请重新确认模式。');
       return;
     }
-    await onStartMeeting();
+    const result = await onStartMeeting();
+    if (!result.success) setError('会议未能启动，请检查初始配置后重试。');
   };
 
   const stepNames = useMemo(() => ['描述会议', '确认信息与模式', '查看准备结果'], []);

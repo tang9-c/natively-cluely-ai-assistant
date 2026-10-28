@@ -2,11 +2,28 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import Module, { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+const require = createRequire(import.meta.url);
+function credentialsForTest(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'qcloud-settings-'));
+  const id = require.resolve('electron');
+  const previous = require.cache[id];
+  const stub = new Module(id); stub.loaded = true;
+  stub.exports = { app: { getPath: () => directory } };
+  require.cache[id] = stub;
+  const modulePath = path.join(repoRoot, 'dist-electron/electron/services/CredentialsManager.js');
+  delete require.cache[modulePath];
+  const { CredentialsManager } = require(modulePath);
+  t.after(() => { require.cache[id] = previous; fs.rmSync(directory, { recursive: true, force: true }); });
+  return CredentialsManager.getInstance();
+}
+
 
 test('QCLOUD settings page does not show legacy commercial content', () => {
   const source = read('src/components/settings/NativelyApiSettings.tsx');
@@ -27,18 +44,14 @@ test('QCLOUD settings page does not show legacy commercial content', () => {
   assert.doesNotMatch(source, /setSttProvider\?\.\('natively'\)/);
 });
 
-test('saving QCLOUD key can atomically select the LLM provider in the main process', () => {
-  const source = read('electron/services/CredentialsManager.ts');
-  const start = source.indexOf('    public setNativelyApiKey(key: string');
-  const end = source.indexOf('    public getPreferredModel', start);
-  const method = source.slice(start, end);
-
-  assert.ok(start >= 0, 'setNativelyApiKey should exist');
-  assert.match(source, /selectAsDefault/);
-  assert.match(method, /shouldPromoteQCloudDefault/);
-  assert.match(method, /this\.credentials\.defaultModel = 'natively'/);
-  assert.doesNotMatch(method, /this\.credentials\.sttProvider = 'natively'/);
-  assert.equal(method.includes(['Auto-set STT provider', 'to natively'].join(' ')), false);
+test('saving QCLOUD key can atomically select the LLM provider in the main process', t => {
+  const cm = credentialsForTest(t);
+  cm.setSttProvider('local-sensevoice');
+  cm.setDefaultModel('manual-model');
+  cm.setNativelyApiKey('saved-key', { selectAsDefault: true });
+  assert.equal(cm.getDefaultModel(), 'natively');
+  assert.equal(cm.getSttProvider(), 'local-sensevoice');
+  assert.equal(cm.getNativelyApiKey(), 'saved-key');
 });
 
 test('saving QCLOUD key protects manually selected models unless selection is explicit', () => {
@@ -53,21 +66,21 @@ test('saving QCLOUD key protects manually selected models unless selection is ex
   assert.doesNotMatch(method, /if \(trimmed\) \{\s*this\.credentials\.defaultModel = 'natively'/);
 });
 
-test('chat default model falls back to Doubao instead of Gemini', () => {
-  const credentials = read('electron/services/CredentialsManager.ts');
+test('chat default model falls back to Doubao instead of Gemini', t => {
+  const cm = credentialsForTest(t);
+  assert.equal(cm.getDefaultModel(), 'doubao-seed-2-0-lite-260215');
+  cm.setNativelyApiKey('key', { selectAsDefault: true });
+  cm.setNativelyApiKey('');
+  assert.equal(cm.getDefaultModel(), 'doubao-seed-2-0-lite-260215');
   const ipc = read('electron/ipcHandlers.ts');
   const aiSettings = read('src/components/settings/AIProvidersSettings.tsx');
   const modelUtils = read('src/utils/modelUtils.ts');
   const llmHelper = read('electron/LLMHelper.ts');
 
-  assert.match(credentials, /const DEFAULT_CHAT_MODEL_ID = 'doubao-seed-2-0-lite-260215'/);
-  assert.match(credentials, /return this\.credentials\.defaultModel \|\| DEFAULT_CHAT_MODEL_ID/);
-  assert.match(credentials, /this\.credentials\.defaultModel = DEFAULT_CHAT_MODEL_ID/);
   assert.match(ipc, /return \{ model: 'doubao-seed-2-0-lite-260215' \}/);
   assert.match(modelUtils, /export const DEFAULT_CHAT_MODEL_ID = 'doubao-seed-2-0-lite-260215'/);
   assert.match(aiSettings, /useState<string>\(DEFAULT_CHAT_MODEL_ID\)/);
   assert.match(llmHelper, /private currentModelId: string = DOUBAO_MODEL/);
-  assert.doesNotMatch(credentials, /return this\.credentials\.defaultModel \|\| 'gemini-3\.1-flash-lite-preview'/);
 });
 
 test('QCLOUD save prompt treats Doubao default as an automatic default model', () => {
@@ -126,29 +139,20 @@ test('QCLOUD key changes broadcast explicit key state without exposing the key',
   assert.doesNotMatch(handler, /broadcast\('qcloud-key-changed',\s*apiKey/);
 });
 
-test('legacy natively STT migrates to QCLOUD API speech channel when key exists and local provider when missing', () => {
-  const source = read('electron/services/CredentialsManager.ts');
-  const start = source.indexOf('    public getSttProvider()');
-  const end = source.indexOf('    public getDeepgramApiKey()', start);
-  const method = source.slice(start, end);
-
-  assert.ok(start >= 0, 'getSttProvider should exist');
-  assert.match(method, /provider === 'natively'/);
-  assert.match(method, /getNativelyApiKey\(\)/);
-  assert.match(method, /sttProvider = 'qcloud-stt'/);
-  assert.match(method, /this\.credentials\.sttProvider = 'local-sensevoice'/);
-  assert.doesNotMatch(method, /QCLOUD does not provide default STT/);
+test('legacy natively STT migrates to QCLOUD API speech channel when key exists and local provider when missing', t => {
+  const cm = credentialsForTest(t);
+  cm.setNativelyApiKey('key'); cm.setSttProvider('natively');
+  assert.equal(cm.getSttProvider(), 'qcloud-stt');
+  cm.setNativelyApiKey(''); cm.setSttProvider('natively');
+  assert.equal(cm.getSttProvider(), 'local-sensevoice');
 });
 
-test('clearing QCLOUD API key moves qcloud-stt away from remote STT', () => {
-  const source = read('electron/services/CredentialsManager.ts');
-  const start = source.indexOf('    public setNativelyApiKey(');
-  const end = source.indexOf('    public getPreferredModel(', start);
-  const method = source.slice(start, end);
-
-  assert.ok(start >= 0, 'setNativelyApiKey should exist');
-  assert.match(method, /this\.credentials\.sttProvider === 'qcloud-stt'/);
-  assert.match(method, /this\.credentials\.sttProvider = 'local-sensevoice'/);
+test('clearing QCLOUD API key moves qcloud-stt away from remote STT', t => {
+  const cm = credentialsForTest(t);
+  cm.setNativelyApiKey('key'); cm.setSttProvider('qcloud-stt');
+  assert.equal(cm.getSttProvider(), 'qcloud-stt');
+  cm.setNativelyApiKey('');
+  assert.equal(cm.getSttProvider(), 'local-sensevoice');
 });
 
 test('startup no longer mounts the Natively quota banner', () => {

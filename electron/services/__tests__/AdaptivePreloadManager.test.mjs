@@ -188,8 +188,8 @@ test('main wires adaptive preload to startup, meeting lifecycle, and application
     'meeting-active preload state must only be committed with meeting state',
   );
   const audioFailureHandler = source.slice(
-    source.indexOf("console.error('[Main] Error initializing audio pipeline:'"),
-    source.indexOf('}, 0); // Defer to next event loop tick'),
+    source.indexOf('private handleMeetingAudioStartupFailure('),
+    source.indexOf('public async endMeeting('),
   );
   assert.match(audioFailureHandler, /this\.isMeetingActive = false/);
   assert.match(audioFailureHandler, /adaptivePreloadManager\.notifyMeetingStopped\(\)/);

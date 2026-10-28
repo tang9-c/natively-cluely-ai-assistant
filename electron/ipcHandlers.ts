@@ -1,3 +1,8 @@
+import { registerOnboardingHandlers } from './services/onboarding/registerOnboardingHandlers';
+import { createOnboardingReadinessReader } from './services/onboarding/OnboardingReadiness';
+import { readOnboardingConfiguration } from './services/onboarding/OnboardingConfiguration';
+import { CredentialsManager } from './services/CredentialsManager';
+import { validationErrorCode, requestSelectedAiModel } from './services/onboarding/OnboardingValidation';
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
@@ -1411,24 +1416,21 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('get-provider-data-scopes', async () =>
     SettingsManager.getInstance().get('providerDataScopes') ?? {},
   );
-  safeHandle('set-provider-data-scopes', async (_, scopes: Record<string, boolean>) => {
-    if (!scopes || typeof scopes !== 'object') {
+  safeHandle('set-provider-data-scopes', async (_, scopes: Record<string, boolean>, options?: { mode: 'replace' | 'patch' }) => {
+    if (!scopes || typeof scopes !== 'object' || Array.isArray(scopes)
+      || (options !== undefined && options?.mode !== 'replace' && options?.mode !== 'patch')) {
       return { success: false, error: 'invalid_scopes' };
     }
-    const allowedKeys = new Set([
-      'transcript', 'screenshots', 'reference_files',
-      'profile_history', 'embeddings', 'post_call_summary',
-    ]);
-    const sanitized: Record<string, boolean> = {};
-    for (const [key, value] of Object.entries(scopes)) {
-      if (allowedKeys.has(key) && typeof value === 'boolean') {
-        sanitized[key] = value;
-      }
+    try {
+      const settings = SettingsManager.getInstance();
+      settings.setProviderDataScopes(scopes, options);
+      const saved = settings.get('providerDataScopes') ?? {};
+      appState.getRAGManager()?.initializeEmbeddings(buildEmbeddingRuntimeConfig());
+      broadcast('provider-data-scopes-changed', saved);
+      return { success: true };
+    } catch {
+      return { success: false, error: 'storage_failed' };
     }
-    SettingsManager.getInstance().set('providerDataScopes', sanitized as any);
-    appState.getRAGManager()?.initializeEmbeddings(buildEmbeddingRuntimeConfig());
-    broadcast('provider-data-scopes-changed', sanitized);
-    return { success: true };
   });
   safeHandle('get-screen-understanding-mode', async () =>
     SettingsManager.getInstance().getScreenUnderstandingMode(),
@@ -1742,6 +1744,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  const saveOnboardingFixture = (target: 'stt' | 'ai', patch: { provider?: string; modelId?: string } = {}) => {
+    if (appState.isOnboardingBusy()) return { success: false, error: 'busy' };
+    const success = appState.onboardingFixture!.saveConfiguration(target, patch);
+    if (success) appState.onboardingService?.invalidate(target);
+    return { success, ...(success ? {} : { error: 'storage_failed' }) };
+  };
   // ── Generic LLM API Key Setters ────────────────────────────────────────────
   // Replaces copy-pasted set-X-api-key handlers for providers that follow the same pattern:
   //   1. Persist key in CredentialsManager
@@ -1773,6 +1781,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   for (const reg of LLM_KEY_REGISTRY) {
     safeHandle(reg.channel, async (_, apiKey: string) => {
+      if (appState.onboardingFixture) return saveOnboardingFixture('ai', { provider: 'doubao' });
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         const cm = CredentialsManager.getInstance();
@@ -1797,7 +1806,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   }
 
   // ── Usage cache and provider-specific key handlers ────────────────────────
-  safeHandle('set-natively-api-key', async (_, apiKey: string, options?: { selectAsDefault?: boolean }) => {
+  safeHandle('set-natively-api-key', async (_, apiKey: string, options?: { selectAsDefault?: boolean; deferValidation?: boolean }) => {
+    if (appState.onboardingFixture) return saveOnboardingFixture('stt');
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1807,7 +1817,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (formatError) {
         return { success: false, error: formatError };
       }
-      if (trimmedKey) {
+      if (trimmedKey && options?.deferValidation !== true) {
         await testQCloudApiKeyConnection(apiKey);
       }
       cm.setNativelyApiKey(apiKey, options);
@@ -2186,11 +2196,14 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle(
     'set-provider-preferred-model',
     async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', modelId: string) => {
+      if (appState.onboardingFixture) return saveOnboardingFixture('ai', { provider, modelId });
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
+        return { success: true };
       } catch (error: any) {
-        console.error(`[IPC] Failed to set preferred model for ${provider}:`, error);
+        console.error(`[IPC] Failed to set preferred model for ${provider}:`, redactForLog([error]));
+        return { success: false, error: 'storage_failed' };
       }
     },
   );
@@ -2222,6 +2235,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     ) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
+        if (appState.onboardingFixture) return saveOnboardingFixture('stt', { provider });
         CredentialsManager.getInstance().setSttProvider(provider);
 
         // Reconfigure the audio pipeline to use the new STT provider
@@ -2377,6 +2391,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('set-doubao-api-key', async (_, apiKey: string) => {
+    if (appState.onboardingFixture) return saveOnboardingFixture('stt');
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setDoubaoApiKey(apiKey);
@@ -2441,7 +2456,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     provider: SttTestProvider,
     apiKey: string,
     region?: string,
-  ): Promise<{ success: boolean; error?: string }> => {
+    signal?: AbortSignal,
+  ): Promise<{ success: boolean; error?: string; errorCode?: import('../shared/onboarding').OnboardingErrorCode }> => {
     console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
     try {
         if (provider === 'deepgram') {
@@ -2587,7 +2603,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           try {
             await axios.get('https://api.elevenlabs.io/v1/voices', {
               headers: { 'xi-api-key': apiKey },
-              timeout: 10000,
+              timeout: 10000, signal,
             });
           } catch (elErr: any) {
             const elStatus = elErr?.response?.data?.detail?.status;
@@ -2609,7 +2625,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             testWav,
             {
               headers: { 'Ocp-Apim-Subscription-Key': apiKey, 'Content-Type': 'audio/wav' },
-              timeout: 15000,
+              timeout: 15000, signal,
             },
           );
         } else if (provider === 'ibmwatson') {
@@ -2623,7 +2639,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 Authorization: `Basic ${Buffer.from(`apikey:${apiKey}`).toString('base64')}`,
                 'Content-Type': 'audio/wav',
               },
-              timeout: 15000,
+              timeout: 15000, signal,
             },
           );
         } else if (provider === 'doubao-auc') {
@@ -2662,9 +2678,14 @@ export function initializeIpcHandlers(appState: AppState): void {
               },
               {
                 headers: authHeaders,
-                timeout: 15000,
+                timeout: 15000, signal,
               },
             );
+
+            const businessStatus = response.headers?.['x-api-status-code'];
+            if (businessStatus && !['20000000', '20000003'].includes(String(businessStatus))) {
+              throw Object.assign(new Error('model_unavailable'), { code: 'model_unavailable' });
+            }
 
             console.log('[IPC] Doubao AUC test response:', {
               status: response.status,
@@ -2699,7 +2720,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   Authorization: `Bearer ${apiKey.trim()}`,
                   ...form.getHeaders(),
                 },
-                timeout: 15000,
+                timeout: 15000, signal,
               },
             );
 
@@ -2741,7 +2762,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           let model: string;
           if (provider === 'groq') {
             endpoint = 'https://api.groq.com/openai/v1/audio/transcriptions';
-            model = 'whisper-large-v3-turbo';
+            model = CredentialsManager.getInstance().getGroqSttModel();
           } else if (provider === 'doubao') {
             endpoint = DOUBAO_AUDIO_TRANSCRIPTIONS_ENDPOINT;
             model = 'volc.seedasr.sauc.duration';
@@ -2759,7 +2780,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               Authorization: `Bearer ${apiKey}`,
               ...form.getHeaders(),
             },
-            timeout: 15000,
+            timeout: 15000, signal,
             ...(openAiHttpsAgent ? { httpsAgent: openAiHttpsAgent, maxRedirects: 0, proxy: false as const } : {}),
           });
         }
@@ -2777,7 +2798,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           endpoint,
         }));
         if (provider === 'doubao' || provider === 'doubao-auc' || provider === 'qcloud-stt') {
-          return { success: false, error: classifyNetworkError(error).userMessage };
+          return { success: false, error: classifyNetworkError(error).userMessage, errorCode: validationErrorCode(error) };
         }
         const rawMsg =
           respData?.error?.message ||
@@ -2786,7 +2807,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           error.message ||
           'Connection failed';
         const msg = sanitizeErrorMessage(rawMsg);
-        return { success: false, error: msg };
+        return { success: false, error: msg, errorCode: validationErrorCode(error) };
       }
   };
 
@@ -2804,9 +2825,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // field). Used by the settings UI's Test Connection button, which is the user's way
   // to verify "is my saved key still valid?" without re-typing it. The Save flow still
   // uses test-stt-connection with the user-supplied input.
-  safeHandle(
-    'test-saved-stt-connection',
-    async (_, provider: SttTestProvider, region?: string) => {
+  const testSavedSttConnection = async (provider: SttTestProvider, region?: string, signal?: AbortSignal) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         const cm = CredentialsManager.getInstance();
@@ -2823,9 +2842,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           : provider === 'qcloud-stt' ? cm.getNativelyApiKey()
           : undefined;
         if (!savedKey) {
-          return { success: false, error: 'no_saved_key' };
+          return { success: false, error: 'no_saved_key', errorCode: 'credentials_missing' as const };
         }
-        return await runSttConnectionTest(provider, savedKey, region);
+        return await runSttConnectionTest(provider, savedKey, region, signal);
       } catch (error: any) {
         const endpoint =
           provider === 'doubao' ? DOUBAO_AUDIO_TRANSCRIPTIONS_ENDPOINT
@@ -2837,7 +2856,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           endpoint,
         }));
         if (provider === 'doubao' || provider === 'doubao-auc' || provider === 'qcloud-stt') {
-          return { success: false, error: classifyNetworkError(error).userMessage };
+          return { success: false, error: classifyNetworkError(error).userMessage, errorCode: validationErrorCode(error) };
         }
         const respData = error?.response?.data;
         const rawMsg =
@@ -2846,10 +2865,13 @@ export function initializeIpcHandlers(appState: AppState): void {
           respData?.message ||
           error.message ||
           'Connection failed';
-        return { success: false, error: sanitizeErrorMessage(rawMsg) };
+        return { success: false, error: sanitizeErrorMessage(rawMsg), errorCode: validationErrorCode(error) };
       }
-    },
-  );
+  };
+  appState.testSavedSttConnection = (provider, signal) => testSavedSttConnection(provider as SttTestProvider,
+    provider === 'azure' ? CredentialsManager.getInstance().getAzureRegion()
+      : provider === 'ibmwatson' ? CredentialsManager.getInstance().getIbmWatsonRegion() : undefined, signal);
+  safeHandle('test-saved-stt-connection', (_event, provider: SttTestProvider, region?: string) => testSavedSttConnection(provider, region));
 
   // ==========================================
   // Local Whisper STT Handlers
@@ -2859,6 +2881,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   const activeSenseVoiceDownloads = new Set<string>();
   const storageUsageService = new StorageUsageService({
     isModelInUse: (kind: DownloadedModelKind, modelId: string) => {
+      if ((kind === 'whisper' || kind === 'sensevoice') && (appState.onboardingValidation?.isBusy('stt') || appState.onboardingService?.isDownloadActive(modelId))) return true;
       if (kind === 'whisper' && activeWhisperDownloads.has(modelId)) return true;
       if (kind === 'sensevoice' && activeSenseVoiceDownloads.has(modelId)) return true;
       if (!appState.getIsMeetingActive()) return false;
@@ -2879,9 +2902,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('storage:get-usage', () => storageUsageService.getStorageUsage());
   safeHandle(
     'storage:delete-downloaded-model',
-    (_event, kind: DownloadedModelKind, modelId: string) => (
-      storageUsageService.deleteDownloadedModel(kind, modelId)
-    ),
+    async (_event, kind: DownloadedModelKind, modelId: string) => {
+      try {
+        if (kind === 'whisper' || kind === 'sensevoice') await appState.prepareLocalModelMutation(modelId);
+        return await storageUsageService.deleteDownloadedModel(kind, modelId);
+      } catch { return { success: false, error: 'model_in_use' }; }
+    },
   );
   safeHandle(
     'storage:delete-legacy-data',
@@ -2901,6 +2927,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('local-whisper-set-model', async (_, modelId: string) => {
+    if (appState.onboardingFixture) return saveOnboardingFixture('stt', { modelId });
     try {
       SettingsManager.getInstance().set('localWhisperModel', modelId);
       broadcast('credentials-changed');
@@ -2914,6 +2941,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // STT instances pick their own model via these slots. When disabled, both
   // fall back to localWhisperModel (the existing global setting).
   safeHandle('local-whisper-get-channel-config', async () => {
+    if (appState.onboardingFixture) return { enabled: false, micModelId: '', systemModelId: '', globalModelId: appState.onboardingFixture.readConfiguration('stt').modelId };
     const sm = SettingsManager.getInstance();
     return {
       enabled: !!sm.get('localWhisperPerChannelEnabled'),
@@ -2942,6 +2970,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('local-whisper-delete-model', async (_, modelId: string) => {
     try {
+      await appState.prepareLocalModelMutation(modelId);
       const { deleteModel } = require('./audio/whisper/modelManager');
       deleteModel(modelId);
       return { success: true };
@@ -2954,7 +2983,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (activeWhisperDownloads.has(modelId)) {
       return { success: false, error: 'already-downloading' };
     }
+    try { await appState.prepareLocalModelMutation(modelId); } catch { return { success: false, error: 'busy' }; }
+    if (activeWhisperDownloads.has(modelId)) return { success: false, error: 'already-downloading' };
     activeWhisperDownloads.add(modelId);
+    appState.onboardingService?.updateDownload({ modelId, status: 'running', progress: 0 });
     try {
       const { Worker } = require('worker_threads');
       const { buildWorkerInitMessage } = require('./audio/whisper/inferenceConfig');
@@ -2962,30 +2994,43 @@ export function initializeIpcHandlers(appState: AppState): void {
       const workerPath = resolveWhisperWorkerPath();
       const w = new Worker(workerPath);
       const sender = event.sender;
+      let finished = false;
       w.on('message', (msg: any) => {
-        if (sender.isDestroyed()) return;
+        if (finished) return;
         if (msg.type === 'progress') {
-          sender.send('local-whisper-download-progress', { modelId, progress: msg.progress });
+          appState.onboardingService?.updateDownload({ modelId, status: 'running', progress: msg.progress });
+          if (!sender.isDestroyed()) sender.send('local-whisper-download-progress', { modelId, progress: msg.progress });
         } else if (msg.type === 'ready') {
+          finished = true;
           activeWhisperDownloads.delete(modelId);
-          sender.send('local-whisper-download-complete', { modelId });
+          appState.onboardingService?.updateDownload({ modelId, status: 'completed' });
+          if (!sender.isDestroyed()) sender.send('local-whisper-download-complete', { modelId });
           w.terminate();
         } else if (msg.type === 'error') {
+          finished = true;
           activeWhisperDownloads.delete(modelId);
-          sender.send('local-whisper-download-error', { modelId, error: msg.message });
+          appState.onboardingService?.updateDownload({ modelId, status: 'failed', errorCode: 'model_load_failed' });
+          if (!sender.isDestroyed()) sender.send('local-whisper-download-error', { modelId, error: msg.message });
           w.terminate();
         }
       });
-      w.on('error', (err: Error) => {
+      w.on('error', (_err: Error) => {
+        if (finished) return;
+        finished = true;
         activeWhisperDownloads.delete(modelId);
-        if (!sender.isDestroyed()) {
-          sender.send('local-whisper-download-error', { modelId, error: err.message });
-        }
+        appState.onboardingService?.updateDownload({ modelId, status: 'failed', errorCode: 'model_load_failed' });
+        if (!sender.isDestroyed()) sender.send('local-whisper-download-error', { modelId, error: 'model_load_failed' });
+      });
+      w.on('exit', () => {
+        if (finished) return;
+        finished = true;
+        if (activeWhisperDownloads.delete(modelId)) appState.onboardingService?.updateDownload({ modelId, status: 'failed', errorCode: 'model_load_failed' });
       });
       w.postMessage(buildWorkerInitMessage(modelId));
       return { success: true };
     } catch (e: any) {
       activeWhisperDownloads.delete(modelId);
+      appState.onboardingService?.updateDownload({ modelId, status: 'failed', errorCode: 'model_load_failed' });
       return { success: false, error: e.message };
     }
   });
@@ -3012,10 +3057,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   setDownloadCallbacks(broadcastModelProgress, broadcastModelComplete, broadcastModelError);
 
   safeHandle('local-models-get-list', async () => {
+    if (appState.onboardingFixture) return appState.onboardingFixture.modelCatalog();
     return { models: getLocalModels() };
   });
 
   safeHandle('local-models-start-download', async (_event, modelId: string) => {
+    if (appState.onboardingFixture) { appState.onboardingService?.updateDownload({ modelId, status: 'running', progress: 42 }); return { success: true }; }
     // Fire-and-forget download; status updates via broadcast events
     startLocalModelDownload(modelId).catch(() => {});
     return { success: true };
@@ -3061,6 +3108,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   safeHandle('local-sensevoice-get-models', async () => {
+    if (appState.onboardingFixture) return appState.onboardingFixture.modelCatalog();
     try {
       const { getAvailableSenseVoiceModels, SENSEVOICE_DEFAULT_MODEL_ID } = require('./audio/sensevoice/modelManager');
       return {
@@ -3082,6 +3130,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('local-sensevoice-delete-model', async (_, modelId: string) => {
     try {
+      await appState.prepareLocalModelMutation(modelId);
       const { deleteSenseVoiceModel } = require('./audio/sensevoice/modelManager');
       deleteSenseVoiceModel(modelId);
       appState.scheduleAdaptiveLocalSttPreload();
@@ -3092,20 +3141,34 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('local-sensevoice-start-download', async (event, modelId: string) => {
+    if (appState.onboardingFixture) {
+      if (appState.isOnboardingBusy()) return { success: false, error: 'busy' };
+      const fixture = appState.onboardingFixture;
+      if (fixture.scenario === 'download-error') {
+        appState.onboardingService?.updateDownload({ modelId, status: 'failed', errorCode: 'network_error' });
+        event.sender.send('local-sensevoice-download-error', { modelId, error: 'network_error' });
+      } else appState.onboardingService?.updateDownload({ modelId, status: 'running', progress: 42 });
+      return { success: true };
+    }
     if (activeSenseVoiceDownloads.has(modelId)) {
       return { success: false, error: 'already-downloading' };
     }
+    try { await appState.prepareLocalModelMutation(modelId); } catch { return { success: false, error: 'busy' }; }
+    if (activeSenseVoiceDownloads.has(modelId)) return { success: false, error: 'already-downloading' };
     activeSenseVoiceDownloads.add(modelId);
+    appState.onboardingService?.updateDownload({ modelId, status: 'running', progress: 0 });
     const sender = event.sender;
     try {
       const { downloadSenseVoiceModel } = require('./audio/sensevoice/modelDownloader');
       downloadSenseVoiceModel(modelId, (progress: number) => {
+        appState.onboardingService?.updateDownload({ modelId, status: 'running', progress });
         if (!sender.isDestroyed()) {
           sender.send('local-sensevoice-download-progress', { modelId, progress });
         }
       })
         .then(() => {
           activeSenseVoiceDownloads.delete(modelId);
+          appState.onboardingService?.updateDownload({ modelId, status: 'completed' });
           appState.scheduleAdaptiveLocalSttPreload();
           if (!sender.isDestroyed()) {
             sender.send('local-sensevoice-download-complete', { modelId });
@@ -3113,6 +3176,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         })
         .catch((err: Error) => {
           activeSenseVoiceDownloads.delete(modelId);
+          appState.onboardingService?.updateDownload({ modelId, status: 'failed', errorCode: 'network_error' });
           if (!sender.isDestroyed()) {
             sender.send('local-sensevoice-download-error', { modelId, error: err.message });
           }
@@ -3120,6 +3184,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (e: any) {
       activeSenseVoiceDownloads.delete(modelId);
+      appState.onboardingService?.updateDownload({ modelId, status: 'failed', errorCode: 'network_error' });
       if (!sender.isDestroyed()) {
         sender.send('local-sensevoice-download-error', { modelId, error: e.message });
       }
@@ -3216,21 +3281,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             },
           );
         } else if (provider === 'doubao') {
-          response = await axios.post(
-            DOUBAO_CHAT_COMPLETIONS_ENDPOINT,
-            {
-              model: 'doubao-seed-2-0-lite-260215',
-              messages: [{ role: 'user', content: 'Hello' }],
-              max_tokens: 10,
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-              },
-              timeout: 15000,
-            },
-          );
+          await requestSelectedAiModel(provider, CredentialsManager.getInstance().getDefaultModel().startsWith('doubao-')
+            ? CredentialsManager.getInstance().getDefaultModel() : 'doubao-seed-2-0-lite-260215', apiKey);
+          return { success: true };
+
         }
 
         if (response && (response.status === 200 || response.status === 201)) {
@@ -3334,6 +3388,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // Persist default model (from Settings) + update runtime + broadcast to all windows
   safeHandle('set-default-model', async (_, modelId: string) => {
+    if (appState.onboardingFixture) return saveOnboardingFixture('ai', { modelId });
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -3406,24 +3461,24 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('get-input-devices', async () => {
-    return AudioDevices.getInputDevices();
+    return appState.onboardingFixture?.devices ?? AudioDevices.getInputDevices();
   });
 
   safeHandle('get-output-devices', async () => {
-    return AudioDevices.getOutputDevices();
+    return appState.onboardingFixture?.outputs ?? AudioDevices.getOutputDevices();
   });
 
-  safeHandle('start-audio-test', async (event, deviceId?: string) => {
-    await appState.startAudioTest(deviceId);
-    return { success: true };
-  });
+  safeHandle('start-audio-test', (event, deviceId?: string, operationId?: string) =>
+    appState.startAudioTest(deviceId, operationId, event.sender));
 
-  safeHandle('stop-audio-test', async () => {
-    appState.stopAudioTest();
+  safeHandle('stop-audio-test', async (event, operationId?: string) => {
+    if (operationId !== undefined && (typeof operationId !== 'string' || !operationId || operationId.length > 128)) return { success: false };
+    await appState.stopAudioTest(event.sender.id, operationId);
     return { success: true };
   });
 
   safeHandle('set-recognition-language', async (_, key: string) => {
+    if (appState.onboardingFixture) return saveOnboardingFixture('stt');
     appState.setRecognitionLanguage(key);
     broadcast('credentials-changed');
     return { success: true };
@@ -3438,8 +3493,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       await appState.startMeeting(metadata);
       return { success: true };
     } catch (error: any) {
-      console.error('Error starting meeting:', error);
-      return { success: false, error: error.message };
+      const errorCode = validationErrorCode(error);
+      return { success: false, error: `onboarding.${errorCode}`, errorCode, recoveryStep: error.recoveryStep };
     }
   });
 
@@ -3605,6 +3660,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         parsed.protocol === 'https:' &&
         parsed.hostname === 'mail.google.com' &&
         parsed.pathname === '/mail/';
+      const allowedOnboardingProvisioningUrl = [
+        'https://docs.volcengine.com/docs/ark/quick-start-beginner?lang=zh',
+        'https://docs.volcengine.com/docs/ark/manage-api-keys?lang=zh',
+        'https://ark.volcengine.com/region:cn-beijing/apikey',
+      ].includes(parsed.href);
       const allowedContactMailUrl =
         parsed.protocol === 'mailto:' &&
         parsed.pathname === 'tangdu@feigenbaum.ai';
@@ -3620,7 +3680,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const allowedSystemSettingsUrl =
         parsed.protocol === 'x-apple.systempreferences:' && process.platform === 'darwin';
 
-      if (allowedWebUrl || allowedContactMailUrl || allowedCueUpReleaseDownload || allowedSystemSettingsUrl) {
+      if (allowedWebUrl || allowedOnboardingProvisioningUrl || allowedContactMailUrl || allowedCueUpReleaseDownload || allowedSystemSettingsUrl) {
         await shell.openExternal(url);
       } else {
         console.warn('[IPC] Blocked open-external request', {
@@ -5603,7 +5663,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // ── Permissions ──────────────────────────────────────────────
-  safeHandle('permissions:check', async () => {
+  const readPermissionSnapshot = async () => {
+    if (appState.onboardingFixture) return appState.onboardingFixture.permissions;
     if (process.platform === 'darwin') {
       const mic = systemPreferences.getMediaAccessStatus('microphone');
       const screen = systemPreferences.getMediaAccessStatus('screen');
@@ -5621,9 +5682,51 @@ export function initializeIpcHandlers(appState: AppState): void {
       systemAudioHealth: await resolveMacSystemAudioPermissionHealth('permissions ipc check', 'unknown', { probeScreenSources: false }),
       microphoneHealth: resolveMacMicrophonePermissionHealth(),
     };
-  });
+  };
+
+  safeHandle('permissions:check', readPermissionSnapshot);
+  if (appState.onboardingService && appState.onboardingValidation) {
+    const sources = { credentials: CredentialsManager.getInstance(), settings: SettingsManager.getInstance(), database: DatabaseManager.getInstance() };
+    appState.onboardingService.setCheckReader(appState.onboardingFixture?.readChecks ?? createOnboardingReadinessReader({
+      readPermissions: readPermissionSnapshot,
+      isPackaged: () => app.isPackaged,
+      inputDevices: () => AudioDevices.getInputDevices(), outputDevices: () => AudioDevices.getOutputDevices(),
+      speechCheck: () => {
+        const check = readOnboardingConfiguration(sources, 'stt');
+        const settings = sources.settings;
+        const compatibility = resolveSttLanguageCompatibility({ provider: check.provider!, requestedLanguageKey: sources.credentials.getSttLanguage(),
+          localWhisper: { enabled: settings.get('localWhisperPerChannelEnabled') === true, globalModelId: settings.get('localWhisperModel'),
+            micModelId: settings.get('localWhisperModelMic'), systemModelId: settings.get('localWhisperModelSystem') } });
+        if (!compatibility.willHonorSelection) return { ...check, status: 'failed', errorCode: 'unsupported_check', messageKey: 'onboarding.language_unsupported' };
+        if (check.provider === 'local-sensevoice' && !require('./audio/sensevoice/modelManager').isSenseVoiceModelCached(check.modelId)) {
+          return { ...check, errorCode: 'model_missing' };
+        }
+        if (check.provider === 'local-whisper') {
+          const models = settings.get('localWhisperPerChannelEnabled')
+            ? [settings.get('localWhisperModelMic') || check.modelId, settings.get('localWhisperModelSystem') || check.modelId] : [check.modelId];
+          if (models.some(model => !require('./audio/whisper/modelManager').isModelCached(model, require('./audio/whisper/inferenceConfig').resolveInferenceConfig().dtype))) return { ...check, errorCode: 'model_missing' };
+        }
+        return check;
+      },
+    }));
+    registerOnboardingHandlers({ safeHandle, service: appState.onboardingService, validator: appState.onboardingValidation,
+      getSenderRole: event => {
+        if (!event.sender || event.sender.isDestroyed() || event.senderFrame?.parent) return undefined;
+        const windows = { launcher: appState.getWindowHelper().getLauncherWindow(),
+          overlay: appState.getWindowHelper().getOverlayWindow(), settings: appState.settingsWindowHelper.getSettingsWindow() };
+        for (const role of ['launcher', 'settings', 'overlay'] as const) {
+          const win = windows[role];
+          if (win && !win.isDestroyed() && win.webContents === event.sender) return role;
+        }
+        return undefined;
+      },
+      onLauncherReady: () => appState.markOnboardingRendererReady(),
+      openLauncher: input => appState.openOnboarding(input), broadcast,
+    });
+  }
 
   safeHandle('permissions:request-mic', async () => {
+    if (appState.onboardingFixture) return appState.onboardingFixture.permissions.microphone === 'granted';
     if (process.platform !== 'darwin') return true;
     try {
       return await systemPreferences.askForMediaAccess('microphone');

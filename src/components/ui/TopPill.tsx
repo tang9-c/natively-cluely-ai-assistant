@@ -86,6 +86,8 @@ export default function TopPill({
                 {/* STOP / QUIT BUTTON */}
                 <button
                     onClick={onQuit}
+                    aria-label="结束会议"
+                    title="结束会议"
                     className={`
             w-8 h-8
             rounded-full

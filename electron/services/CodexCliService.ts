@@ -33,6 +33,18 @@ export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
 };
 
 export class CodexCliService {
+  /** No CLI release has yet been certified for onboarding's complete isolation contract.
+   * --version/--help are presence/capability evidence only. Do not run the normal
+   * agent as a probe: it can inherit instructions, skills, hooks and MCP/apps.
+   * Keep existing authentication and custom provider configuration untouched.
+   */
+  public static async validateInference(_config: CodexCliConfig, signal: AbortSignal): Promise<{
+    success: false; errorCode: 'unsupported_check' | 'timeout'; messageKey: string;
+  }> {
+    const errorCode = signal.aborted ? 'timeout' : 'unsupported_check';
+    return { success: false, errorCode, messageKey: signal.aborted ? 'onboarding.timeout' : 'onboarding.codex_isolation_unverified' };
+  }
+
   public static buildArgs(model: string, imagePaths: string[] = [], sandboxMode: CodexSandboxMode = 'read-only'): string[] {
     const args = [
       'exec',

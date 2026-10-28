@@ -75,6 +75,7 @@ test('audio recovery stays quiet, failures remain channel-specific and permissio
     await send({ channel, source: 'capture', state: 'healthy' });
     await expect(live.getByText(recognitionMessage, { exact: true })).toBeVisible();
     await expect(live.getByText('语音识别异常', { exact: true })).toBeVisible();
+    await expect(live.getByRole('button', { name: '检查语音设置', exact: true })).toBeVisible();
     await live.screenshot({ path: `.tmp/v28-t3/fix-round-1/ui-${channel}-stt-failed-capture-healthy.png` });
     await connected(channel);
     await expect(live.getByText(recognitionMessage, { exact: true })).toBeHidden();

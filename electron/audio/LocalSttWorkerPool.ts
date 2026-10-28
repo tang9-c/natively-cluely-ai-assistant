@@ -134,6 +134,20 @@ export class LocalSttWorkerLease extends EventEmitter {
     return this.entry.ready;
   }
 
+  waitUntilReady(signal?: AbortSignal): Promise<void> {
+    if (this.released) return Promise.reject(new LocalSttWorkerError('worker_released', 'Lease released'));
+    if (signal?.aborted) return Promise.reject(new Error('aborted'));
+    if (this.entry.readyError) return Promise.reject(this.entry.readyError);
+    if (this.entry.ready) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const cleanup = () => { this.off('message', onMessage); this.off('error', onError); signal?.removeEventListener('abort', onAbort); };
+      const onMessage = (message: { type?: string }) => { if (message.type === 'ready') { cleanup(); resolve(); } };
+      const onError = (error: Error) => { cleanup(); reject(error); };
+      const onAbort = () => { cleanup(); reject(new Error('aborted')); };
+      this.on('message', onMessage); this.on('error', onError); signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
   postMessage(message: Record<string, any>, _transferList?: readonly any[]): void {
     if (message.type === 'setPrompt') {
       this.prompt = String(message.prompt ?? '');

@@ -47,18 +47,18 @@ import { createRequire } from 'node:module';
 function lifecycleHarness() {
   const tree = ts.createSourceFile('main.ts', source, ts.ScriptTarget.Latest, true);
   const cls = tree.statements.find(n => ts.isClassDeclaration(n) && n.name.text === 'AppState');
-  const names = new Set(['endMeeting', 'startMeeting', 'startMeetingInternal', 'finishMeetingBeforeQuit']);
+  const names = new Set(['endMeeting', 'startMeeting', 'startMeetingInternal', 'finishMeetingBeforeQuit', 'stopAudioTest', 'recordOnboardingMeetingEvent']);
   const methods = cls.members.filter(n => n.name && names.has(n.name.getText(tree))).map(n => n.getText(tree)).join('\n');
   const notices = [];
   const compiled = ts.transpileModule(`class Lifecycle { ${methods} }; globalThis.Lifecycle = Lifecycle;`, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS}}).outputText;
-  const context = {console: {log(){}, error(){}, warn(){}}, BrowserWindow: {getAllWindows: () => []}, require: name => {
+  const context = {process: {env: {}}, console: {log(){}, error(){}, warn(){}}, BrowserWindow: {getAllWindows: () => []}, require: name => {
     if (name === 'electron') return {dialog: {showErrorBox: (...args) => notices.push(args)}};
     throw new Error('unused collaborator');
   }};
   vm.runInNewContext(compiled, context);
   const state = new context.Lifecycle();
   Object.assign(state, {
-    isMeetingActive: true, _isDraining: false, _pendingTeardown: null, _captureHealth: {},
+    isMeetingActive: true, _onboardingMeetingGeneration: 0, _isDraining: false, _pendingTeardown: null, _captureHealth: {},
     windowHelper: {setWindowMode(){}, resetOverlayPosition(){}},
     getWindowHelper: () => ({getOverlayWindow: () => null, flushLauncherEdits: async () => true}), broadcastMeetingState(){}, broadcast(){},
     cancelAudioRecovery(){}, stopDefaultOutputWatcher(){}, processingHelper: {cancelAndDrain: async () => true}, clearQueues(){},
@@ -211,7 +211,7 @@ test('A2-fix2-Q5 Start already awaiting microphone permission cannot commit afte
   state.resetMeetingEchoDiagnostics = () => {};
   state.logSttRuntimeDiagnostics = () => {initialized++; throw new Error('B must not initialize');};
   context.ensureMacMicrophoneAccess = () => permission.promise;
-  context.process = {platform: 'linux'};
+  context.process = {platform: 'linux', env: {}};
   const start = state.startMeeting().then(() => null, error => error);
   const quit = quitHarness(state); quit.trigger(); await tick(); permission.resolve(true); await tick();
   assert.equal(await start, null); assert.equal(initialized, 0); assert.equal(state.isMeetingActive, false);

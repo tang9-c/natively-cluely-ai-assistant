@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.7.18] - 2026-10-27
+
+### Added
+
+- Guide first-time users through initial setup, permissions, speech recognition, AI service checks, and starting their first real meeting. Resume unfinished setup without losing saved configuration.
+- Explain microphone and system-audio limitations, model downloads, validation failures, and recovery actions within the setup flow.
+
+### Fixed
+
+- Keep setup progress and validation receipts consistent when settings change or multiple windows are open. Release audio-test resources before starting a meeting.
+- Distinguish entering a meeting from receiving real audio and transcript results; synthetic test events cannot complete onboarding milestones.
+
+### Testing and known limitations
+
+- The implementation acceptance run passed 3,382 unit tests and 50 isolated Electron scenarios, plus renderer and Electron type checks and production builds. The release candidate is checked again before remote builds.
+- Credentials remain stored as plaintext JSON with restricted file permissions. SEC-01 is a user-accepted, non-blocking known risk; this release does not add encryption or migrate old credential files.
+- Fresh-device permission prompts, physical microphone/system-audio capture, real provider-account validation, and interactive installer acceptance remain unverified. Remote packaging and runtime smoke checks are recorded separately from these manual checks.
+
 ## [2.7.17] - 2026-10-23
 
 ### Fixes

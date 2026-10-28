@@ -15,8 +15,8 @@ test('StartupSequence presents the Chinese CueUp onboarding copy', () => {
   const source = read('src/components/StartupSequence.tsx');
 
   assert.match(source, /欢迎使用 Feigenbaum CueUp/);
-  assert.match(source, /关键时刻，给你一句能用的回答/);
-  assert.match(source, /点击继续即表示你同意 CueUp 的/);
+  assert.match(source, /先完成初始设置/);
+  assert.match(source, /点击开始设置即表示你同意 CueUp 的/);
   assert.match(source, /本地优先转写/);
   assert.match(source, /屏幕与上下文理解/);
   assert.match(source, /会议后记录与检索/);

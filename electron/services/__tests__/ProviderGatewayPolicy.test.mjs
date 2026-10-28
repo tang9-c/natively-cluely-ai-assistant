@@ -162,8 +162,8 @@ test('IPC handlers expose get/set provider-data-scopes and broadcast updates', (
 
   assert.match(ipc, /safeHandle\(['"]get-provider-data-scopes['"]/);
   assert.match(ipc, /safeHandle\(['"]set-provider-data-scopes['"]/);
-  assert.match(scopeHandler, /broadcast\('provider-data-scopes-changed', sanitized\)/);
-  assert.match(scopeHandler, /SettingsManager\.getInstance\(\)\.set\('providerDataScopes'/);
+  assert.match(scopeHandler, /broadcast\('provider-data-scopes-changed', saved\)/);
+  assert.match(scopeHandler, /settings\.setProviderDataScopes\(scopes, options\)/);
   assert.match(scopeHandler, /initializeEmbeddings\(buildEmbeddingRuntimeConfig\(\)\)/);
 });
 
@@ -175,7 +175,7 @@ test('preload and renderer types expose provider data scope controls', () => {
   assert.match(preload, /setProviderDataScopes:/);
   assert.match(preload, /onProviderDataScopesChanged:/);
   assert.match(preload, /ipcRenderer\.invoke\('get-provider-data-scopes'\)/);
-  assert.match(preload, /ipcRenderer\.invoke\('set-provider-data-scopes', scopes\)/);
+  assert.match(preload, /ipcRenderer\.invoke\('set-provider-data-scopes', scopes, options\)/);
 
   assert.match(types, /getProviderDataScopes:\s*\(\)\s*=>\s*Promise/);
   assert.match(types, /setProviderDataScopes:\s*\(scopes:/);

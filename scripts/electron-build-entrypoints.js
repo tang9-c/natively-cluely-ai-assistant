@@ -36,6 +36,8 @@ function getElectronEntryPoints(rootDir, mode = 'development') {
       results.push(...findTypeScriptFiles(directory, rootDir));
     }
   }
+  const onboardingFixture = 'electron/test/onboardingFixtures.ts';
+  if (fs.existsSync(path.join(rootDir, onboardingFixture))) results.push(onboardingFixture);
   return results;
 }
 
