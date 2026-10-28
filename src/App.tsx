@@ -474,6 +474,8 @@ const App: React.FC = () => {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
+            {/* A cold lazy main must not suspend the welcome's exit lifecycle. */}
+            <React.Suspense fallback={AppFallback}>
             <QueryClientProvider client={queryClient}>
               <ToastProvider>
                 <div id="launcher-container" className="h-full w-full relative" style={{ display: onboarding.isOpen ? 'none' : undefined }}>
@@ -586,6 +588,7 @@ const App: React.FC = () => {
                 <ToastViewport />
               </ToastProvider>
             </QueryClientProvider>
+            </React.Suspense>
           </motion.div>
         )}
       </AnimatePresence>

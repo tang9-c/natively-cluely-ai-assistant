@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.19] - 2026-10-28
+
+### Fixed
+
+- Let first-time users enter initial setup after clicking Start setup. Keep lazy loading of the main interface from interrupting the welcome screen's exit animation; users no longer need to restart to see the setup overview.
+
+### Testing and known limitations
+
+- Added cold-start regression tests against production renderer chunks loaded over file URLs, covering normal and reduced motion, actual removal of the welcome screen, button hit testing, and navigation. Strengthened the existing welcome regression.
+- The P1 verification passed both production scenarios, all 50 related Electron scenarios on the final run, nine content checks, and both TypeScript checks. A locally packaged ARM64 candidate passed native clicks through welcome, overview, permissions, and returning home. The initial suite run had one startup timeout; the isolated rerun and full rerun passed, as recorded in the acceptance report.
+- Credential plaintext storage remains the user-accepted, non-blocking SEC-01 risk. Complete first-meeting acceptance with real AI accounts, fresh-device system permissions, and actual audio transcription remains pending; this release does not claim those checks passed.
+
 ## [2.7.18] - 2026-10-27
 
 ### Added
