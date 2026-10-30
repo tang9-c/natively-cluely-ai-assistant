@@ -15,8 +15,8 @@ export function createOnboardingFixture(scenario: string, environment: { e2e: bo
   let modelAvailable = !['missing-services', 'download-error'].includes(scenario);
   let changed = 0;
   const configured: Record<string, boolean> = { stt: scenario !== 'missing-services', ai: !['missing-services', 'save-failed'].includes(scenario) };
-  const selected = { stt: scenario === 'whisper-current' ? 'local-whisper' : 'local-sensevoice', ai: scenario === 'codex-unsupported' ? 'codex-cli' : 'doubao' };
-  const models = { stt: 'fixture-sensevoice', ai: 'fixture-ai' };
+  const selected = { stt: scenario === 'whisper-current' ? 'local-whisper' : 'local-sensevoice', ai: scenario === 'codex-unsupported' ? 'codex' : 'doubao' };
+  const models = { stt: 'fixture-sensevoice', ai: scenario === 'codex-unsupported' ? 'codex-cli:gpt-5.4' : 'fixture-ai' };
   const readConfiguration = (target: ValidationTarget): OnboardingCheck => ({ configured: configured[target], status: 'missing', provider: selected[target],
     modelId: models[target], configIdentity: `fixture-${target}${changed ? `-${changed}` : ''}`,
     ...(target === 'stt' && scenario === 'language-unsupported' ? { errorCode: 'unsupported_check' as const, messageKey: 'onboarding.language_unsupported' } : {}),

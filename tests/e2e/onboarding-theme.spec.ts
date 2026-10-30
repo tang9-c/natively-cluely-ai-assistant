@@ -68,7 +68,7 @@ for (const theme of ['light', 'dark'] as const) for (const system of ['light', '
       await navigate('语音识别');
       await page.getByRole('button', { name: '检查模型', exact: true }).click();
       await tokenColor(page.getByText(/本次检查通过/), '--status-success-text');
-      await navigate('AI 服务');
+      await navigate('AI 提供商');
       await page.getByRole('button', { name: '我还没有账号或密钥', exact: true }).click();
       const back = page.getByRole('button', { name: '我已准备好，返回填写', exact: true });
       await tokenColor(back, '--btn-primary-bg', 'background-color'); await tokenColor(back, '--btn-primary-text');
@@ -85,7 +85,7 @@ for (const theme of ['light', 'dark'] as const) for (const system of ['light', '
       await tokenColor(dialog.getByText('离开前保存这些修改？'), '--text-secondary');
       await dialog.getByRole('button', { name: '放弃修改', exact: true }).click();
       await tokenColor(page.getByText(/本次已确认/).last(), '--status-success-text');
-      await navigate('AI 服务');
+      await navigate('AI 提供商');
       await page.getByRole('button', { name: '保存并验证', exact: true }).click();
       await expect(page.locator('section > p[role="status"]')).toContainText('通过');
       await tokenColor(page.locator('section > p[role="status"]'), '--status-success-text');
@@ -127,7 +127,7 @@ for (const theme of ['light', 'dark'] as const) test.describe(`first meeting col
     const navigate = (name: string) => page.getByRole('navigation', { name: '初始设置步骤' }).getByRole('button', { name: new RegExp(name) }).click();
     await navigate('语音识别');
     await tokenColor(page.getByText(/上次检查通过，沿用历史回执/), '--status-info-text');
-    await navigate('AI 服务');
+    await navigate('AI 提供商');
     await tokenColor(page.locator('section > p[role="status"]'), '--status-info-text');
     await navigate('开始会议');
     await page.getByRole('button', { name: '开始会议', exact: true }).click();

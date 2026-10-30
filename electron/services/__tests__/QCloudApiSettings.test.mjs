@@ -38,7 +38,7 @@ test('QCLOUD settings page does not show legacy commercial content', () => {
   ];
 
   assert.match(source, /QCLOUD API/);
-  assert.match(source, /QCLOUD key/);
+  assert.match(source, /QCLOUD API Key/);
   assert.doesNotMatch(source, /setDefaultModel\?\.\('natively'\)/);
   forbidden.forEach(text => assert.equal(source.includes(text), false, `unexpected legacy text: ${text}`));
   assert.doesNotMatch(source, /setSttProvider\?\.\('natively'\)/);
@@ -103,7 +103,7 @@ test('QCLOUD settings validates key format before saving', () => {
 
   assert.match(source, /isValidQCloudKeyFormat/);
   assert.match(source, /QCLOUD_KEY_PATTERN/);
-  assert.match(source, /QCLOUD key 格式不正确/);
+  assert.match(source, /QCLOUD API Key 格式不正确/);
   assert.ok(
     source.indexOf('isValidQCloudKeyFormat') < source.indexOf('setNativelyApiKey(apiKey.trim()'),
     'format validation should happen before the save IPC',

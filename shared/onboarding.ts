@@ -34,11 +34,14 @@ export interface OnboardingProgress {
 }
 export interface OnboardingCheck {
     configured?: boolean;
+    qcloudKeyConfigured?: boolean;
+    languageKey?: string;
     status: CheckStatus;
     messageKey?: string;
     errorCode?: OnboardingErrorCode;
     provider?: string;
     modelId?: string;
+    modelName?: string;
     configIdentity?: string;
     checkedAt?: number;
     depth?: ValidationReceipt['depth'];

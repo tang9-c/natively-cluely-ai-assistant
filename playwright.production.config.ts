@@ -6,7 +6,7 @@ import base from './playwright.config';
 export default defineConfig<{ rendererMode: 'development' | 'production' }>({
   ...base,
   testIgnore: [],
-  testMatch: ['**/onboarding-theme.spec.ts', '**/onboarding-production.spec.ts', '**/onboarding-qcloud.spec.ts', '**/onboarding-permissions.spec.ts'],
+  testMatch: ['**/onboarding-consistency.spec.ts', '**/onboarding-theme.spec.ts', '**/onboarding-production.spec.ts', '**/onboarding-qcloud.spec.ts', '**/onboarding-permissions.spec.ts'],
   use: { ...base.use, rendererMode: 'production' },
   webServer: undefined,
 });

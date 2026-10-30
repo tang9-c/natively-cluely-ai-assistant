@@ -135,7 +135,13 @@ export class OnboardingService {
             let configError: OnboardingErrorCode | undefined;
             if (this.deps.readConfiguration) {
                 const config = this.deps.readConfiguration(target);
-                Object.assign(check, { configIdentity: config.configIdentity, provider: config.provider, modelId: config.modelId, configured: config.configured });
+                if (check.messageKey === 'onboarding.language_unsupported' && check.configIdentity !== config.configIdentity) {
+                    delete check.messageKey;
+                    delete check.errorCode;
+                    check.status = 'missing';
+                }
+                Object.assign(check, { configIdentity: config.configIdentity, provider: config.provider, modelId: config.modelId,
+                    configured: config.configured, modelName: config.modelName, qcloudKeyConfigured: config.qcloudKeyConfigured, languageKey: config.languageKey });
                 configError = config.errorCode;
                 if (check.errorCode === 'credentials_missing' || check.errorCode === 'scope_denied') delete check.errorCode;
                 if (config.errorCode) { check.errorCode = config.errorCode; check.status = 'missing'; }

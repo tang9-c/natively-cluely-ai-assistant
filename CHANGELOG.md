@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.7.21] - 2026-10-30
+
+### Fixed
+
+- Reuse the saved QCLOUD API Key between speech recognition and AI in initial setup, including after provider changes, without exposing credential contents.
+- Invalidate stale language and service validation messages when configuration changes.
+- Align provider, language, model, device and data-scope labels with Settings while preserving persisted IDs, custom model spelling, legacy providers and Codex CLI selectors.
+- Open configuration help at the matching settings page; distinguish a saved key from a verified connection and disclose that legacy 7/30-day automatic cleanup is not enabled.
+
+### Testing and known limitations
+
+- Candidate checks passed 177 unit/contract tests, 58 development Electron scenarios, 29 production renderer scenarios, both TypeScript checks and production builds. Categories may overlap; final remote build and asset checks are recorded in `docs/testing/2.7.21-build-release.md`.
+- Plaintext credential storage remains the user-accepted, non-blocking SEC-01 risk. Real account responses, fresh-device TCC, voiced capture/full meetings, physical hotplug and interactive new-installer/theme acceptance remain unverified.
+
 ## [2.7.20] - 2026-10-30
 
 ### Fixed

@@ -254,3 +254,41 @@ test('QCLOUD AI validation prepares the legacy saved key revision without replac
   assert.equal(h.credentials.getDefaultModel(), 'natively');
   assert.equal(f.readOnboardingConfiguration(h, 'ai').errorCode, undefined);
 });
+
+test('QCLOUD shared key availability follows the stored key independently of selected AI/STT providers without exposing it', () => {
+  const h = setup(); const f = factory();
+  h.credentials.setSttProvider('local-sensevoice');
+  h.credentials.setDefaultModel('doubao-seed-2-0-lite-260215');
+  h.service.initialize(legacy);
+  for (const target of ['stt', 'ai']) assert.equal(h.service.getSnapshot().checks[target].qcloudKeyConfigured, false);
+  h.credentials.setNativelyApiKey('shared-fixture-key', { selectAsDefault: false });
+  for (const target of ['stt', 'ai']) {
+    const check = h.service.getSnapshot().checks[target];
+    assert.equal(check.qcloudKeyConfigured, true);
+    assert.doesNotMatch(JSON.stringify(check), /shared-fixture-key/);
+  }
+  assert.equal(h.credentials.getSttProvider(), 'local-sensevoice');
+  assert.equal(h.credentials.getDefaultModel(), 'doubao-seed-2-0-lite-260215');
+  h.credentials.setSttLanguage('chinese');
+  assert.equal(f.readOnboardingConfiguration(h, 'stt').languageKey, 'chinese');
+  assert.equal(h.service.getSnapshot().checks.stt.languageKey, 'chinese');
+  h.credentials.setNativelyApiKey('', { selectAsDefault: false });
+  for (const target of ['stt', 'ai']) assert.equal(h.service.getSnapshot().checks[target].qcloudKeyConfigured, false);
+});
+
+test('language warning from a previous configuration cannot be relabelled as the new configuration before refresh', async () => {
+  const h = managers(); const f = factory();
+  h.credentials.setNativelyApiKey('fixture-shared', { selectAsDefault: false });
+  h.credentials.setSttProvider('qcloud-stt'); h.credentials.setSttLanguage('english-us');
+  const service = f.createOnboardingService({ ...h, database: { hasNonDemoMeeting: () => false }, readChecks: async () => ({
+    microphone: { status: 'missing' }, inputDevice: { status: 'missing' }, systemAudio: { status: 'missing' }, ai: { status: 'missing' },
+    stt: { ...f.readOnboardingConfiguration(h, 'stt'), status: 'failed', errorCode: 'unsupported_check', messageKey: 'onboarding.language_unsupported' },
+  }) });
+  service.initialize(legacy); await service.refreshChecks();
+  assert.equal(service.getSnapshot().checks.stt.messageKey, 'onboarding.language_unsupported');
+  h.credentials.setSttLanguage('chinese');
+  const next = service.getSnapshot().checks.stt;
+  assert.notEqual(next.messageKey, 'onboarding.language_unsupported');
+  assert.notEqual(next.errorCode, 'unsupported_check');
+  assert.notEqual(next.status, 'verified');
+});
