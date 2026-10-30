@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { OnboardingSnapshot, OnboardingStateResult } from '../../../shared/onboarding';
 import type { OnboardingFormGuard } from '../../hooks/useOnboarding';
 import { onboardingErrorText, saveAndValidateOnboarding } from '../../utils/onboardingActions';
+import { getSpeechProviderLabel, getRecognitionLanguageLabel, getSpeechSettingsTab } from '../../utils/settingsDisplay';
 const control = 'mt-2 w-full rounded-lg border border-border-muted bg-bg-elevated px-3 py-2 text-sm';
 const button = 'rounded-lg border border-border-muted px-3 py-2 text-xs hover:bg-bg-item-active disabled:opacity-40';
 export default function SpeechStep({ snapshot, refresh, registerFormGuard, onOpenSettings, onDownload }: {
@@ -31,8 +32,12 @@ export default function SpeechStep({ snapshot, refresh, registerFormGuard, onOpe
   const keyInput = useRef<HTMLInputElement>(null);
   const [missingKey, setMissingKey] = useState(false);
   const local = provider.startsWith('local-');
-  const downloading = snapshot.downloads.find(d => d.modelId === check.modelId && d.status === 'running');
-  const downloadError = snapshot.downloads.find(d => d.modelId === check.modelId && d.status === 'failed');
+  const hasSavedKey = provider === 'qcloud-stt' ? check.qcloudKeyConfigured === true : check.configured && provider === check.provider;
+  const currentModel = provider === check.provider && (provider !== 'local-whisper' || whisperId === check.modelId);
+  const currentCheck = currentModel && language === (check.languageKey ?? saved.language);
+  const downloading = currentModel && snapshot.downloads.find(d => d.modelId === check.modelId && d.status === 'running');
+  const downloadError = currentModel && snapshot.downloads.find(d => d.modelId === check.modelId && d.status === 'failed');
+  const checkError = currentCheck ? check.errorCode : undefined;
   const busy = pending || snapshot.meeting.isActive || snapshot.meeting.isStarting || check.status === 'checking';
   const dirty = key.length > 0 || provider !== saved.provider || language !== saved.language || (provider === 'local-whisper' && whisperId !== savedWhisperId);
   useEffect(() => {
@@ -76,8 +81,8 @@ export default function SpeechStep({ snapshot, refresh, registerFormGuard, onOpe
   useEffect(() => registerFormGuard({ isDirty: () => dirty, save, discard: () => { setKey(''); setProvider(saved.provider); setLanguage(saved.language); setWhisperId(savedWhisperId); } }), [dirty, saved, key, language, provider, whisperId, savedWhisperId, busy, registerFormGuard]);
   const validate = async () => {
     if (busy) return;
-    if (!local && keySetters[provider] && (!check.configured || provider !== check.provider || changingKey) && !key.trim()) {
-      setMissingKey(true); setError('请填写语音识别密钥。'); keyInput.current?.focus(); return;
+    if (!local && keySetters[provider] && (!hasSavedKey || changingKey) && !key.trim()) {
+      setMissingKey(true); setError(provider === 'qcloud-stt' ? '请填写 QCLOUD API Key。' : '请填写语音识别密钥。'); keyInput.current?.focus(); return;
     }
     setMissingKey(false); setPending(true); setError(null);
     const result = await saveAndValidateOnboarding({ target: 'stt', save, clear: () => setKey(''), refresh,
@@ -99,12 +104,12 @@ export default function SpeechStep({ snapshot, refresh, registerFormGuard, onOpe
   return <section className="space-y-5">
     <div><h1 tabIndex={-1} className="text-2xl font-medium">设置语音识别</h1><p className="mt-2 text-sm text-text-secondary">沿用当前服务；未配置时推荐本地 SenseVoice。</p></div>
     <fieldset disabled={busy} className="space-y-4">
-      <label className="block text-sm">会议语言<select aria-label="会议语言" className={control} value={language} onChange={e => { setLanguage(e.target.value); setStatus(null); }}>
-        {language && !languages[language] && <option value={language}>{language}</option>}{Object.entries(languages).map(([value, lang]) => <option key={value} value={value}>{lang.group ? `${lang.group} · ${lang.label ?? value}` : lang.label ?? lang.name ?? value}</option>)}
+      <label className="block text-sm">会议语言<select aria-label="会议语言" className={control} value={language} onChange={e => { setLanguage(e.target.value); setStatus(null); setError(null); setMissingKey(false); }}>
+        {language && !languages[language] && <option value={language}>{language}</option>}{Object.entries(languages).map(([value, lang]) => <option key={value} value={value}>{getRecognitionLanguageLabel(lang, value)}</option>)}
       </select></label>
-      <label className="block text-sm">语音识别服务<select aria-label="语音识别服务" className={control} value={provider} onChange={e => { setKey(''); setProvider(e.target.value); setStatus(null); setError(null); }}>
-        <option value="local-sensevoice">本地 SenseVoice（推荐）</option><option value="doubao-auc">云端 Doubao AUC</option>
-        <option value="qcloud-stt">云端 QCLOUD</option>{!['local-sensevoice', 'doubao-auc', 'qcloud-stt', 'none'].includes(originalProvider) && <option value={originalProvider}>当前服务 · {originalProvider}</option>}
+      <label className="block text-sm">语音提供商<select aria-label="语音提供商" className={control} value={provider} onChange={e => { setKey(''); setProvider(e.target.value); setChangingKey(false); setMissingKey(false); setStatus(null); setError(null); }}>
+        <option value="local-sensevoice">{getSpeechProviderLabel('local-sensevoice')}</option><option value="doubao-auc">{getSpeechProviderLabel('doubao-auc')}</option>
+        <option value="qcloud-stt">{getSpeechProviderLabel('qcloud-stt')}</option>{!['local-sensevoice', 'doubao-auc', 'qcloud-stt', 'none'].includes(originalProvider) && <option value={originalProvider}>当前提供商 · {getSpeechProviderLabel(originalProvider)}</option>}
       </select></label>
       {local ? <div className="space-y-3 rounded-xl border border-border-muted p-4">
         {provider === 'local-whisper' && <label className="block text-sm">当前 Whisper 模型<select aria-label="当前 Whisper 模型" disabled={perChannel} className={control} value={whisperId} onChange={event => { setWhisperId(event.target.value); setModel(catalog.find(m => m.id === event.target.value) ?? null); }}>
@@ -119,16 +124,17 @@ export default function SpeechStep({ snapshot, refresh, registerFormGuard, onOpe
         {(error || downloadError) && !downloading && local && <button className={button} onClick={() => void download(true)}>重新下载</button>}
       </div> : <div className="space-y-3 rounded-xl border border-border-muted p-4">
         <p className="text-xs leading-relaxed text-text-secondary">语音将发送至所选识别服务。验证可能发送内置样本，不采集你的声音；凭据可访问不等于会议转写成功。AI 转写文本范围在下一步独立设置。</p>
-        {!keySetters[provider] ? <p className="text-xs text-text-secondary">沿用已保存凭据；修改此服务的认证请返回原设置。</p> : check.configured && provider === check.provider && !changingKey ? <div className="text-xs">STT 密钥已保存 <button className={button} onClick={() => setChangingKey(true)}>更换语音密钥</button></div>
-          : <label className="block text-sm">语音 API Key<input ref={keyInput} aria-invalid={missingKey} aria-describedby={missingKey ? 'onboarding-speech-error' : undefined} type="password" autoComplete="off" className={control} value={key} onChange={e => setKey(e.target.value)} /></label>}
+        {!keySetters[provider] ? <p className="text-xs text-text-secondary">沿用已保存凭据；修改此服务的认证请返回原设置。</p> : hasSavedKey && !changingKey ? <div className="text-xs">{provider === 'qcloud-stt' ? 'QCLOUD API 密钥已保存，语音识别与 AI 共用。' : 'STT 密钥已保存'} <button className={button} onClick={() => setChangingKey(true)}>更换语音密钥</button></div>
+          : <label className="block text-sm">{provider === 'qcloud-stt' ? 'QCLOUD API Key' : '语音 API Key'}<input ref={keyInput} aria-invalid={missingKey} aria-describedby={missingKey ? 'onboarding-speech-error' : undefined} type="password" autoComplete="off" className={control} value={key} onChange={e => setKey(e.target.value)} /></label>}
+        {provider === 'qcloud-stt' && !hasSavedKey && <p className="text-xs text-text-secondary">可使用与 AI 相同的 QCLOUD API Key，无需另行申请语音密钥。</p>}
         <button className={button} onClick={() => void validate()}>保存并验证语音服务</button>
-        <button className={button} onClick={() => onOpenSettings('audio')}>配置帮助</button>
+        <button className={button} onClick={() => onOpenSettings(getSpeechSettingsTab(provider))}>配置帮助</button>
       </div>}
-      {local && provider === 'local-whisper' && <button className={button} onClick={() => onOpenSettings('audio')}>修改当前 Whisper 模型</button>}
+      {local && provider === 'local-whisper' && <button className={button} onClick={() => onOpenSettings(getSpeechSettingsTab(provider))}>修改当前 Whisper 模型</button>}
     </fieldset>
-    <p className={`text-xs ${pending || check.status === 'previously_verified' ? 'text-status-info' : check.status === 'verified' ? 'text-status-success' : 'text-text-secondary'}`}>{pending ? '正在保存并检查…' : status ?? (check.status === 'verified' ? '本次检查通过' : check.status === 'previously_verified' ? '上次检查通过，沿用历史回执' : check.configured ? '已保存，尚未验证语音服务' : '尚未配置')}{check.depth ? ` · ${check.depth === 'model_load' ? '模型加载' : '凭据访问'}` : ''}</p>
-    {(error || downloadError || check.errorCode) && <p id="onboarding-speech-error" role="alert" className={`text-xs ${!error && !downloadError && check.errorCode === 'unsupported_check' ? 'text-status-warning' : 'text-status-error'}`}>{error ?? (check.messageKey === 'onboarding.language_unsupported' ? '当前语音服务不支持所选语言，请更改语言或服务。' : onboardingErrorText(downloadError?.errorCode ?? check.errorCode))}</p>}
-    {(error || downloadError || check.status === 'failed') && <button disabled={busy} className={button} onClick={() => void (downloadError ? download() : validate())}>重试</button>}
-    {check.errorCode === 'unsupported_check' && <button className={button} onClick={() => onOpenSettings('audio')}>返回原语音设置</button>}
+    <p className={`text-xs ${pending || currentCheck && check.status === 'previously_verified' ? 'text-status-info' : currentCheck && check.status === 'verified' ? 'text-status-success' : 'text-text-secondary'}`}>{pending ? '正在保存并检查…' : !currentCheck ? '配置已更改，保存后重新检查。' : status ?? (check.status === 'verified' ? '本次检查通过' : check.status === 'previously_verified' ? '上次检查通过，沿用历史回执' : check.configured ? '已保存，尚未验证语音服务' : '尚未配置')}{currentCheck && check.depth ? ` · ${check.depth === 'model_load' ? '模型加载' : '凭据访问'}` : ''}</p>
+    {(error || downloadError || checkError) && <p id="onboarding-speech-error" role="alert" className={`text-xs ${!error && !downloadError && checkError === 'unsupported_check' ? 'text-status-warning' : 'text-status-error'}`}>{error ?? (downloadError ? onboardingErrorText(downloadError.errorCode) : check.messageKey === 'onboarding.language_unsupported' ? '当前语音服务不支持所选语言，请更改语言或服务。' : onboardingErrorText(checkError))}</p>}
+    {(error || downloadError || currentCheck && check.status === 'failed') && <button disabled={busy} className={button} onClick={() => void (downloadError ? download() : validate())}>重试</button>}
+    {checkError === 'unsupported_check' && <button className={button} onClick={() => onOpenSettings(getSpeechSettingsTab(provider))}>返回原语音设置</button>}
   </section>;
 }

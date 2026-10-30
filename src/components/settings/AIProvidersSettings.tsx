@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, DEFAULT_CHAT_MODEL_ID, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, DEFAULT_CHAT_MODEL_ID, codexCliSelectorId, STANDARD_CLOUD_MODELS, getModelDisplayName, getAiModelDisplayName, resolveAiModelInput } from '../../utils/modelUtils';
+import { getAiProviderLabel, TRANSCRIPT_SCOPE_LABEL, TRANSCRIPT_SCOPE_DESCRIPTION } from '../../utils/settingsDisplay';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { LocalModelsPanel } from '../LocalModelsPanel';
@@ -22,9 +23,10 @@ interface ModelSelectProps {
     options: ModelOption[];
     onChange: (value: string) => void;
     placeholder?: string;
+    label?: string;
 }
 
-const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder = "Select model" }) => {
+const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder = "Select model", label }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -43,6 +45,7 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
     return (
         <div className="relative" ref={containerRef}>
             <button
+                aria-label={label}
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-40 bg-bg-input border border-border-subtle rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between hover:bg-bg-elevated transition-colors"
                 type="button"
@@ -90,8 +93,8 @@ const CodexCliModelField: React.FC<{
         <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">{label}</span>
         <div className="flex gap-2">
             <input
-                value={value}
-                onChange={e => onChange(e.target.value)}
+                value={getAiModelDisplayName('codex-cli', value)}
+                onChange={e => onChange(resolveAiModelInput('codex-cli', e.target.value))}
                 onBlur={onSave}
                 className="min-w-0 flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
                 placeholder={placeholder}
@@ -99,7 +102,7 @@ const CodexCliModelField: React.FC<{
             <ModelSelect
                 value={value}
                 options={value && !CODEX_CLI_MODEL_PRESETS.some(option => option.id === value)
-                    ? [{ id: value, name: prettifyModelId(value) }, ...CODEX_CLI_MODEL_PRESETS]
+                    ? [{ id: value, name: getAiModelDisplayName('codex-cli', value) }, ...CODEX_CLI_MODEL_PRESETS]
                     : CODEX_CLI_MODEL_PRESETS}
                 onChange={(modelId) => {
                     onChange(modelId);
@@ -593,16 +596,17 @@ export const AIProvidersSettings: React.FC = () => {
 
                 <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between">
                     <div>
-                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">当前模型</label>
+                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">聊天默认模型</label>
                         <p className="text-[10px] text-text-secondary">保存后立即用于新的对话。</p>
                     </div>
                     <ModelSelect
+                        label="聊天默认模型"
                         value={defaultModel}
                         options={(() => {
                             const opts: { id: string; name: string }[] = [];
 
                             if (hasStoredKey.natively) {
-                                opts.push({ id: 'natively', name: 'QCLOUD API' });
+                                opts.push({ id: 'natively', name: getAiProviderLabel('natively') });
                             }
 
                             for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
@@ -610,11 +614,11 @@ export const AIProvidersSettings: React.FC = () => {
                                 cfg.ids.forEach((id, i) => opts.push({ id, name: cfg.names[i] }));
                                 const pm = preferredModels[prov as keyof typeof preferredModels];
                                 if (pm && !cfg.ids.includes(pm)) {
-                                    opts.push({ id: pm, name: prettifyModelId(pm) });
+                                    opts.push({ id: pm, name: getModelDisplayName(pm) });
                                 }
                             }
                             if (codexCliConfig.enabled) {
-                                opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})` });
+                                opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${getAiModelDisplayName('codex-cli', codexCliConfig.model)})` });
                                 CODEX_CLI_MODEL_PRESETS.forEach(model => {
                                     const id = codexCliSelectorId(model.id);
                                     if (!opts.find(o => o.id === id)) {
@@ -627,7 +631,7 @@ export const AIProvidersSettings: React.FC = () => {
                             // ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
 
                             if (defaultModel && !opts.find(o => o.id === defaultModel)) {
-                                opts.unshift({ id: defaultModel, name: prettifyModelId(defaultModel) });
+                                opts.unshift({ id: defaultModel, name: getModelDisplayName(defaultModel) });
                             }
                             return opts;
                         })()}
@@ -652,7 +656,7 @@ export const AIProvidersSettings: React.FC = () => {
                     {/* Doubao */}
                     <ProviderCard
                         providerId="doubao"
-                        providerName="Doubao (Volcengine)"
+                        providerName={getAiProviderLabel('doubao')}
                         apiKey={doubaoApiKey}
                         preferredModel={preferredModels.doubao}
                         hasStoredKey={!!hasStoredKey.doubao}
@@ -774,7 +778,7 @@ export const AIProvidersSettings: React.FC = () => {
                             />
                         </label>
                         <CodexCliModelField
-                            label="普通模型"
+                            label="Codex 默认模型"
                             value={codexCliConfig.model}
                             placeholder="gpt-5.5"
                             onChange={(model) => setCodexCliConfig(prev => ({ ...prev, model }))}
@@ -805,7 +809,7 @@ export const AIProvidersSettings: React.FC = () => {
                             className="flex items-center gap-2 px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors disabled:opacity-60"
                         >
                             {codexCliStatus === 'testing' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                            测试 CLI
+                            检测 CLI
                         </button>
                     </div>
                 </div>
@@ -1160,8 +1164,8 @@ export const AIProvidersSettings: React.FC = () => {
             {/* Cloud Provider Data Scopes — fail-closed cloud share controls */}
             <div className="space-y-5" data-testid="cloud-provider-data-scopes">
                 <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">云提供商数据范围</h3>
-                    <p className="text-xs text-text-secondary mb-2">控制云端 AI 提供商可以访问哪些数据。关闭的数据类型会在本地处理，以保护隐私。</p>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">AI 数据范围</h3>
+                    <p className="text-xs text-text-secondary mb-2">控制 AI 提供商接收的数据类型；关闭某类数据后，需要可用且允许的本地服务才能继续处理。</p>
                 </div>
                 <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">
                     {([
@@ -1185,7 +1189,7 @@ export const AIProvidersSettings: React.FC = () => {
                                     className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${allowed ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                     role="switch"
                                     aria-checked={allowed}
-                                    aria-label={`允许云端提供商访问${label}`}
+                                    aria-label={key === 'transcript' ? TRANSCRIPT_SCOPE_LABEL : `允许云端提供商访问${label}`}
                                 >
                                     <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${allowed ? 'translate-x-4' : 'translate-x-0'}`} />
                                 </div>
@@ -1194,7 +1198,7 @@ export const AIProvidersSettings: React.FC = () => {
                     })}
                     <div className="flex items-start gap-2 mt-1 pt-3 border-t border-border-subtle">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-tertiary shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                        <p className="text-[11px] text-text-tertiary leading-relaxed">关闭某类数据后，CueUp 会回退到最佳可用的本地模型，让这类数据留在本机处理。</p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">{TRANSCRIPT_SCOPE_DESCRIPTION}</p>
                     </div>
                 </div>
             </div>

@@ -93,6 +93,7 @@ export function readOnboardingConfiguration(sources: ConfigurationSources, targe
             metadata, credentialVersions: key ? versions([key]) : [] });
         const missing = provider === 'none' || (!local && (!key || !raw[key] || !cm.getCredentialVersion(key)));
         return { status: 'missing', provider, modelId, configured: local || !!(key && raw[key]), configIdentity: identity,
+            qcloudKeyConfigured: !!raw.nativelyApiKey, languageKey: cm.getSttLanguage(),
             ...(missing ? { errorCode: 'credentials_missing' as const } : {}) };
     }
     const modelId = cm.getDefaultModel();
@@ -111,6 +112,8 @@ export function readOnboardingConfiguration(sources: ConfigurationSources, targe
         codex: codex ? { enabled: sm.get('codexCliEnabled'), path: sm.get('codexCliPath'), model: sm.get('codexCliModel'),
             timeoutMs: sm.get('codexCliTimeoutMs'), sandboxMode: sm.get('codexCliSandboxMode') } : undefined });
     return { status: 'missing', provider, modelId, configured: key ? !!raw[key] : codex ? sm.get('codexCliEnabled') === true : !!raw.customProviders?.length || !!raw.curlProviders?.length, configIdentity,
+        qcloudKeyConfigured: !!raw.nativelyApiKey,
+        modelName: provider === 'custom' ? [...(raw.customProviders ?? []), ...(raw.curlProviders ?? [])].find(provider => provider.id === modelId)?.name : undefined,
         ...(sm.get('providerDataScopes')?.transcript === false ? { errorCode: 'scope_denied' as const }
             : key && (!raw[key] || !cm.getCredentialVersion(key)) ? { errorCode: 'credentials_missing' as const } : {}) };
 }

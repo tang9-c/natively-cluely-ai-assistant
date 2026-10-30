@@ -149,7 +149,7 @@ test.describe('AI 配置', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'ready' });
   test('[ai] 未保存字段离开确认，开通说明返回不验证', async ({ page, electronApp }) => {
     await page.getByRole('button', { name: '开始设置', exact: true }).click();
-    await page.getByRole('navigation', { name: '初始设置步骤' }).getByRole('button', { name: /AI 服务/ }).click();
+    await page.getByRole('navigation', { name: '初始设置步骤' }).getByRole('button', { name: /AI 提供商/ }).click();
     await page.getByRole('button', { name: '我还没有账号或密钥', exact: true }).click();
     await electronApp.evaluate(({ shell }) => {
       (globalThis as any).__onboardingExternalTargets = [];
@@ -207,7 +207,7 @@ test.describe('设备回退', () => {
 test.describe('AI 保存错误', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'save-failed' });
   test('[ai] 保存失败不清空密钥、不验证，保存并离开失败也留页', async ({ page, electronApp }) => {
-    await enterOnboardingStep(page, 'AI 服务');
+    await enterOnboardingStep(page, 'AI 提供商');
     await page.getByLabel('AI API Key', { exact: true }).fill('fixture-unsaved');
     await page.getByRole('button', { name: '保存并验证', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('未能保存');
@@ -222,7 +222,7 @@ test.describe('AI 保存错误', () => {
 test.describe('AI 验证错误', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'ai-network-failed' });
   test('[ai] 密钥保存后清空，验证失败仍显示已保存', async ({ page }) => {
-    await enterOnboardingStep(page, 'AI 服务');
+    await enterOnboardingStep(page, 'AI 提供商');
     await page.getByRole('button', { name: '更换密钥', exact: true }).click();
     await page.getByLabel('AI API Key', { exact: true }).fill('fixture-saved');
     await page.getByRole('button', { name: '保存并验证', exact: true }).click();
@@ -236,8 +236,8 @@ test.describe('AI 验证错误', () => {
 test.describe('AI 范围拒绝', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'scope-denied' });
   test('[ai] 沿用全局拒绝策略，验证不发请求且不允许继续', async ({ page, electronApp }) => {
-    await enterOnboardingStep(page, 'AI 服务');
-    await expect(page.getByLabel('全局：允许转写文本用于 AI')).toHaveValue('deny');
+    await enterOnboardingStep(page, 'AI 提供商');
+    await expect(page.getByLabel('允许 AI 使用转写内容')).toHaveValue('deny');
     await page.getByRole('button', { name: '保存并验证', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('全局策略不允许');
     expect(await electronApp.evaluate(() => (globalThis as any).__onboardingE2ECounters.validations)).toBe(0);
@@ -247,7 +247,7 @@ test.describe('AI 范围拒绝', () => {
 test.describe('Codex 验证边界', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'codex-unsupported' });
   test('[ai] 程序检测和推理验证分开，不支持隔离时明确返回', async ({ page }) => {
-    await enterOnboardingStep(page, 'AI 服务');
+    await enterOnboardingStep(page, 'AI 提供商');
     await expect(page.getByText('尚未检测程序', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '验证当前配置', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('引导暂不能验证此配置');
@@ -270,7 +270,7 @@ test.describe('语音下载与云服务', () => {
   });
   test('[speech] 云 STT 单独保存密钥，凭据访问不会显示为真实识别成功', async ({ page, electronApp }) => {
     await enterOnboardingStep(page, '语音识别');
-    await page.getByLabel('语音识别服务', { exact: true }).selectOption('doubao-auc');
+    await page.getByLabel('语音提供商', { exact: true }).selectOption('doubao-auc');
     await page.getByLabel('语音 API Key', { exact: true }).fill('fixture-stt-key');
     await page.getByRole('button', { name: '保存并验证语音服务', exact: true }).click();
     const state = await page.evaluate(() => window.electronAPI.getOnboardingState()); if (!state.success) throw new Error(state.errorCode);
@@ -304,7 +304,7 @@ test.describe('下载错误', () => {
 test.describe('原设置与页面尺寸', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'ready' });
   test('[ai] 打开原设置先处理未保存字段，返回时重新读取配置', async ({ page }) => {
-    await enterOnboardingStep(page, 'AI 服务');
+    await enterOnboardingStep(page, 'AI 提供商');
     await page.getByRole('button', { name: '更换密钥', exact: true }).click();
     await page.getByLabel('AI API Key', { exact: true }).fill('fixture-discard');
     await page.getByRole('button', { name: '返回原设置', exact: true }).click();
@@ -323,7 +323,7 @@ test.describe('原设置与页面尺寸', () => {
       await electronApp.evaluate(({ BrowserWindow }, size) => { const win = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('window=launcher'))!; win.setMinimumSize(400, 300); win.setContentSize(size.width, size.height); }, { width, height });
       await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      for (const [step, label] of [['permissions', '权限与设备'], ['speech', '语音识别'], ['ai', 'AI 服务'], ['ready', '开始会议']] as const) {
+      for (const [step, label] of [['permissions', '权限与设备'], ['speech', '语音识别'], ['ai', 'AI 提供商'], ['ready', '开始会议']] as const) {
         await page.getByRole('navigation').getByRole('button', { name: new RegExp(label) }).click();
         await expect(page.getByRole('navigation').locator('button[aria-current="step"]')).toContainText(label);
         const primary = page.getByTestId('onboarding-primary'); await expect(primary).toBeVisible();
@@ -347,7 +347,7 @@ test.describe('保留历史 Whisper', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'whisper-current' });
   test('[speech] 沿用历史服务，明确保存后更换当前模型并加载验证', async ({ page }) => {
     await enterOnboardingStep(page, '语音识别');
-    await expect(page.getByLabel('语音识别服务')).toHaveValue('local-whisper');
+    await expect(page.getByLabel('语音提供商')).toHaveValue('local-whisper');
     await page.getByLabel('当前 Whisper 模型').selectOption('fixture-whisper-alternative');
     await page.getByRole('button', { name: '检查模型', exact: true }).click();
     await expect(page.getByText('本次检查通过', { exact: false })).toBeVisible();
@@ -378,18 +378,18 @@ test.describe('T13 首次设置完整验收', () => {
     await page.getByRole('button', { name: '稍后继续', exact: true }).click(); await capture('resume');
   });
   test('[ai] 缺少模型或程序路径时聚焦对应字段，不调用验证', async ({ page, electronApp }) => {
-    await enterOnboardingStep(page, 'AI 服务'); await page.getByLabel('AI 模型', { exact: true }).fill('');
+    await enterOnboardingStep(page, 'AI 提供商'); await page.getByLabel('聊天默认模型', { exact: true }).fill('');
     await page.getByRole('button', { name: '保存并验证', exact: true }).click();
-    await expect(page.getByLabel('AI 模型', { exact: true })).toBeFocused(); await expect(page.getByRole('alert')).toContainText('模型');
-    await page.getByLabel('AI 服务', { exact: true }).selectOption('codex-cli');
-    await page.getByLabel('Codex 程序路径', { exact: true }).fill('');
+    await expect(page.getByLabel('聊天默认模型', { exact: true })).toBeFocused(); await expect(page.getByRole('alert')).toContainText('模型');
+    await page.getByLabel('AI 提供商', { exact: true }).selectOption('codex-cli');
+    await page.getByLabel('可执行文件', { exact: true }).fill('');
     await page.getByRole('button', { name: '验证当前配置', exact: true }).click();
-    await expect(page.getByLabel('Codex 程序路径', { exact: true })).toBeFocused(); await expect(page.getByRole('alert')).toContainText('程序路径');
+    await expect(page.getByLabel('可执行文件', { exact: true })).toBeFocused(); await expect(page.getByRole('alert')).toContainText('可执行文件');
     expect(await electronApp.evaluate(() => (globalThis as any).__onboardingE2ECounters.validations)).toBe(0);
   });
   test('[meeting] 仅用 Tab/Enter 完成设置导航、进入会议、关闭提示和结束会议', async ({ page, electronApp }) => {
     await tabTo(page, page.getByRole('button', { name: '开始设置', exact: true })); await page.keyboard.press('Enter');
-    for (const label of ['权限与设备', '语音识别', 'AI 服务', '开始会议']) {
+    for (const label of ['权限与设备', '语音识别', 'AI 提供商', '开始会议']) {
       const step = page.getByRole('navigation').getByRole('button', { name: new RegExp(label) });
       await tabTo(page, step); await page.keyboard.press('Enter');
       await expect(page.getByRole('navigation').locator('button[aria-current="step"]')).toContainText(label);
@@ -407,7 +407,7 @@ test.describe('T13 首次设置完整验收', () => {
 test.describe('T13 必填字段可访问性', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'missing-services' });
   test('[ai] 缺少密钥时聚焦错误字段，不保存、不调用验证', async ({ page, electronApp }) => {
-    await enterOnboardingStep(page, 'AI 服务');
+    await enterOnboardingStep(page, 'AI 提供商');
     await page.getByRole('button', { name: '保存并验证', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('密钥');
     await expect(page.getByLabel('AI API Key', { exact: true })).toBeFocused();
@@ -415,7 +415,7 @@ test.describe('T13 必填字段可访问性', () => {
     await page.screenshot({ path: 'docs/qa/assets/2026-10-27-first-run-onboarding/ai-required-key.png' });
   });
   test('[speech] 云识别缺少密钥时聚焦输入框，不调用验证', async ({ page, electronApp }) => {
-    await enterOnboardingStep(page, '语音识别'); await page.getByLabel('语音识别服务', { exact: true }).selectOption('doubao-auc');
+    await enterOnboardingStep(page, '语音识别'); await page.getByLabel('语音提供商', { exact: true }).selectOption('doubao-auc');
     await page.getByRole('button', { name: '保存并验证语音服务', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('密钥');
     await expect(page.getByLabel('语音 API Key', { exact: true })).toBeFocused();
@@ -426,6 +426,14 @@ test.describe('T13 必填字段可访问性', () => {
 
 test.describe('T13 下载视觉状态', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'download-running' });
+  test('[speech] 更改会议语言不会隐藏仍在运行的模型下载', async ({ page }) => {
+    await enterOnboardingStep(page, '语音识别');
+    const progress = page.getByRole('progressbar', { name: '模型下载进度' });
+    await expect(progress).toHaveAttribute('value', '42');
+    await page.getByLabel('会议语言', { exact: true }).selectOption('chinese');
+    await expect(progress).toHaveAttribute('value', '42');
+    await expect(page.getByRole('button', { name: '先配置 AI', exact: true })).toBeEnabled();
+  });
   test('[speech] 下载中四种尺寸主题保留进度与并行设置入口', async ({ page, electronApp }) => {
     await enterOnboardingStep(page, '语音识别');
     await captureOnboardingMatrix(page, electronApp, 'download-running', async () => {
@@ -438,7 +446,7 @@ test.describe('T13 下载视觉状态', () => {
 test.describe('T13 未保存与存储错误视觉状态', () => {
   test.use({ onboardingMode: 'fresh', onboardingScenario: 'save-failed' });
   test('[ai] 保存失败与未保存确认在四种尺寸主题可见且 Escape 保留输入', async ({ page, electronApp }) => {
-    await enterOnboardingStep(page, 'AI 服务');
+    await enterOnboardingStep(page, 'AI 提供商');
     await page.getByLabel('AI API Key', { exact: true }).fill('fixture-not-a-real-key');
     await page.getByRole('button', { name: '保存并验证', exact: true }).click();
     await captureOnboardingMatrix(page, electronApp, 'save-failed', async () => {

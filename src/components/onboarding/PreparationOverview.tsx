@@ -1,13 +1,14 @@
 import React from 'react';
+import { getSpeechProviderLabel, getAiProviderLabel } from '../../utils/settingsDisplay';
 import { getModelDisplayName } from '../../utils/modelUtils';
 import { Check, ChevronRight, Circle, Loader2, TriangleAlert } from 'lucide-react';
 import type { OnboardingCheck, OnboardingSnapshot, OnboardingStep } from '../../../shared/onboarding';
-export const onboardingLabels: Record<OnboardingStep, string> = { overview: '设置概览', permissions: '权限与设备', speech: '语音识别', ai: 'AI 服务', ready: '开始会议' };
+export const onboardingLabels: Record<OnboardingStep, string> = { overview: '设置概览', permissions: '权限与设备', speech: '语音识别', ai: 'AI 提供商', ready: '开始会议' };
 export function preparationRows(snapshot: OnboardingSnapshot) {
   return [
     { label: '麦克风与设备', step: 'permissions' as const, check: snapshot.checks.microphone.status === 'verified' || snapshot.checks.microphone.status === 'pending_runtime' ? snapshot.checks.inputDevice : snapshot.checks.microphone },
     { label: '语音识别', step: 'speech' as const, check: snapshot.checks.stt },
-    { label: 'AI 服务', step: 'ai' as const, check: snapshot.checks.ai },
+    { label: 'AI 提供商', step: 'ai' as const, check: snapshot.checks.ai },
     { label: '系统音频', step: 'permissions' as const, check: snapshot.checks.systemAudio, limited: true },
   ];
 }
@@ -33,11 +34,14 @@ export default function PreparationOverview({ snapshot, mode = 'overview', focus
         const statusColor = row.check.status === 'failed' ? 'text-status-error' : good
           ? row.check.status === 'verified' ? 'text-status-success' : 'text-status-info'
           : warning ? 'text-status-warning' : row.check.status === 'checking' ? 'text-status-info' : 'text-text-secondary';
+        const providerLabel = row.check.provider ? row.step === 'speech' ? getSpeechProviderLabel(row.check.provider) : getAiProviderLabel(row.check.provider) : '';
+        const modelName = row.check.modelName ?? (row.check.modelId ? getModelDisplayName(row.check.modelId) : '');
+        const showModel = modelName !== providerLabel && (row.step !== 'speech' || modelName !== row.check.modelId);
         const Icon = row.check.status === 'checking' ? Loader2 : good ? Check : warning ? TriangleAlert : Circle;
         return <div key={row.label} className="flex items-center gap-3 px-4 py-4">
           <Icon size={17} className={`${statusColor} shrink-0 ${row.check.status === 'checking' ? 'motion-safe:animate-spin' : ''}`} />
           <div className="min-w-0 flex-1"><p className="text-sm font-medium text-text-primary">{row.label}</p>
-            <p className={`mt-1 break-all text-xs ${statusColor}`}>{row.check.status === 'missing' ? (row.check.configured ? '已配置，待验证' : '尚未配置') : statusLabels[row.check.status]}{row.check.provider ? ` · ${row.check.provider === 'natively' ? 'QCLOUD API' : row.check.provider}` : ''}{row.check.modelId ? ` · ${getModelDisplayName(row.check.modelId)}` : ''}</p>
+            <p className={`mt-1 break-all text-xs ${statusColor}`}>{row.check.status === 'missing' ? (row.check.configured ? '已配置，待验证' : '尚未配置') : statusLabels[row.check.status]}{providerLabel ? ` · ${providerLabel}` : ''}{modelName && showModel ? ` · ${modelName}` : ''}</p>
             {row.check.checkedAt !== undefined && <p className="mt-1 text-xs text-text-tertiary">{new Date(row.check.checkedAt).toLocaleString()} · {row.check.depth === 'model_load' ? '模型加载' : row.check.depth === 'model_response' ? '模型响应' : '凭据访问'}</p>}
             {row.check.errorCode === 'scope_denied' && <p className="mt-1 text-xs text-status-warning">当前策略不允许 AI 使用会议内容。</p>}
             {row.check.errorCode === 'model_missing' && <p className="mt-1 text-xs text-text-secondary">模型尚未下载。</p>}

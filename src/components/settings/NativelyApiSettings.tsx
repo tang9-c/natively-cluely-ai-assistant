@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
+import { getAiProviderLabel } from '../../utils/settingsDisplay';
+
 // ─── Card wrapper ────────────────────────────────────────────
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
@@ -59,7 +61,7 @@ export const NativelyApiSettings: React.FC = () => {
   const handleSave = async () => {
     if (!apiKey.trim() || apiKey.includes('•')) return;
     if (!isValidQCloudKeyFormat(apiKey)) {
-      setError('QCLOUD key 格式不正确，应以 sk- 开头，并且只包含字母、数字、下划线或短横线。');
+      setError('QCLOUD API Key 格式不正确，应以 sk- 开头，并且只包含字母、数字、下划线或短横线。');
       return;
     }
     setIsSaving(true);
@@ -69,7 +71,7 @@ export const NativelyApiSettings: React.FC = () => {
       let selectAsDefault = true;
       if (defaultModel?.model && !isAutoDefaultModel(defaultModel.model)) {
         selectAsDefault = window.confirm(
-          `当前默认聊天模型是 ${defaultModel.model}。保存后是否切换为 QCLOUD API？\n\n选择“取消”将只保存 QCLOUD key，不改变当前默认模型。`,
+          `当前默认聊天模型是 ${defaultModel.model}。保存后是否切换为 QCLOUD API？\n\n选择“取消”将只保存 QCLOUD API Key，不改变当前默认模型。`,
         );
       }
       const r = await window.electronAPI.setNativelyApiKey(apiKey.trim(), { selectAsDefault });
@@ -79,7 +81,7 @@ export const NativelyApiSettings: React.FC = () => {
         setJustSaved(true);
         setTimeout(() => setJustSaved(false), 2500);
       } else {
-        setError(r.error || '保存 QCLOUD key 失败');
+        setError(r.error || '保存 QCLOUD API Key 失败');
       }
     } catch (e: any) {
       setError(e.message || '意外错误');
@@ -103,17 +105,17 @@ export const NativelyApiSettings: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-[15px] font-semibold text-text-primary tracking-[-0.01em]">
-            QCLOUD API
+            {getAiProviderLabel('natively')}
           </h3>
           <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
-            配置 QCLOUD key 后，可用于聊天和语音转录；Embedding 默认本地，必要时云端回退。
+            配置 QCLOUD API Key 后，可用于聊天和语音转录；Embedding 默认本地，必要时云端回退。
           </p>
         </div>
         {!isLoading && isSaved && (
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
             <span className="text-[10px] font-semibold text-emerald-500 tracking-wide">
-              已连接
+              密钥已保存
             </span>
           </div>
         )}
@@ -128,9 +130,9 @@ export const NativelyApiSettings: React.FC = () => {
             <Cloud size={18} className="text-blue-400" />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">QCLOUD key</p>
+            <p className="text-[13px] font-semibold text-text-primary">QCLOUD API Key</p>
             <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-              QCLOUD 用于 LLM 路由和实时转录（可选，需在语音标签下手动启用），也可在本地向量模型不可用时提供 Embedding 回退。
+              QCLOUD 用于 LLM 路由和实时转录（可选，需在音频标签下手动启用），也可在本地向量模型不可用时提供 Embedding 回退。
             </p>
           </div>
         </div>
@@ -143,7 +145,7 @@ export const NativelyApiSettings: React.FC = () => {
           {/* Label row */}
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-              QCLOUD key
+              QCLOUD API Key
             </span>
             {isSaved && (
               <button
@@ -166,7 +168,7 @@ export const NativelyApiSettings: React.FC = () => {
               setError(null);
             }}
             onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-            placeholder="请输入 QCLOUD key"
+            placeholder="请输入 QCLOUD API Key"
             spellCheck={false}
             autoComplete="off"
             className={`w-full bg-bg-input border rounded-xl px-3.5 py-2.5 text-[13px] font-mono text-text-primary
@@ -214,7 +216,7 @@ export const NativelyApiSettings: React.FC = () => {
                 已保存
               </span>
             ) : (
-              '保存 key'
+              '保存密钥'
             )}
           </button>
 
@@ -225,7 +227,7 @@ export const NativelyApiSettings: React.FC = () => {
 
           {/* T&C consent */}
           <p className="text-[10.5px] text-text-tertiary leading-relaxed text-center">
-            Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。
+            Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD API Key 调用 embedding-vision。云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。
           </p>
         </div>
       </Card>
@@ -240,9 +242,9 @@ export const NativelyApiSettings: React.FC = () => {
           </div>
           <div className="space-y-3">
             {[
-              { step: '1', text: '粘贴你的 QCLOUD key 并保存。' },
+              { step: '1', text: '粘贴你的 QCLOUD API Key 并保存。' },
               { step: '2', text: '保存成功后，可将聊天默认模型切换为 QCLOUD API；已有手动模型会先询问确认。' },
-              { step: '3', text: '如需云端语音转写，可在“语音”标签选择 QCLOUD API；Embedding 仅在本地向量模型不可用时按配置回退到云端。' },
+              { step: '3', text: '如需云端语音转写，可在“音频”标签选择 QCLOUD API；Embedding 仅在本地向量模型不可用时按配置回退到云端。' },
             ].map(({ step, text }) => (
               <div key={step} className="flex items-start gap-3">
                 <div className="w-5 h-5 rounded-full bg-bg-input border border-border-subtle flex items-center justify-center text-[10px] font-bold text-text-tertiary shrink-0 mt-[1px]">

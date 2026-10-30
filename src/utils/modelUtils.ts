@@ -65,7 +65,7 @@ export const getCodexCliModelDisplayName = (id: string): string | null => {
 
     const modelId = id.slice('codex-cli:'.length);
     const preset = CODEX_CLI_MODEL_PRESETS.find(model => model.id === modelId);
-    return preset?.name || prettifyModelId(modelId);
+    return preset?.name || modelId;
 };
 
 export const MODEL_DISPLAY_NAMES: Record<string, string> = {
@@ -82,6 +82,10 @@ export const getModelDisplayName = (id: string): string => {
     const codexCliName = getCodexCliModelDisplayName(id);
     if (codexCliName) return codexCliName;
     if (id.startsWith('ollama-')) return id.replace('ollama-', '');
+    for (const provider of Object.values(STANDARD_CLOUD_MODELS)) {
+        const index = provider.ids.indexOf(id);
+        if (index >= 0) return provider.names[index];
+    }
     return MODEL_DISPLAY_NAMES[id] || id;
 };
 
@@ -89,3 +93,17 @@ export const prettifyModelId = (id: string): string => {
     if (!id) return '';
     return id.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 };
+
+export const normalizeAiProvider = (provider?: string): string => provider === 'codex' ? 'codex-cli' : provider && provider !== 'none' ? provider : 'doubao';
+export function getCodexCliModelId(selector: string, configuredModel = ''): string {
+    return selector === 'codex-cli' ? configuredModel : selector.startsWith('codex-cli:') ? selector.slice('codex-cli:'.length) : selector;
+}
+export function getAiModelDisplayName(provider: string, model: string): string {
+    return provider === 'codex-cli' ? CODEX_CLI_MODEL_PRESETS.find(option => option.id === model)?.name ?? model : getModelDisplayName(model);
+}
+export function resolveAiModelInput(provider: string, value: string): string {
+    if (provider === 'codex-cli') return CODEX_CLI_MODEL_PRESETS.find(model => model.name === value.trim())?.id ?? getCodexCliModelId(value.trim());
+    const catalog = STANDARD_CLOUD_MODELS[provider];
+    const index = catalog?.names.indexOf(value.trim()) ?? -1;
+    return index >= 0 ? catalog.ids[index] : value;
+}

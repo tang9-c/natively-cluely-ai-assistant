@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { OnboardingSnapshot, OnboardingStateResult } from '../../../shared/onboarding';
 import type { OnboardingFormGuard } from '../../hooks/useOnboarding';
 import { onboardingErrorText } from '../../utils/onboardingActions';
+import { getAudioDeviceOptions } from '../../utils/settingsDisplay';
 const control = 'mt-2 w-full rounded-lg border border-border-muted bg-bg-elevated px-3 py-2 text-sm text-text-primary';
 const button = 'rounded-lg border border-border-muted px-3 py-2 text-xs hover:bg-bg-item-active disabled:opacity-40';
 export default function PermissionsStep({ snapshot, refresh, registerFormGuard }: {
@@ -82,14 +83,14 @@ export default function PermissionsStep({ snapshot, refresh, registerFormGuard }
       }}>允许访问麦克风</button>}
       {isMac && <button className={button} onClick={() => void api.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone')}>打开麦克风设置</button>}
       <label className="block text-sm">输入设备<select aria-label="输入设备" className={control} value={input} onChange={e => { stop(); setFallback(null); setInput(e.target.value); }}>
-        <option value="default">系统默认</option>{unavailable && <option value={input}>已保存设备（不可用）</option>}{inputs.filter(d => d.id !== 'default').map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        {getAudioDeviceOptions(inputs, input).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
       </select></label>
       {unavailable && <p role="alert" className="text-xs text-status-error">已保存的输入设备已断开，请重新选择。</p>}
       <button className={button} onClick={() => void check()}>{testing ? '停止检查' : '检查电平'}</button>
       {testing && <div className="space-y-2"><meter aria-label="声音输入电平" min={0} max={1} value={level} className="h-2 w-full" /><p className="text-xs text-text-secondary">仅检查输入音量，不录制、不转写。没有电平时请检查静音或说话。</p></div>}
       {fallback && <p className="text-xs text-status-warning">当前检查的是系统默认设备。<button className="ml-2 underline" onClick={() => { stop(); setInput(fallback); setFallback(null); }}>改用该设备</button></p>}
       <label className="block text-sm">输出设备<select aria-label="输出设备" className={control} value={output} onChange={e => { stop(); setOutput(e.target.value); }}>
-        <option value="default">系统默认</option>{output !== 'default' && !outputs.some(d => d.id === output) && <option value={output}>已保存设备（不可用）</option>}{outputs.filter(d => d.id !== 'default').map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        {getAudioDeviceOptions(outputs, output).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
       </select></label>
       <button className={button} onClick={() => void save()}>保存设备</button>
     </fieldset>

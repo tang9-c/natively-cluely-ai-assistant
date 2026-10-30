@@ -34,6 +34,7 @@ import {
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { KeyRecorder } from './ui/KeyRecorder';
 import icon from './icon.png';
+import { formatLanguageLabel, getAiProviderLabel, getSpeechProviderLabel, getAudioDeviceOptions, getMeetingRetentionLabel } from '../utils/settingsDisplay';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -236,24 +237,7 @@ const getProviderBadgeColor = (badge?: string | null, fallback?: string): string
     return fallback;
 };
 
-const languageDisplayLabels: Record<string, string> = {
-    Auto: '自动',
-    English: '英语',
-    Chinese: '中文',
-    'Chinese (Simplified)': '中文（简体）',
-    French: '法语',
-    German: '德语',
-    Italian: '意大利语',
-    Portuguese: '葡萄牙语',
-    Japanese: '日语',
-    Korean: '韩语',
-    Spanish: '西班牙语',
-    Russian: '俄语',
-    Turkish: '土耳其语',
-    Ukrainian: '乌克兰语',
-};
 
-const formatLanguageLabel = (label?: string): string => label ? (languageDisplayLabels[label] ?? label) : '';
 
 const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChange }) => {
     const isLight = useResolvedTheme() === 'light';
@@ -270,7 +254,8 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const selected = options.find(o => o.id === value);
+    const visibleOptions: ProviderOption[] = options.some(option => option.id === value) || !value || value === 'none' ? options : [{ id: value, label: getSpeechProviderLabel(value), desc: '沿用已保存的语音配置', color: 'gray', icon: <Mic size={14} /> }, ...options];
+    const selected = visibleOptions.find(option => option.id === value);
 
     const getBadgeStyle = (color?: string) => {
         switch (color) {
@@ -337,7 +322,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                         className={`absolute top-full left-0 w-full mt-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden ring-1 ring-black/5 ${isLight ? 'bg-bg-elevated border border-border-subtle' : 'bg-bg-elevated/90 border border-white/5'}`}
                     >
                         <div className="max-h-[320px] overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
-                            {options.map(option => {
+                            {visibleOptions.map(option => {
                                 const isSelected = value === option.id;
                                 return (
                                     <button
@@ -1457,24 +1442,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                         toJSON: () => d
                     }));
 
-                    setInputDevices(formatDevices(inputs));
-                    setOutputDevices(formatDevices(outputs));
+                    const inputId = localStorage.getItem('preferredInputDeviceId') || 'default';
+                    const outputId = localStorage.getItem('preferredOutputDeviceId') || 'default';
+                    setInputDevices(formatDevices(getAudioDeviceOptions(inputs, inputId)));
+                    setOutputDevices(formatDevices(getAudioDeviceOptions(outputs, outputId)));
 
-                    // Load saved preferences
-                    const savedInput = localStorage.getItem('preferredInputDeviceId');
-                    const savedOutput = localStorage.getItem('preferredOutputDeviceId');
-
-                    if (savedInput && inputs.find((d: any) => d.id === savedInput)) {
-                        setSelectedInput(savedInput);
-                    } else if (inputs.length > 0 && !selectedInput) {
-                        setSelectedInput(inputs[0].id);
-                    }
-
-                    if (savedOutput && outputs.find((d: any) => d.id === savedOutput)) {
-                        setSelectedOutput(savedOutput);
-                    } else if (outputs.length > 0 && !selectedOutput) {
-                        setSelectedOutput(outputs[0].id);
-                    }
+                    setSelectedInput(inputId);
+                    setSelectedOutput(outputId);
                 } catch (e) {
                     console.error("Error loading native devices:", e);
                 }
@@ -1597,7 +1571,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-api' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <Cloud size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
-                                        <span>QCLOUD API</span>
+                                        <span>{getAiProviderLabel('natively')}</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('ai-providers')}
@@ -1758,6 +1732,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 className="text-xs text-text-secondary mt-0.5 leading-normal"
                                                                 data-testid="meeting-retention-description"
                                                             >启用后,实时辅助正常工作,但会议结束时会丢弃转录、摘要和历史记录</p>
+                                                            <p data-testid="meeting-retention-current" className="mt-1 text-xs text-text-secondary">当前策略：{getMeetingRetentionLabel(meetingRetention)}</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -2426,14 +2401,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         options={[
                                                             ...(hasStoredNativelyKey ? [{
                                                                 id: 'qcloud-stt',
-                                                                label: 'QCLOUD API',
+                                                                label: getSpeechProviderLabel('qcloud-stt'),
                                                                 badge: '已保存',
                                                                 desc: '复用 QCLOUD API Key · 中文优先大模型 · 支持说话人分离',
                                                                 color: 'blue',
                                                                 icon: <Cloud size={14} className="text-blue-500" />,
                                                             }] : []),
-                                                            { id: 'doubao-auc', label: 'Doubao AUC（说话人分离）', badge: hasStoredDoubaoKey ? '已保存' : null, desc: '复用 Doubao API Key；AUC 大模型，支持说话人分离', color: 'orange', icon: <Mic size={14} /> },
-                                                            { id: 'local-sensevoice', label: '本地 SenseVoice', badge: null, desc: '中文优先的本地语音转写', color: 'green', icon: <Cpu size={14} /> },
+                                                            { id: 'doubao-auc', label: getSpeechProviderLabel('doubao-auc'), badge: hasStoredDoubaoKey ? '已保存' : null, desc: '复用 Doubao API Key；AUC 大模型，支持说话人分离', color: 'orange', icon: <Mic size={14} /> },
+                                                            { id: 'local-sensevoice', label: getSpeechProviderLabel('local-sensevoice'), badge: null, desc: '中文优先的本地语音转写', color: 'green', icon: <Cpu size={14} /> },
                                                         ]}
                                                     />
                                                 </div>
@@ -2760,7 +2735,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                             {/* Recognition Language Family */}
                                             <CustomSelect
-                                                label="语言"
+                                                label="会议语言"
                                                 icon={<Globe size={14} />}
                                                 value={selectedSttGroup}
                                                 options={languageGroups.map(g => ({
@@ -2884,7 +2859,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     setSelectedInput(id);
                                                     localStorage.setItem('preferredInputDeviceId', id);
                                                 }}
-                                                placeholder="默认麦克风"
+                                                placeholder="系统默认"
                                             />
 
                                             <div>
@@ -2910,7 +2885,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     setSelectedOutput(id);
                                                     localStorage.setItem('preferredOutputDeviceId', id);
                                                 }}
-                                                placeholder="默认扬声器"
+                                                placeholder="系统默认"
                                             />
 
                                             <div className="flex justify-end">

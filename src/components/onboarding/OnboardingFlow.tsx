@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, LockKeyhole } from 'lucide-react';
 import { derivePreparationDecision } from '../../../shared/onboarding';
 import type { MeetingStartResult, OnboardingSnapshot, OnboardingStateResult, OnboardingStep } from '../../../shared/onboarding';
 import { useState } from 'react';
+import { getMeetingRetentionLabel } from '../../utils/settingsDisplay';
 import PermissionsStep from './PermissionsStep';
 import SpeechStep from './SpeechStep';
 import AiServiceStep from './AiServiceStep';
@@ -109,7 +110,7 @@ export default function OnboardingFlow({ snapshot, pending, error, confirmLeave,
             <PreparationOverview snapshot={snapshot} mode={step === 'ready' ? 'ready' : 'overview'} onNavigate={onNavigate} />
             {step === 'ready' && <div className="mt-5 space-y-3 text-xs text-text-secondary">
               <p>输入：{deviceNames.input} · 输出：{deviceNames.output}</p>
-              <p>会议内容保留：{{ forever: '永久', '7d': '7 天', '30d': '30 天', never: '不保存' }[retention] ?? retention} <button className="ml-2 underline" onClick={() => onOpenSettings('general')}>修改保留策略</button></p>
+              <p>会议内容保留：{getMeetingRetentionLabel(retention)} <button className="ml-2 underline" onClick={() => onOpenSettings('general')}>修改保留策略</button></p>
               <p>这将开始真实会议。会议可能使用已配置且策略允许的备用服务。</p>
               {snapshot.progress.acceptedSystemAudioLimitation && <p className="text-status-warning">你已了解系统音频限制；仍会按原流程尝试捕获并可能请求授权。</p>}
               <button disabled={busy} className="rounded-lg border border-border-muted px-3 py-2" onClick={() => void onDefer()}>{snapshot.meeting.isActive ? '返回首页' : '稍后开始'}</button>

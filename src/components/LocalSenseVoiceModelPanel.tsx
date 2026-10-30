@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Check, Download, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
+import { getSpeechProviderLabel } from '../utils/settingsDisplay';
 
 interface SenseVoiceModelInfo {
     id: string;
@@ -130,7 +131,7 @@ export function LocalSenseVoiceModelPanel() {
                         ) : (
                             <AlertCircle size={16} className="text-amber-500" />
                         )}
-                        <h4 className="text-sm font-semibold text-text-primary">Local SenseVoice</h4>
+                        <h4 className="text-sm font-semibold text-text-primary">{getSpeechProviderLabel('local-sensevoice')}</h4>
                     </div>
                     <p className="mt-1 text-xs text-text-secondary">
                         {model?.name ?? 'SenseVoice Small Chinese'} · 中文会议优先 · 本地运行
@@ -198,7 +199,7 @@ export function LocalSenseVoiceModelPanel() {
                                     专名错词纠正
                                 </h5>
                                 <p className="mt-1 text-xs text-text-secondary">
-                                    用于修正常见、稳定的 Local SenseVoice 误识别。请为每个正确专名填写它经常被识别成的错词；只填写正确词不会提高模型识别概率。
+                                    用于修正常见、稳定的 本地 SenseVoice 误识别。请为每个正确专名填写它经常被识别成的错词；只填写正确词不会提高模型识别概率。
                                 </p>
                             </div>
                             <button

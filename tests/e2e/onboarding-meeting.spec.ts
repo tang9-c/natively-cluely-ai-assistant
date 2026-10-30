@@ -48,7 +48,7 @@ test.describe('真实会议入口与首次提示', () => {
     if (!repeated.success) throw new Error(repeated.errorCode);
     expect(repeated.snapshot.meeting.generation).toBe(state.snapshot.meeting.generation);
     await page.evaluate(() => window.electronAPI.openOnboarding({ step: 'ai' }));
-    await expect(page.getByLabel('AI 模型', { exact: true })).toBeDisabled();
+    await expect(page.getByLabel('聊天默认模型', { exact: true })).toBeDisabled();
     await onboardingScript(electronApp, 'invalidate-ai');
     await page.evaluate(() => window.electronAPI.openOnboarding({ step: 'ready' }));
     await expect(page.getByRole('button', { name: '返回当前会议', exact: true })).toBeVisible();
