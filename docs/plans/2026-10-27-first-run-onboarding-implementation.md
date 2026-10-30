@@ -890,3 +890,8 @@ E2E 对 P2、P3、P4、P4a、P5 运行 1200×800 亮色和 600×400 暗色/reduc
 状态：源码与本机自动化完成，尚未发布。`src/index.css`、`tailwind.config.js` 增加通用 info / success / warning / error 文字、背景、边框及主按钮文字 token。欢迎页与当前引导页面替换独立状态色，复用主按钮 normal / hover / disabled 变量；历史验证、限制说明和实际操作错误区分显示，不改权限、导航、服务或存储逻辑。
 
 新增 `onboarding-theme.spec.ts` 六项实际 computed style / 状态对比度回归：应用 / 系统四组合、同页切换、主按钮各状态、错误容器、开通页、未保存确认、窄窗口与首次会议提示。已加入 production 与系统音频 UI 配置。结果：开发态联合 51/51、production 14/14、系统音频单元 120/120、内容与表单 8/8、两套类型检查和生产构建通过；新状态色在三种标准表面文字对比度至少 4.5:1。真机和发行包项保持未完成。见[样式规范](../design/semantic-status-colors.md)和[验收记录](../qa/2026-10-29-onboarding-theme.md)。
+
+
+## 2.7.20 正式发布（2026-10-30）
+
+本轮 QCLOUD API、系统音频权限与初始设置主题修复已随 [2.7.20](https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.20-sha-57d25a1) 正式发布，三个平台均在 `57d25a17647daa5429d5413b76562ba733938959` 首次构建成功，14 个附件和公开地址核对完成。详见[发布与附件记录](../testing/2.7.20-build-release.md)。上述修复阶段“尚未发布”是当时状态；T13 真实账号、系统授权、有声采音和安装交互缺口仍不勾选，SEC-01 仍为用户已接受的非阻断风险。
