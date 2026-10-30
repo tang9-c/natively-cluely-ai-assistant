@@ -1,25 +1,24 @@
-## CueUp 2.7.20：修复 QCLOUD API、系统音频权限与首次设置样式
+## CueUp 2.7.21：修复首次设置配置复用与设置一致性
 
-- 首次设置正确显示 QCLOUD API，使用专用密钥和模型进行验证，并提供 QCLOUD API 平台的独立开通指引。
-- 系统音频由原生采集后端检查授权，不再因屏幕枚举失败而跳过会议采音、设备切换或恢复。CoreAudio 静音不再被屏幕权限检查误判为拒绝；真实原生错误和截图权限检查保留。
-- 权限页区分未确定和明确拒绝，刷新设备与权限会显示读取中、成功和失败结果。
-- 初始设置采用统一状态色，跟随应用亮暗主题；区分信息、成功、警告、错误及历史验证回执。
+- 首次设置的语音识别与 AI 复用已保存的 QCLOUD API Key，切换提供商后无需重复输入；仅传递密钥是否存在，不读取密钥正文。
+- 变更语言、提供商或模型后清除旧检查提示，避免把上一次“不支持语言”误显示为当前配置的结果。
+- 统一首次设置与设置页的提供商、语言、模型、设备、数据范围用语与选项；显示名称转换保持实际配置 ID 不变。
+- 正确识别并保留 Codex CLI 的通用与指定模型配置、自定义模型和历史语音提供商；配置帮助跳转到对应设置。
+- 区分“密钥已保存”和连接验证通过；历史 7/30 天保留值明确标注自动清理未启用。
 
 ## 验证
 
-- 新增系统音频权限与生命周期专项，三个平台打包前运行相关回归；PR / push 运行隔离 production UI 检查。
-- 本轮修复已通过 120 项系统音频保护、90 项 QCLOUD 相关单元、8 项内容与表单检查、51 项开发态 Electron 和最终 14 项 production 场景，以及两套类型检查和生产构建。最终 2.7.20 候选与远程包结果另记于仓库 `docs/testing/2.7.20-build-release.md`。
-- 状态色覆盖应用与系统亮暗四种组合、同页切换、按钮各状态与窄窗口；新状态文字在三种标准不透明表面上的对比度至少 4.5:1。
-- 原始验收中的窗口启动超时、production 测试适配器缺口及复跑保留在验收文档，不声称所有检查首轮均成功。
+- 本轮候选已通过 177 项单元/契约测试、58 项开发态 Electron 场景、29 项 production renderer 场景，以及类型检查和生产构建。测试类别可能交叠，不作为唯一用例总数相加。
+- 远程构建、包内架构、运行时 smoke 与最终附件结果见仓库 `docs/testing/2.7.21-build-release.md`。
 
 ## 已知限制
 
-- 凭据仍以明文 JSON 保存，SEC-01 已由用户接受为非阻断风险。本次未实施加密或旧文件迁移。
-- 真实 QCLOUD 账号 / 模型调用、完整首次会议、新设备 TCC 和实际系统音频转写等人工验收尚未完成。隔离 UI 和固定 WAV 运行时 smoke 不替代这些项目。
-- macOS 包使用 ad-hoc 签名，未配置 Developer ID 或 Apple 公证；参见附件 `INSTALL-UNSIGNED-MACOS.txt`。Windows 包未配置 Authenticode 证书，SmartScreen 可能提示无法识别发布者。
+- 凭据仍为明文 JSON，SEC-01 为用户明确接受的非阻断风险。
+- 真实 QCLOUD 账号/模型响应、新设备 TCC、有声采集与完整会议、物理设备热插拔、新安装包人工亮暗主题验收尚未执行；隔离 UI 和固定 WAV smoke 不替代这些项目。
+- macOS 为 ad-hoc 签名，未配置 Developer ID 或 Apple 公证；参见附件 `INSTALL-UNSIGNED-MACOS.txt`。Windows 未配置 Authenticode。
 
 ## 下载选择
 
-- Apple Silicon Mac：文件名含 `arm64` 的 DMG 或 ZIP。
-- Intel Mac：文件名不含 `arm64` 的 macOS DMG 或 ZIP。
-- Windows x64：`CueUp-Setup-2.7.20.exe`；便携版为 `CueUp.2.7.20.exe`。
+- Apple Silicon Mac：含 `arm64` 的 DMG 或 ZIP。
+- Intel Mac：不含 `arm64` 的 macOS DMG 或 ZIP。
+- Windows x64：`CueUp-Setup-2.7.21.exe`；便携版 `CueUp.2.7.21.exe`。
