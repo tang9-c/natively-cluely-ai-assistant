@@ -1,0 +1,428 @@
+{
+  "version": "2.7.21",
+  "tag": "v2.7.21-sha-226d8e0",
+  "source_sha": "226d8e0b6c21fc364c209215860d6b056d94a201",
+  "draft": false,
+  "assets": [
+    {
+      "name": "CueUp-2.7.21-arm64-mac.zip",
+      "size": 307167350,
+      "digest": "sha256:d9ee64fd6be62fc1a5226ac8a191b245c12c777bf99042388899494d1dcfd0fd",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-arm64-mac.zip"
+    },
+    {
+      "name": "CueUp-2.7.21-arm64-mac.zip.blockmap",
+      "size": 309907,
+      "digest": "sha256:cc7841de4ba48c8ee5d63a085774e76fe6444ae31cd4f972293bd5de55e660de",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-arm64-mac.zip.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.21-arm64.dmg",
+      "size": 322102548,
+      "digest": "sha256:c66f28d71f540b9e3f60aa2a66877c2f861ab2f59f3371e7ff04c9ef5c2722fb",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-arm64.dmg"
+    },
+    {
+      "name": "CueUp-2.7.21-arm64.dmg.blockmap",
+      "size": 335206,
+      "digest": "sha256:c5d24577b1ff7d73e9552458a87e6382eed2f6fca92ae1b6c31b1b0402a7789a",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-arm64.dmg.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.21-mac.zip",
+      "size": 311988558,
+      "digest": "sha256:461b57dbcb513c9e17d336988684300b6c4e53c6130b3a8ef03a405a6b28bb1e",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-mac.zip"
+    },
+    {
+      "name": "CueUp-2.7.21-mac.zip.blockmap",
+      "size": 317088,
+      "digest": "sha256:dd7b162f1c56d1d0639d04b15207a373a1a6a0863e6de3b13c4504211c5cf47e",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-mac.zip.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.21.dmg",
+      "size": 326907229,
+      "digest": "sha256:439f60dd27964edeb6489d74cbbe76a7c059af37eb33b4037031ddaaf31a6e71",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21.dmg"
+    },
+    {
+      "name": "CueUp-2.7.21.dmg.blockmap",
+      "size": 342523,
+      "digest": "sha256:628676ca2b1c28b6720df30b254c24e584d454a29955c118629d1c486f01dac9",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21.dmg.blockmap"
+    },
+    {
+      "name": "CueUp-Setup-2.7.21.exe",
+      "size": 272231918,
+      "digest": "sha256:b5333388c5b1e44de87f98bddd339b7d6fcdd084bc977237a952d6286900abe2",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-Setup-2.7.21.exe"
+    },
+    {
+      "name": "CueUp-Setup-2.7.21.exe.blockmap",
+      "size": 283964,
+      "digest": "sha256:c99809423c60f2823029ec8b19d8e572025c95bed455af082cc24f251e981aee",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-Setup-2.7.21.exe.blockmap"
+    },
+    {
+      "name": "CueUp.2.7.21.exe",
+      "size": 271987095,
+      "digest": "sha256:1f432dbf39ac409c933f2acfc662e06d8d5bf35d35ed666bc8c470f0ee498c50",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp.2.7.21.exe"
+    },
+    {
+      "name": "INSTALL-UNSIGNED-MACOS.txt",
+      "size": 595,
+      "digest": "sha256:b0eeda2281edaff805ad3658e54ecb592622de839c23b5966c730d705ffb52b9",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/INSTALL-UNSIGNED-MACOS.txt"
+    },
+    {
+      "name": "OPEN-UNSIGNED-CUEUP-MAC.sh",
+      "size": 712,
+      "digest": "sha256:dbe354af3d4ef3af24174e920a1198ba53347b6cf939560659d57c76d93e02e4",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/OPEN-UNSIGNED-CUEUP-MAC.sh"
+    },
+    {
+      "name": "latest.yml",
+      "size": 342,
+      "digest": "sha256:86ba886d0c027def16c45c9f1c67a08475f00ab44465ba0a81830a7dc9491da6",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/latest.yml"
+    }
+  ],
+  "builds": [
+    {
+      "id": 41034045960,
+      "name": "Build ARM64 Mac",
+      "head_sha": "226d8e0b6c21fc364c209215860d6b056d94a201",
+      "attempt": 1,
+      "conclusion": "success",
+      "artifacts": [
+        {
+          "id": 12967991181,
+          "name": "cueup-arm64-mac-41034045960",
+          "size": 629105126,
+          "digest": "sha256:0749eca5eff76c3fc010b944a3794864b0826b74534602dfda814f12199c045d"
+        }
+      ]
+    },
+    {
+      "id": 41034040782,
+      "name": "Build Intel Mac",
+      "head_sha": "226d8e0b6c21fc364c209215860d6b056d94a201",
+      "attempt": 1,
+      "conclusion": "success",
+      "artifacts": [
+        {
+          "id": 12967203829,
+          "name": "cueup-intel-mac-41034040782",
+          "size": 638754581,
+          "digest": "sha256:ed4180b7327fdaefd862b6acbc4529942bea3588b363979686ef15a381eace84"
+        }
+      ]
+    },
+    {
+      "id": 41034035350,
+      "name": "Build Windows x64",
+      "head_sha": "226d8e0b6c21fc364c209215860d6b056d94a201",
+      "attempt": 1,
+      "conclusion": "success",
+      "artifacts": [
+        {
+          "id": 12968125923,
+          "name": "cueup-windows-x64-41034035350",
+          "size": 544585264,
+          "digest": "sha256:8542c5347e0b5f6f406a8b0cb4494536ba697d94749a3674cb3edb3f39a3f4c8"
+        }
+      ]
+    }
+  ],
+  "published_at": "2026-10-30T09:48:20Z",
+  "release_url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.21-sha-226d8e0",
+  "release_id": 428862199,
+  "latest_verified": true,
+  "public_download_checks": [
+    {
+      "name": "CueUp-2.7.21-arm64-mac.zip",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-arm64-mac.zip",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-2.7.21-arm64-mac.zip.blockmap",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-arm64-mac.zip.blockmap",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-2.7.21-arm64.dmg",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-arm64.dmg",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-2.7.21-arm64.dmg.blockmap",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-arm64.dmg.blockmap",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-2.7.21-mac.zip",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-mac.zip",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-2.7.21-mac.zip.blockmap",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21-mac.zip.blockmap",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-2.7.21.dmg",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21.dmg",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-2.7.21.dmg.blockmap",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-2.7.21.dmg.blockmap",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-Setup-2.7.21.exe",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-Setup-2.7.21.exe",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp-Setup-2.7.21.exe.blockmap",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp-Setup-2.7.21.exe.blockmap",
+      "http_status": 200
+    },
+    {
+      "name": "CueUp.2.7.21.exe",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/CueUp.2.7.21.exe",
+      "http_status": 200
+    },
+    {
+      "name": "INSTALL-UNSIGNED-MACOS.txt",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/INSTALL-UNSIGNED-MACOS.txt",
+      "http_status": 200
+    },
+    {
+      "name": "latest.yml",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/latest.yml",
+      "http_status": 200
+    },
+    {
+      "name": "OPEN-UNSIGNED-CUEUP-MAC.sh",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.21-sha-226d8e0/OPEN-UNSIGNED-CUEUP-MAC.sh",
+      "http_status": 200
+    }
+  ],
+  "runtime_reports": [
+    {
+      "id": 41034045960,
+      "name": "Build ARM64 Mac",
+      "reports": [
+        {
+          "step": "Verify packaged ARM64 runtime and native architecture",
+          "report": {
+            "ok": true,
+            "platform": "darwin",
+            "arch": "arm64",
+            "errors": []
+          }
+        },
+        {
+          "step": "Smoke test final ARM64 packaged runtime",
+          "report": {
+            "ok": true,
+            "platform": "darwin",
+            "arch": "arm64",
+            "results": {
+              "pdf": {
+                "ok": true,
+                "chars": 38
+              },
+              "pptx": {
+                "ok": true,
+                "slideCount": 1
+              },
+              "embedding": {
+                "ok": true,
+                "dimensions": 384
+              },
+              "database": {
+                "ok": true
+              },
+              "rag": {
+                "ok": true,
+                "topRowId": 1
+              },
+              "sensevoice": {
+                "ok": true,
+                "chars": 240,
+                "providerRequested": "cueup-invalid-gpu",
+                "providerActual": "cpu",
+                "fallbackReason": "candidate_initialization_failed",
+                "fallbackVerified": true
+              }
+            }
+          }
+        },
+        {
+          "step": "Validate ARM64 manual update assets",
+          "report": {
+            "ok": true,
+            "version": "2.7.21",
+            "arch": "arm64",
+            "dmg": "CueUp-2.7.21-arm64.dmg",
+            "zip": "CueUp-2.7.21-arm64-mac.zip",
+            "errors": []
+          }
+        }
+      ]
+    },
+    {
+      "id": 41034040782,
+      "name": "Build Intel Mac",
+      "reports": [
+        {
+          "step": "Verify packaged Intel runtime and native architecture",
+          "report": {
+            "ok": true,
+            "platform": "darwin",
+            "arch": "x64",
+            "errors": []
+          }
+        },
+        {
+          "step": "Smoke test final Intel packaged runtime",
+          "report": {
+            "ok": true,
+            "platform": "darwin",
+            "arch": "x64",
+            "results": {
+              "pdf": {
+                "ok": true,
+                "chars": 38
+              },
+              "pptx": {
+                "ok": true,
+                "slideCount": 1
+              },
+              "embedding": {
+                "ok": true,
+                "dimensions": 384
+              },
+              "database": {
+                "ok": true
+              },
+              "rag": {
+                "ok": true,
+                "topRowId": 1
+              },
+              "sensevoice": {
+                "ok": true,
+                "chars": 239,
+                "providerRequested": "cueup-invalid-gpu",
+                "providerActual": "cpu",
+                "fallbackReason": "candidate_initialization_failed",
+                "fallbackVerified": true
+              }
+            }
+          }
+        },
+        {
+          "step": "Validate Intel manual update assets",
+          "report": {
+            "ok": true,
+            "version": "2.7.21",
+            "arch": "x64",
+            "dmg": "CueUp-2.7.21.dmg",
+            "zip": "CueUp-2.7.21-mac.zip",
+            "errors": []
+          }
+        }
+      ]
+    },
+    {
+      "id": 41034035350,
+      "name": "Build Windows x64",
+      "reports": [
+        {
+          "step": "Verify packaged Windows runtime and native architecture",
+          "report": {
+            "ok": true,
+            "platform": "win32",
+            "arch": "x64",
+            "errors": []
+          }
+        },
+        {
+          "step": "Verify Windows updater metadata and installer integrity",
+          "report": {
+            "ok": true,
+            "version": "2.7.21",
+            "installer": "CueUp-Setup-2.7.21.exe",
+            "size": 272231918,
+            "errors": []
+          }
+        },
+        {
+          "step": "Smoke test final Windows packaged runtime",
+          "report": {
+            "ok": true,
+            "platform": "win32",
+            "arch": "x64",
+            "results": {
+              "pdf": {
+                "ok": true,
+                "chars": 38
+              },
+              "pptx": {
+                "ok": true,
+                "slideCount": 1
+              },
+              "embedding": {
+                "ok": true,
+                "dimensions": 384
+              },
+              "database": {
+                "ok": true
+              },
+              "rag": {
+                "ok": true,
+                "topRowId": 1
+              },
+              "sensevoice": {
+                "ok": true,
+                "chars": 239,
+                "providerRequested": "cueup-invalid-gpu",
+                "providerActual": "cpu",
+                "fallbackReason": "candidate_initialization_failed",
+                "fallbackVerified": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "aggregators": [
+    {
+      "conclusion": "cancelled",
+      "head_sha": "226d8e0b6c21fc364c209215860d6b056d94a201",
+      "html_url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41035570679",
+      "id": 41035570679,
+      "status": "completed"
+    },
+    {
+      "conclusion": "cancelled",
+      "head_sha": "226d8e0b6c21fc364c209215860d6b056d94a201",
+      "html_url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41035300907",
+      "id": 41035300907,
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "226d8e0b6c21fc364c209215860d6b056d94a201",
+      "html_url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41035013086",
+      "id": 41035013086,
+      "status": "completed"
+    }
+  ]
+}
