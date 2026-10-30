@@ -5,7 +5,7 @@ test.use({ onboardingMode: 'fresh', onboardingScenario: 'permission-denied' });
 
 test('manual refresh clears obsolete system audio denial and shows authorized-but-not-captured status', async ({ page, electronApp }, testInfo) => {
   await enterOnboardingStep(page, '权限与设备');
-  await expect(page.getByTestId('onboarding-system-audio-permission')).toContainText('应用当前读取的屏幕录制权限未开启');
+  await expect(page.getByTestId('onboarding-system-audio-permission')).toContainText('系统音频采集权限不可用');
   await page.screenshot({ path: testInfo.outputPath('permissions-app-denied.png') });
   await page.getByRole('button', { name: '了解限制，继续设置', exact: true }).click();
   await onboardingScript(electronApp, 'restore-permissions');
@@ -16,6 +16,37 @@ test('manual refresh clears obsolete system audio denial and shows authorized-bu
   await page.screenshot({ path: testInfo.outputPath('permissions-restored.png') });
   const state = await page.evaluate(() => window.electronAPI.getOnboardingState());
   expect(state.success && state.snapshot.progress.acceptedSystemAudioLimitation).toBe(false);
+});
+
+for (const theme of ['light', 'dark'] as const) test(`screen-only denial remains pending audio verification in ${theme} theme`, async ({ page, electronApp }) => {
+  await electronApp.evaluate(({ app }) => {
+    const require = process.getBuiltinModule('node:module').createRequire(app.getAppPath() + '/screen-only-probe.cjs');
+    const state = require(app.getAppPath() + '/dist-electron/electron/main.js').AppState.getInstance();
+    const { createOnboardingReadinessReader } = require(app.getAppPath() + '/dist-electron/electron/services/onboarding/OnboardingReadiness.js');
+    const fixture = state.onboardingFixture;
+    fixture.permissions.microphone = 'granted';
+    state.onboardingService.setCheckReader(createOnboardingReadinessReader({ isPackaged: () => true,
+      readPermissions: async () => fixture.permissions, inputDevices: () => fixture.devices,
+      outputDevices: () => fixture.outputs, speechCheck: () => fixture.readConfiguration('stt') }));
+  });
+  await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
+  await enterOnboardingStep(page, '权限与设备');
+  const audio = page.getByTestId('onboarding-system-audio-permission');
+  await expect(audio).toContainText('尚未确认系统音频授权');
+  await expect(audio).toHaveClass(/text-status-info/);
+  await expect(page.getByRole('button', { name: /了解.*系统音频限制|了解限制，继续设置/ })).toHaveCount(0);
+  let state = await page.evaluate(() => window.electronAPI.getOnboardingState());
+  expect(state.success && state.snapshot.checks.systemAudio).toEqual({ status: 'pending_runtime', evidenceSource: 'unavailable' });
+  const permissions = await page.evaluate(() => window.electronAPI.checkPermissions());
+  expect(permissions.screen).toBe('denied');
+  await onboardingScript(electronApp, 'restore-permissions');
+  await page.getByRole('button', { name: '刷新设备与权限', exact: true }).click();
+  await expect(audio).toContainText('尚未确认系统音频授权');
+  await expect(audio).not.toContainText('系统授权已开启');
+  state = await page.evaluate(() => window.electronAPI.getOnboardingState());
+  expect(state.success && state.snapshot.progress.acceptedSystemAudioLimitation).toBe(false);
+  await page.getByRole('button', { name: '继续', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '设置语音识别', exact: true })).toBeVisible();
 });
 
 test('refresh gives progress, reports failure and clears the old read error on successful retry', async ({ page, electronApp }) => {

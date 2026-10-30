@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.22] - 2026-10-30
+
+### Fixed
+
+- Stop inferring system-audio denial or authorization from screen-recording permission during initial setup. Show pending runtime verification until the selected audio backend checks access when a meeting starts.
+- Clear obsolete system-audio limitation acknowledgements after a successful passive refresh. Preserve permission-read errors, missing-device checks, actual capture failures and screenshot authorization checks.
+
+### Testing and known limitations
+
+- Add unit/IPC and light/dark production-renderer regressions for screen-only permission results and refresh. Candidate and remote build results are recorded in `docs/testing/2.7.22-build-release.md`; overlapping suites are not summed as unique tests.
+- Real macOS TCC authorization and voiced capture with the new installer remain unverified. This release does not change signing identity or credential storage; SEC-01 remains an accepted, non-blocking risk.
+
 ## [2.7.21] - 2026-10-30
 
 ### Fixed
