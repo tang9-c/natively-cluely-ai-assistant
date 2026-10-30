@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-29",
+  "environment": "development Electron E2E, isolated fresh userData, fake QCLOUD key, blocked network, intercepted external browser launch",
+  "liveProviderValidated": false,
+  "productionResourceCasesPassed": 5,
+  "screenshots": [
+    {
+      "file": "qcloud-saved.png",
+      "width": 1200,
+      "height": 800,
+      "bytes": 73671,
+      "sha256": "5d27cf904bd44cbef0fc32590c3c9fe56b04bde2cedb744239c96bda94929cf8"
+    },
+    {
+      "file": "qcloud-provisioning.png",
+      "width": 1200,
+      "height": 800,
+      "bytes": 65824,
+      "sha256": "5b88381218309c9b0a4b978ad02d21d825a1df9711f132618d4199cd4a34d1c5"
+    }
+  ]
+}

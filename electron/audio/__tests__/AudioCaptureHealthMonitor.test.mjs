@@ -230,7 +230,7 @@ test('production resume and output-route changes share one rebuild per channel',
   assert.equal(app._captureHealth.mic.attempts,1); assert.equal(app._captureHealth.system.attempts,1);
   app.cancelAudioRecovery(); assert.equal(c.timers.size,0);
 });
-test('production reconfigure invalidates old release work and ignores stop during permission await', async () => {
+test('production reconfigure invalidates old release work and ignores stop during native release await', async () => {
   const {app,c,instances}=mainFixture();
   app.microphoneCapture.emit('error',new Error('unplugged')); await c.tick(0);
   await app.reconfigureAudio('fictional-mic','fictional-output');
@@ -238,10 +238,10 @@ test('production reconfigure invalidates old release work and ignores stop durin
   await c.tick(1500); assert.equal(instances.length,4,'old recovery must not replace the newly selected mic');
   app.cancelAudioRecovery(); assert.equal(c.timers.size,0);
   const g=mainFixture(); let release;
-  g.control.permissionAwait=new Promise(resolve=>{release=resolve;});
+  g.app.systemAudioCapture.destroy=()=>new Promise(resolve=>{release=resolve;});
   const pending=g.app.reconfigureAudio('changed','changed'); await g.c.tick(0);
   g.app.isMeetingActive=false; g.app._audioCaptureEpoch++; g.app.cancelAudioRecovery();
-  release({effectiveDenied:false}); await pending;
+  release(); await pending;
   assert.equal(g.instances.length,2); assert.equal(g.c.timers.size,0);
 });
 test('diagnostics polls raw counters only and missing or invalid native fields never become zero-heartbeats', () => {

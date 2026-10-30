@@ -46,7 +46,7 @@ test('QCLOUD onboarding explicitly defers network validation until after secure 
 test('provisioning opens only the exact approved HTTPS destinations through the existing external URL handler', async () => {
   const { ipcHandler } = await import('./helpers/onboardingRuntime.mjs'); const opened = [];
   const handler = ipcHandler('open-external', { URL, shell: { openExternal: async url => opened.push(url) }, process: { platform: 'linux' } });
-  const approved = ['https://docs.volcengine.com/docs/ark/quick-start-beginner?lang=zh', 'https://docs.volcengine.com/docs/ark/manage-api-keys?lang=zh', 'https://ark.volcengine.com/region:cn-beijing/apikey'];
-  for (const url of [...approved, 'http://docs.volcengine.com/docs/ark/quick-start-beginner?lang=zh', 'https://docs.volcengine.com/other', 'https://docs.volcengine.com/docs/ark/quick-start-beginner?lang=zh&redirect=elsewhere', 'https://ark.volcengine.com/region:cn-beijing/apikey#unexpected']) await handler({}, url);
+  const approved = ['https://aigw.feigenbaum.com.cn/', 'https://docs.volcengine.com/docs/ark/quick-start-beginner?lang=zh', 'https://docs.volcengine.com/docs/ark/manage-api-keys?lang=zh', 'https://ark.volcengine.com/region:cn-beijing/apikey'];
+  for (const url of [...approved, 'http://aigw.feigenbaum.com.cn/', 'https://aigw.feigenbaum.com.cn/?redirect=elsewhere', 'https://aigw.feigenbaum.com.cn/unapproved', 'https://aigw.feigenbaum.com.cn.example.test/', 'http://docs.volcengine.com/docs/ark/quick-start-beginner?lang=zh', 'https://docs.volcengine.com/other', 'https://docs.volcengine.com/docs/ark/quick-start-beginner?lang=zh&redirect=elsewhere', 'https://ark.volcengine.com/region:cn-beijing/apikey#unexpected']) await handler({}, url);
   assert.deepEqual(opened, approved);
 });

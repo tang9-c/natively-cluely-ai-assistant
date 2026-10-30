@@ -27,12 +27,19 @@ module.exports = {
         button: {
           primary: {
             bg: 'var(--btn-primary-bg)',
+            text: 'var(--btn-primary-text)',
             hover: 'var(--btn-primary-hover)',
             'disabled-bg': 'var(--btn-primary-disabled-bg)',
             'disabled-border': 'var(--btn-primary-disabled-border)',
             'disabled-text': 'var(--btn-primary-disabled-text)',
             'shadow-color': 'var(--btn-primary-shadow-color)',
           }
+        },
+        status: {
+          info: { DEFAULT: 'var(--status-info-text)', bg: 'var(--status-info-bg)', border: 'var(--status-info-border)' },
+          success: { DEFAULT: 'var(--status-success-text)', bg: 'var(--status-success-bg)', border: 'var(--status-success-border)' },
+          warning: { DEFAULT: 'var(--status-warning-text)', bg: 'var(--status-warning-bg)', border: 'var(--status-warning-border)' },
+          error: { DEFAULT: 'var(--status-error-text)', bg: 'var(--status-error-bg)', border: 'var(--status-error-border)' },
         },
         text: {
           primary: 'var(--text-primary)',

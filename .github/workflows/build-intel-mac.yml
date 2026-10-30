@@ -50,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Verify system audio permission regressions
+        run: npm run test:system-audio-permissions
+
       - name: Read package version
         id: package-version
         run: node -e "process.stdout.write('version=' + require('./package.json').version + '\n')" >> "$GITHUB_OUTPUT"

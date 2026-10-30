@@ -51,6 +51,21 @@
   --text-secondary: #A0A0A0;
   --text-tertiary: #606060;
 
+  /* Shared status colors: ordinary application surfaces, keyed by data-theme. */
+  --status-info-text: #93C5FD;
+  --status-info-bg: #172C45;
+  --status-info-border: #315980;
+  --status-success-text: #6EE7B7;
+  --status-success-bg: #102D25;
+  --status-success-border: #28624D;
+  --status-warning-text: #FCD34D;
+  --status-warning-bg: #33270F;
+  --status-warning-border: #785A1E;
+  --status-error-text: #FDA4AF;
+  --status-error-bg: #351B27;
+  --status-error-border: #7D3549;
+
+
   --border-subtle: transparent;
   --border-muted: #333333;
 
@@ -102,6 +117,7 @@
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
 
   /* Primary Action Button Defaults (Dark) */
+  --btn-primary-text: #FFFFFF;
   --btn-primary-bg: #2563EB; /* blue-600 */
   --btn-primary-hover: #3b82f6; /* blue-500 */
   --btn-primary-disabled-bg: rgba(30, 58, 138, 0.3); /* blue-900/30 */
@@ -147,6 +163,19 @@
   --text-primary:      #111827;   /* gray-900 — near-black, warm                  */
   --text-secondary:    #6B7280;   /* gray-500 — comfortable secondary             */
   --text-tertiary:     #9CA3AF;   /* gray-400 — soft hints and labels             */
+
+  --status-info-text: #1D4ED8;
+  --status-info-bg: #EFF6FF;
+  --status-info-border: #BFDBFE;
+  --status-success-text: #047857;
+  --status-success-bg: #ECFDF5;
+  --status-success-border: #A7F3D0;
+  --status-warning-text: #92400E;
+  --status-warning-bg: #FFFBEB;
+  --status-warning-border: #FCD34D;
+  --status-error-text: #BE123C;
+  --status-error-bg: #FFF1F2;
+  --status-error-border: #FECDD3;
 
   /* ── Borders — barely-there structural lines ── */
   --border-subtle:     rgba(0, 0, 0, 0.07);   /* card outlines, dividers          */

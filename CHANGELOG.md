@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.7.20] - 2026-10-29
+
+### Fixed
+
+- Show QCLOUD API correctly in initial setup, preserve existing internal provider identifiers, use its dedicated key and chat model for validation, and provide a separate account/token guide at the QCLOUD API portal.
+- Let the native system-audio backend check its own authorization instead of blocking meeting startup, device changes or recovery on screen enumeration. Do not interpret CoreAudio silence as a screen permission denial; retain actual native failure handling and screenshot permission checks.
+- Distinguish undetermined permissions from explicit denial and show progress, success and failure when refreshing devices and permissions.
+- Use shared theme-aware information, success, warning and error colors throughout initial setup. Match the application's selected theme even when the OS theme differs, and distinguish historical checks from current successful validation.
+
+### Testing and known limitations
+
+- Add focused system-audio permission/lifecycle tests and production-renderer theme regressions. Run the permission unit suite before packaging all three platforms and run isolated production UI checks on pushes and pull requests.
+- Local verification before the version bump passed 120 system-audio tests, 90 QCLOUD-related unit tests, eight content/form checks, 51 joint development Electron scenarios, and the final 14-scenario production suite. Both TypeScript checks and production builds passed. Release-candidate verification and remote results are recorded separately in `docs/testing/2.7.20-build-release.md`.
+- Credentials remain plaintext JSON: SEC-01 is the user-accepted, non-blocking risk. Real QCLOUD account/model validation, fresh-device TCC, actual microphone/system-audio transcription and interactive installer acceptance remain unverified; isolated UI tests and fixed-audio runtime smoke checks do not replace those checks.
+
 ## [2.7.19] - 2026-10-28
 
 ### Fixed

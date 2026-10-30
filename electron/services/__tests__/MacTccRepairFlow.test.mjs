@@ -108,21 +108,12 @@ test('startup permissions toaster is skipped when effective permissions are alre
   onboarding.snapshot.progress.origin = 'fresh'; effect(); await new Promise(setImmediate); assert.equal(reads, 1); assert.equal(shown, 0);
 });
 
-test('startup does not trigger the macOS Screen Recording TCC prompt', () => {
+test('startup neither probes screen capture nor announces audio denial based on screen status', () => {
   const main = read('electron/main.ts');
-  const startupBlock = main.match(/\/\/ macOS Screen Recording status check\.[\s\S]*?\/\/ Recover unprocessed meetings/);
-
-  assert.ok(startupBlock, 'startup permission block should be present');
-  assert.doesNotMatch(
-    startupBlock[0],
-    /desktopCapturer\.getSources\(\{[\s\S]*?types: \['screen'\]/,
-    'startup must not call desktopCapturer.getSources because it triggers the Screen Recording TCC dialog',
-  );
-  assert.doesNotMatch(
-    startupBlock[0],
-    /resolveMacScreenCaptureCapability\('startup permission check'\)/,
-    'startup denied-status notification must not run a screen source capability probe',
-  );
+  const startup = main.slice(main.indexOf('async function initializeApp()'), main.indexOf('// Recover unprocessed meetings'));
+  assert.doesNotMatch(startup, /desktopCapturer\.getSources\(/);
+  assert.doesNotMatch(startup, /systemPreferences\.getMediaAccessStatus\('screen'\)/);
+  assert.doesNotMatch(startup, /['"]system-audio-permission-denied['"]/);
 });
 
 test('permissions check reports screen status without probing screen sources', async () => {

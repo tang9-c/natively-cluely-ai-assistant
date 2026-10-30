@@ -31,6 +31,9 @@ jobs:
         shell: bash
         run: npm install
 
+      - name: Verify system audio permission regressions
+        run: npm run test:system-audio-permissions
+
       - name: Read package version
         id: package-version
         shell: bash

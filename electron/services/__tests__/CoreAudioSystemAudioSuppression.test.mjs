@@ -39,21 +39,28 @@ test('system audio diagnostics distinguish raw capture from emitted STT silence'
   assert.match(nativeLib, /diagnostics\.record_silence\(\)/);
 });
 
-test('ordinary CoreAudio zero-fill stays diagnostic; confirmed permission denial emits a capture error', async () => {
+test('CoreAudio zero-fill never infers audio denial from screen permission; SCK retains screen diagnostics', async () => {
   const main = read('electron/main.ts');
   const tree = ts.createSourceFile('main.ts', main, ts.ScriptTarget.Latest, true);
   const cls = tree.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'AppState');
   const method = cls.members.find(node => node.name?.getText(tree) === 'handleZeroFilledSystemAudio').getText(tree);
-  let denied = false;
-  const context = { console: { warn() {} }, resolveMacScreenCaptureCapability: async () => ({ effectiveDenied: denied }) };
+  let denied = false, backend = 'coreaudio', probes = 0;
+  const context = { console: { warn() {} }, resolveMacScreenCaptureCapability: async () => { probes++; return { effectiveDenied: denied }; } };
   vm.runInNewContext(ts.transpileModule(`class Probe { ${method} };globalThis.Probe=Probe;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
   const events = [];
-  const capture = { getBackendName: () => 'coreaudio', emit: (name, error) => events.push({ name, message: error.message }) };
+  const capture = { getBackendName: () => backend, emit: (name, error) => events.push({ name, message: error.message }) };
   const probe = new context.Probe();
   Object.assign(probe, { systemAudioCapture: capture, isMeetingActive: true });
-  await probe.handleZeroFilledSystemAudio(capture, '', 10_000);
-  assert.deepEqual(events, []);
-  denied = true;
+  for (const nonScreenBackend of ['coreaudio', 'wasapi', 'unknown']) {
+    backend = nonScreenBackend;
+    for (const screenDenied of [false, true]) {
+      denied = screenDenied;
+      await probe.handleZeroFilledSystemAudio(capture, '', 10_000);
+      assert.deepEqual(events, []);
+      assert.equal(probes, 0);
+    }
+  }
+  backend = 'sck';
   await probe.handleZeroFilledSystemAudio(capture, '', 10_000);
   assert.deepEqual(events, [{ name: 'error', message: 'Screen recording permission denied' }]);
   probe.isMeetingActive = false;

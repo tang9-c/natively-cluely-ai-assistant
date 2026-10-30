@@ -65,3 +65,36 @@ test('AI shares 60-second cancellation and busy retention with STT; late output 
   resolve({ provider: 'doubao', modelId: 'doubao-selected', depth: 'model_response' }); await new Promise(setImmediate);
   assert.equal(service.getSnapshot().progress.validationReceipts.ai.result, 'failed');
 });
+
+test('QCLOUD legacy selector validates its real chat model with the dedicated saved key', async () => {
+  const requests = []; const selected = { provider: 'natively', modelId: 'natively' };
+  const run = executor({ ...selected, apiKey: 'saved-qcloud-key', transcriptAllowed: true }, async (...args) => {
+    requests.push(args); return { status: 200, data: { model: 'lite32k', choices: [{ message: { content: 'OK' } }] } };
+  });
+  assert.deepEqual(await run(selected, new AbortController().signal), { ...selected, depth: 'model_response' });
+  assert.equal(requests[0][0], 'https://aigw.feigenbaum.com.cn/v1/chat/completions');
+  assert.equal(requests[0][1].model, 'lite32k');
+  assert.deepEqual(requests[0][1].messages, [{ role: 'user', content: 'Reply with OK.' }]);
+  assert.equal(requests[0][2].headers.Authorization, 'Bearer saved-qcloud-key');
+});
+
+test('QCLOUD preserves scope, authentication and returned-model checks without fallback', async () => {
+  const selected = { provider: 'natively', modelId: 'natively' };
+  let calls = 0;
+  await assert.rejects(executor({ ...selected, apiKey: 'key', transcriptAllowed: false }, async () => { calls++; })(selected, new AbortController().signal), e => e.code === 'scope_denied');
+  assert.equal(calls, 0);
+  await assert.rejects(executor({ ...selected, apiKey: 'key', transcriptAllowed: true }, async () => { throw { response: { status: 401 } }; })(selected, new AbortController().signal), e => e.code === 'authentication_failed');
+  await assert.rejects(executor({ ...selected, apiKey: 'key', transcriptAllowed: true }, async () => ({ status: 200, data: { model: 'unexpected', choices: [{ message: { content: 'OK' } }] } }))(selected, new AbortController().signal), e => e.code === 'model_unavailable');
+});
+
+test('main process reads QCLOUD credentials instead of Doubao credentials for the QCLOUD selection', async () => {
+  const { mainInitializer } = await import('./helpers/onboardingRuntime.mjs');
+  const deps = mainInitializer('aiExecutor', {
+    createAiExecutor: deps => deps,
+    appState: { onboardingService: { getSnapshot: () => ({ checks: { ai: { provider: 'natively', modelId: 'natively' } } }) } },
+    credentialsManagerSingleton: { getNativelyApiKey: () => 'dedicated-qcloud-key', getDoubaoLlmApiKey: () => 'unrelated-doubao-key' },
+    SettingsManager: { getInstance: () => ({ get() {} }) },
+    require: () => ({ CodexCliService: { normalizeConfig: value => value } }),
+  });
+  assert.equal(deps.readSavedConfig().apiKey, 'dedicated-qcloud-key');
+});

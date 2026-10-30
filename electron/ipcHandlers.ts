@@ -3661,6 +3661,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         parsed.hostname === 'mail.google.com' &&
         parsed.pathname === '/mail/';
       const allowedOnboardingProvisioningUrl = [
+        'https://aigw.feigenbaum.com.cn/',
         'https://docs.volcengine.com/docs/ark/quick-start-beginner?lang=zh',
         'https://docs.volcengine.com/docs/ark/manage-api-keys?lang=zh',
         'https://ark.volcengine.com/region:cn-beijing/apikey',

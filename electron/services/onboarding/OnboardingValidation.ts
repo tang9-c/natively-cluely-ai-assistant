@@ -1,3 +1,4 @@
+import { QCLOUD_CHAT_COMPLETIONS_ENDPOINT, QCLOUD_CHAT_MODEL } from '../../llm/QCloudLlmConstants';
 import type { OnboardingCheck, OnboardingErrorCode, ValidationOutcome, ValidationReceipt, ValidationTarget } from '../../../shared/onboarding';
 import { OnboardingError, OnboardingService } from './OnboardingService';
 import type { LocalSttWorkerLease } from '../../audio/LocalSttWorkerPool';
@@ -133,14 +134,16 @@ type ValidationPost = (url: string, body: unknown, options: any) => Promise<{ st
 /** Shared fixed-input probe. Never receives a meeting prompt, transcript or tools. */
 export async function requestSelectedAiModel(provider: string, modelId: string, apiKey: string, signal?: AbortSignal,
     post: ValidationPost = (url, body, options) => require('axios').post(url, body, options)): Promise<void> {
-    if (provider !== 'doubao') throw new OnboardingError('unsupported_check');
+    if (provider !== 'doubao' && !(provider === 'natively' && modelId === 'natively')) throw new OnboardingError('unsupported_check');
+    const requestModel = provider === 'natively' ? QCLOUD_CHAT_MODEL : modelId;
+    const endpoint = provider === 'natively' ? QCLOUD_CHAT_COMPLETIONS_ENDPOINT : 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
     if (!apiKey?.trim()) throw new OnboardingError('credentials_missing');
     try {
-        const result = await post('https://ark.cn-beijing.volces.com/api/v3/chat/completions',
-            { model: modelId, messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 16 },
+        const result = await post(endpoint,
+            { model: requestModel, messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 16 },
             { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15_000, signal });
         if (![200, 201].includes(result.status) || !result.data?.choices?.some((choice: any) => typeof choice.message?.content === 'string' && choice.message.content.trim())
-            || (typeof result.data.model === 'string' && result.data.model !== modelId)) throw new OnboardingError('model_unavailable');
+            || (typeof result.data.model === 'string' && result.data.model !== requestModel)) throw new OnboardingError('model_unavailable');
     } catch (error) { throw new OnboardingError(signal?.aborted ? 'timeout' : validationErrorCode(error)); }
 }
 export function createAiExecutor(deps: {

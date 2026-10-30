@@ -149,7 +149,7 @@ export function prepareOnboardingCredentials(sources: { credentials: Credentials
     const check = readOnboardingConfiguration({ ...sources, database: { hasNonDemoMeeting: () => false } }, target);
     const sttKeys: Record<string, keyof StoredCredentials> = { groq: 'groqSttApiKey', openai: 'openAiSttApiKey',
         'doubao-auc': 'doubaoApiKey', 'qcloud-stt': 'nativelyApiKey', azure: 'azureApiKey', ibmwatson: 'ibmWatsonApiKey' };
-    const aiKeys: Record<string, keyof StoredCredentials> = { doubao: 'doubaoLlmApiKey' };
+    const aiKeys: Record<string, keyof StoredCredentials> = { doubao: 'doubaoLlmApiKey', natively: 'nativelyApiKey' };
     const key = (target === 'stt' ? sttKeys : aiKeys)[check.provider ?? ''];
     if (key) sources.credentials.ensureCredentialVersion(key);
 }
