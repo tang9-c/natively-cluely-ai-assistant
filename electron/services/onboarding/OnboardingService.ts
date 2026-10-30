@@ -218,7 +218,7 @@ export class OnboardingService {
         this.snapshot!.devices = structuredClone(devices);
         this.snapshot!.checks = structuredClone(checks);
         if (checks.systemAudio.status === 'verified' || checks.systemAudio.status === 'previously_verified'
-            || (checks.systemAudio.status === 'pending_runtime' && checks.systemAudio.evidenceSource === 'system' && !checks.systemAudio.errorCode)) {
+            || (checks.systemAudio.status === 'pending_runtime' && !checks.systemAudio.errorCode)) {
             this.audioAcknowledgementRevoked = true;
         }
         this.changed();

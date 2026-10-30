@@ -11,6 +11,7 @@ export function createOnboardingFixture(scenario: string, environment: { e2e: bo
   const counters = { reads: 0, validations: 0, audioStarts: 0, audioStops: 0 };
   const devices = [{ id: 'fixture-input', name: '测试麦克风' }];
   const permissions = { platform: scenario === 'permission-denied' ? 'darwin' : 'fixture', microphone: scenario === 'permission-denied' ? 'denied' : 'granted', screen: scenario === 'permission-denied' ? 'denied' : 'granted' };
+  const captureState = { permissionDenied: scenario === 'permission-denied' };
   const outputs = [{ id: 'fixture-output', name: '测试扬声器' }];
   let modelAvailable = !['missing-services', 'download-error'].includes(scenario);
   let changed = 0;
@@ -22,7 +23,7 @@ export function createOnboardingFixture(scenario: string, environment: { e2e: bo
     ...(target === 'stt' && scenario === 'language-unsupported' ? { errorCode: 'unsupported_check' as const, messageKey: 'onboarding.language_unsupported' } : {}),
     ...(target === 'ai' && scenario === 'scope-denied' ? { errorCode: 'scope_denied' as const } : {}) });
   return {
-    scenario, counters, devices, outputs,
+    scenario, counters, devices, outputs, captureState,
     rejectProgress: (progress: { deferredAt?: number }) => scenario === 'defer-save-failed' && progress.deferredAt !== undefined,
     now: () => currentTime,
     advanceTime: (milliseconds: number) => {
@@ -43,7 +44,7 @@ export function createOnboardingFixture(scenario: string, environment: { e2e: bo
       return { microphone: permissions.microphone === 'denied' ? { status: 'failed', errorCode: 'permission_denied' } : { status: 'verified', evidenceSource: 'runtime' },
         inputDevice: devices.length > 0 && (!selection.inputDeviceId || devices.some(d => d.id === selection.inputDeviceId) || selection.inputDeviceId === 'default')
           ? { status: 'verified', evidenceSource: 'runtime' } : { status: 'missing', errorCode: 'device_missing' },
-        systemAudio: permissions.screen === 'denied' ? { status: 'limited', errorCode: 'permission_denied' } : { status: 'verified', evidenceSource: 'runtime' }, stt: readConfiguration('stt'), ai: readConfiguration('ai') };
+        systemAudio: captureState.permissionDenied ? { status: 'limited', errorCode: 'permission_denied', evidenceSource: 'runtime' } : { status: 'verified', evidenceSource: 'runtime' }, stt: readConfiguration('stt'), ai: readConfiguration('ai') };
     },
     execute: async (target: ValidationTarget, check: OnboardingCheck, signal: AbortSignal): Promise<ValidationEvidence> => {
       counters.validations++;

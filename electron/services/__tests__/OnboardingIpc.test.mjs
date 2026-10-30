@@ -82,49 +82,56 @@ test('one failed passive check does not discard other readiness rows', async () 
   assert.equal(snapshot.ai.status, 'missing'); assert.doesNotMatch(JSON.stringify(snapshot), /private file/);
 });
 
-test('restored packaged macOS authorization clears limitation acknowledgement without claiming captured audio', async () => {
+test('unprobed audio clears an obsolete limitation acknowledgement without claiming authorization', async () => {
   const { createOnboardingReadinessReader } = require('../../../dist-electron/electron/services/onboarding/OnboardingReadiness.js');
   let screen = 'denied';
   const h = harness();
-  h.service.setCheckReader(createOnboardingReadinessReader({ isPackaged: () => true,
-    readPermissions: async () => ({ platform: 'darwin', microphone: 'granted', screen }),
-    inputDevices: () => [{ id: 'default' }], outputDevices: () => [{ id: 'default' }], speechCheck: () => ({ status: 'missing' }) }));
+  h.service.setCheckReader(async () => ({ microphone: { status: 'verified' }, inputDevice: { status: 'verified' },
+    systemAudio: { status: 'limited', errorCode: 'permission_denied', evidenceSource: 'runtime' }, stt: { status: 'missing' }, ai: { status: 'missing' } }));
   await h.invoke(1, 'update-onboarding-progress', initialize);
   await h.invoke(1, 'update-onboarding-progress', { type: 'acknowledge-system-audio-limitation' });
   assert.equal(h.service.getSnapshot().progress.acceptedSystemAudioLimitation, true);
-  screen = 'granted'; const restored = await h.service.refreshChecks();
+  h.service.setCheckReader(createOnboardingReadinessReader({ isPackaged: () => true,
+    readPermissions: async () => ({ platform: 'darwin', microphone: 'granted', screen }),
+    inputDevices: () => [{ id: 'default' }], outputDevices: () => [{ id: 'default' }], speechCheck: () => ({ status: 'missing' }) }));
+  const restored = await h.service.refreshChecks();
   assert.equal(restored.checks.systemAudio.status, 'pending_runtime');
+  assert.equal(restored.checks.systemAudio.evidenceSource, 'unavailable');
   assert.equal(restored.progress.acceptedSystemAudioLimitation, false);
+  await h.invoke(1, 'update-onboarding-progress', { type: 'navigate', step: 'speech' });
+  assert.equal(h.service.getSnapshot().progress.acceptedSystemAudioLimitation, false);
+  screen = 'granted'; await h.service.refreshChecks();
   screen = 'denied'; await h.service.refreshChecks();
   assert.equal(h.service.getSnapshot().progress.acceptedSystemAudioLimitation, false);
 });
 
-test('macOS system audio honors positive permission health even when the raw screen status is inconclusive', async () => {
+test('screen-derived positive health cannot certify unprobed system audio authorization', async () => {
   const { createOnboardingReadinessReader } = require('../../../dist-electron/electron/services/onboarding/OnboardingReadiness.js');
   const read = createOnboardingReadinessReader({ isPackaged: () => true,
     readPermissions: async () => ({ platform: 'darwin', microphone: 'granted', screen: 'not-determined', systemAudioHealth: { effectiveGranted: true } }),
     inputDevices: () => [{ id: 'default' }], outputDevices: () => [{ id: 'default' }], speechCheck: () => ({ status: 'missing' }) });
   const check = (await read()).systemAudio;
-  assert.equal(check.status, 'pending_runtime'); assert.equal(check.evidenceSource, 'system');
+  assert.equal(check.status, 'pending_runtime'); assert.equal(check.evidenceSource, 'unavailable');
   assert.equal(check.errorCode, undefined);
 });
 
-for (const screen of ['unknown', 'not-determined']) test(`inconclusive macOS screen permission ${screen} is not a denial or capture success`, async () => {
+for (const screen of ['unknown', 'not-determined', 'denied', 'restricted', 'granted']) test(`passive macOS screen permission ${screen} cannot determine system audio access`, async () => {
   const { createOnboardingReadinessReader } = require('../../../dist-electron/electron/services/onboarding/OnboardingReadiness.js');
   const read = createOnboardingReadinessReader({ isPackaged: () => true,
-    readPermissions: async () => ({ platform: 'darwin', microphone: 'granted', screen }),
+    readPermissions: async () => ({ platform: 'darwin', microphone: 'granted', screen, systemAudioHealth: { effectiveGranted: screen === 'granted' } }),
     inputDevices: () => [{ id: 'default' }], outputDevices: () => [{ id: 'default' }], speechCheck: () => ({ status: 'missing' }) });
   const check = (await read()).systemAudio;
   assert.equal(check.status, 'pending_runtime'); assert.equal(check.evidenceSource, 'unavailable'); assert.equal(check.errorCode, undefined);
 });
 
-for (const screen of ['denied', 'restricted']) test(`explicit macOS screen permission ${screen} retains the limitation`, async () => {
+test('a failed permission read remains an error rather than an audio grant or a screen denial', async () => {
   const { createOnboardingReadinessReader } = require('../../../dist-electron/electron/services/onboarding/OnboardingReadiness.js');
   const read = createOnboardingReadinessReader({ isPackaged: () => true,
-    readPermissions: async () => ({ platform: 'darwin', microphone: 'granted', screen, systemAudioHealth: { effectiveGranted: false } }),
+    readPermissions: async () => { throw new Error('permission reader unavailable'); },
     inputDevices: () => [{ id: 'default' }], outputDevices: () => [{ id: 'default' }], speechCheck: () => ({ status: 'missing' }) });
-  assert.equal((await read()).systemAudio.errorCode, 'permission_denied');
-  assert.equal((await read()).systemAudio.status, 'limited');
+  const checks = await read();
+  assert.equal(checks.systemAudio.status, 'failed'); assert.equal(checks.systemAudio.errorCode, 'unsupported_check');
+  assert.equal(checks.microphone.errorCode, 'unsupported_check'); assert.equal(checks.inputDevice.status, 'verified');
 });
 test('positive system audio authorization does not hide a missing output device', async () => {
   const { createOnboardingReadinessReader } = require('../../../dist-electron/electron/services/onboarding/OnboardingReadiness.js');

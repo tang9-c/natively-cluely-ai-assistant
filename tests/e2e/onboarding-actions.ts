@@ -11,7 +11,7 @@ export async function onboardingScript(electronApp: ElectronApplication, script:
     if (!state.onboardingFixture) throw new Error('fixture_not_enabled');
     const service = state.onboardingService;
     if (script === 'invalidate-ai') service.invalidate('ai');
-    if (script === 'restore-permissions') { state.onboardingFixture.permissions.microphone = 'granted'; state.onboardingFixture.permissions.screen = 'granted'; }
+    if (script === 'restore-permissions') { state.onboardingFixture.permissions.microphone = 'granted'; state.onboardingFixture.permissions.screen = 'granted'; state.onboardingFixture.captureState.permissionDenied = false; }
     if (script === 'unplug-input') state.onboardingFixture.devices.splice(0);
     if (script === 'download-complete') {
       const modelId = service.getSnapshot().checks.stt.modelId;

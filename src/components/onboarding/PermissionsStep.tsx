@@ -99,7 +99,7 @@ export default function PermissionsStep({ snapshot, refresh, registerFormGuard }
       {isMac && <button className={button} onClick={() => void api.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')}>打开系统音频设置</button>}
       <p data-testid="onboarding-system-audio-permission" className={`text-xs leading-relaxed ${systemAudio.errorCode === 'permission_denied' ? 'text-status-warning' : systemAudio.errorCode ? 'text-status-error' : 'text-status-info'}`}>
         {systemAudioAuthorized ? '系统授权已开启，实际捕获将在会议开始时确认。'
-          : systemAudio.errorCode === 'permission_denied' ? '应用当前读取的屏幕录制权限未开启。若系统设置已开启，请退出并重新打开应用后刷新；仅系统音频录制的授权将在开始会议时由实际采集确认。暂时可能只能转写你的声音。'
+          : systemAudio.errorCode === 'permission_denied' ? '系统音频采集权限不可用，请检查当前采集方式所需的系统授权，再重试。'
           : systemAudio.errorCode === 'device_missing' ? '输出设备不可用，请重新选择设备并刷新。'
           : '尚未确认系统音频授权，开始会议时将检查实际采集，并可能显示系统授权提示。'}
       </p>

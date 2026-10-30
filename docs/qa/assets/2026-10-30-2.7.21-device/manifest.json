@@ -1,0 +1,14 @@
+{
+  "captured_by": "user",
+  "purpose": "User-provided macOS Screen & System Audio Recording and System Audio Only toggles both enabled; not proof of current application TCC identity or actual capture",
+  "files": [
+    {
+      "name": "01-user-system-permissions.png",
+      "format": "PNG",
+      "width": 738,
+      "height": 1184,
+      "bytes": 198242,
+      "sha256": "261e52fba941d115e11f1050678c1bba51628d27bfe61f7fd78ec2194ec2bfca"
+    }
+  ]
+}
