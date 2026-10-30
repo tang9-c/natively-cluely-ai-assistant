@@ -61,3 +61,7 @@ npm run test:system-audio-permissions:e2e
 - 原“permission-denied” fixture 的模拟音频拒绝改由独立 captureState 表达，和屏幕状态分开；真实拒绝提示与恢复、读取失败、设备故障以及会议失败恢复继续保留。历史截图被测试自动重写后已另存并恢复，不覆盖旧验收证据。
 
 原始日志保存在本机私有目录 `~/.codex/release-records/onboarding-audio-evidence-fix/`。本轮没有发布、覆盖安装包、修改签名、操作用户正在检查的应用或重置 TCC。当前安装的 2.7.21 仍有旧行为；真实账号、真实有声采集及修复包升级复验未执行，见[本机验收与修复追记](../qa/2026-10-30-2.7.21-device-acceptance.md)。
+
+## 2.7.22 发布跟进
+
+上述首次设置权限误判修复已随 [2.7.22](https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.22-sha-398ccca) 正式发布，三平台远程构建和附件核对见[发布记录](2.7.22-build-release.md)。本节不追溯改写此前未发布阶段事实，也不代表已替换本机应用或完成新包真实 TCC / 有声会议验收。
