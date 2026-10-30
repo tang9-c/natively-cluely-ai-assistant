@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-29",
+  "realSystemPermissionVerified": false,
+  "images": [
+    {
+      "file": "permission-denied-1200-dark.png",
+      "width": 1200,
+      "height": 800,
+      "sha256": "d06d3f05b5383dd840f6eaf6b2474c6aa665b1437b96b563d0dd58c5ad13596b",
+      "source": "development renderer isolated Electron fixture"
+    },
+    {
+      "file": "permission-denied-1200-light.png",
+      "width": 1200,
+      "height": 800,
+      "sha256": "b7e155d4f0323e3840842625a30b3df66987d6caf72443167ad67e665d4a105b",
+      "source": "development renderer isolated Electron fixture"
+    },
+    {
+      "file": "permission-denied-600-dark.png",
+      "width": 600,
+      "height": 400,
+      "sha256": "677cb514cbd4f1f7e36b5b5ca251d35e24447c20cf567206ac0f3d2f9283c717",
+      "source": "development renderer isolated Electron fixture"
+    },
+    {
+      "file": "permission-denied-600-light.png",
+      "width": 600,
+      "height": 400,
+      "sha256": "3cb7222ffeeebb3614548c22515aeb85b2b26c4073b8c3bd18bdfaa057d3e8f4",
+      "source": "development renderer isolated Electron fixture"
+    },
+    {
+      "file": "permissions-app-denied.png",
+      "width": 1200,
+      "height": 800,
+      "sha256": "9523e4d670ccf01e6248548474fef3372310ac48a14024f5caf1429370ee67e3",
+      "source": "production renderer isolated Electron fixture"
+    },
+    {
+      "file": "permissions-restored.png",
+      "width": 1200,
+      "height": 800,
+      "sha256": "20df13cad976de3a2f7e59548903b03215f68fdfa42fd89cdb8b428d0e9acd61",
+      "source": "production renderer isolated Electron fixture"
+    }
+  ]
+}

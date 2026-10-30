@@ -126,8 +126,8 @@ export default function SpeechStep({ snapshot, refresh, registerFormGuard, onOpe
       </div>}
       {local && provider === 'local-whisper' && <button className={button} onClick={() => onOpenSettings('audio')}>修改当前 Whisper 模型</button>}
     </fieldset>
-    <p className="text-xs text-text-secondary">{pending ? '正在保存并检查…' : status ?? (check.status === 'verified' ? '本次检查通过' : check.status === 'previously_verified' ? '上次检查通过，沿用历史回执' : check.configured ? '已保存，尚未验证语音服务' : '尚未配置')}{check.depth ? ` · ${check.depth === 'model_load' ? '模型加载' : '凭据访问'}` : ''}</p>
-    {(error || downloadError || check.errorCode) && <p id="onboarding-speech-error" role="alert" className="text-xs text-amber-600">{error ?? (check.messageKey === 'onboarding.language_unsupported' ? '当前语音服务不支持所选语言，请更改语言或服务。' : onboardingErrorText(downloadError?.errorCode ?? check.errorCode))}</p>}
+    <p className={`text-xs ${pending || check.status === 'previously_verified' ? 'text-status-info' : check.status === 'verified' ? 'text-status-success' : 'text-text-secondary'}`}>{pending ? '正在保存并检查…' : status ?? (check.status === 'verified' ? '本次检查通过' : check.status === 'previously_verified' ? '上次检查通过，沿用历史回执' : check.configured ? '已保存，尚未验证语音服务' : '尚未配置')}{check.depth ? ` · ${check.depth === 'model_load' ? '模型加载' : '凭据访问'}` : ''}</p>
+    {(error || downloadError || check.errorCode) && <p id="onboarding-speech-error" role="alert" className={`text-xs ${!error && !downloadError && check.errorCode === 'unsupported_check' ? 'text-status-warning' : 'text-status-error'}`}>{error ?? (check.messageKey === 'onboarding.language_unsupported' ? '当前语音服务不支持所选语言，请更改语言或服务。' : onboardingErrorText(downloadError?.errorCode ?? check.errorCode))}</p>}
     {(error || downloadError || check.status === 'failed') && <button disabled={busy} className={button} onClick={() => void (downloadError ? download() : validate())}>重试</button>}
     {check.errorCode === 'unsupported_check' && <button className={button} onClick={() => onOpenSettings('audio')}>返回原语音设置</button>}
   </section>;

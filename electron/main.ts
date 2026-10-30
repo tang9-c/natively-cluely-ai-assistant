@@ -1733,6 +1733,8 @@ export class AppState {
 
     // Suppression keepalives and ordinary silence are zero too: diagnose only.
     console.warn(`${prefix}System audio zero-fill observation (${observationMs}ms, backend=${capture.getBackendName()}).`);
+    // CoreAudio silence is not evidence about ScreenCapture permission.
+    if (capture.getBackendName() !== 'sck') return;
     const screenCapability = await resolveMacScreenCaptureCapability('system audio zero-fill detector');
     if (this.systemAudioCapture !== capture || !this.isMeetingActive) return;
     if (screenCapability.effectiveDenied) {
@@ -1899,36 +1901,17 @@ export class AppState {
       // 1. Initialize Captures if missing
       // If they already exist (e.g. from reconfigureAudio), they are already wired to write to this.googleSTT/User
       if (!this.systemAudioCapture) {
-        const screenCapability = await resolveMacScreenCaptureCapability('system audio pipeline setup');
-        if (epoch !== this._audioCaptureEpoch) return;
-        if (screenCapability.effectiveDenied) {
-          if (screenCapability.staleGrantSuspected) {
-            const message = this.getStaleScreenRecordingMessage();
-            console.warn('[Main] Skipping SystemAudioCapture init — stale Screen Recording grant suspected. Meeting will run mic-only.');
-            this.broadcastScreenTccRepairRequired('SCREEN_TCC_STALE_GRANTED', message);
-          } else {
-            console.warn('[Main] Skipping SystemAudioCapture init — Screen Recording permission denied. Meeting will run mic-only.');
-            this.broadcast('system-audio-permission-denied',
-              formatPermissionMessage('screen-recording-denied'));
-          }
-          this.broadcastDeviceSelection({
-            kind: 'output',
-            requested: null,
-            actual: null,
-            fellBack: true,
-            reason: screenCapability.staleGrantSuspected ? 'screen-recording-stale-grant' : 'screen-recording-permission-denied',
-          });
-        } else {
-          this.systemAudioCapture = new SystemAudioCapture();
-          this.wireSystemCapture(this.systemAudioCapture);
-          // Publish the request now; current capture data will confirm the actual device.
-          this.broadcastDeviceSelection({
-            kind: 'output',
-            requested: null,
-            actual: null,
-            fellBack: false,
-          });
-        }
+        // The native backend checks its own authorization at start(). Screen
+        // enumeration cannot determine CoreAudio Tap's audio-only permission.
+        this.systemAudioCapture = new SystemAudioCapture();
+        this.wireSystemCapture(this.systemAudioCapture);
+        // Publish the request now; current capture data will confirm the actual device.
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: null,
+          actual: null,
+          fellBack: false,
+        });
       }
 
       if (!this.microphoneCapture) {
@@ -2470,61 +2453,40 @@ export class AppState {
       if (epoch !== this._audioCaptureEpoch) return;
     }
 
-    const screenCapability = await resolveMacScreenCaptureCapability('audio reconfigure');
-    if (epoch !== this._audioCaptureEpoch) return;
-    if (screenCapability.effectiveDenied) {
-      if (screenCapability.staleGrantSuspected) {
-        const message = this.getStaleScreenRecordingMessage();
-        console.warn('[Main] Skipping SystemAudioCapture reconfigure — stale Screen Recording grant suspected. Meeting will run mic-only.');
-        this.broadcastScreenTccRepairRequired('SCREEN_TCC_STALE_GRANTED', message);
-      } else {
-        console.warn('[Main] Skipping SystemAudioCapture reconfigure — Screen Recording permission denied. Meeting will run mic-only.');
-        this.broadcast('system-audio-permission-denied',
-          formatPermissionMessage('screen-recording-denied'));
-      }
+    try {
+      console.log('[Main] Initializing SystemAudioCapture...');
+      this.systemAudioCapture = new SystemAudioCapture(wantedOutput);
+      this._sysSttRateApplied = false;
+      this.wireSystemCapture(this.systemAudioCapture, '(Reconfigured)');
+      console.log('[Main] SystemAudioCapture initialized.');
       this.broadcastDeviceSelection({
         kind: 'output',
         requested: wantedOutput || null,
         actual: null,
-        fellBack: true,
-        reason: screenCapability.staleGrantSuspected ? 'screen-recording-stale-grant' : 'screen-recording-permission-denied',
+        fellBack: false,
       });
-    } else {
+    } catch (err) {
+      console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
       try {
-        console.log('[Main] Initializing SystemAudioCapture...');
-        this.systemAudioCapture = new SystemAudioCapture(wantedOutput);
+        this.systemAudioCapture = new SystemAudioCapture(); // Default
         this._sysSttRateApplied = false;
-        this.wireSystemCapture(this.systemAudioCapture, '(Reconfigured)');
-        console.log('[Main] SystemAudioCapture initialized.');
+        this.wireSystemCapture(this.systemAudioCapture, '(Default)');
         this.broadcastDeviceSelection({
           kind: 'output',
           requested: wantedOutput || null,
           actual: null,
-          fellBack: false,
+          fellBack: true,
+          reason: (err as Error)?.message || 'unknown',
         });
-      } catch (err) {
-        console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
-        try {
-          this.systemAudioCapture = new SystemAudioCapture(); // Default
-          this._sysSttRateApplied = false;
-          this.wireSystemCapture(this.systemAudioCapture, '(Default)');
-          this.broadcastDeviceSelection({
-            kind: 'output',
-            requested: wantedOutput || null,
-            actual: null,
-            fellBack: true,
-            reason: (err as Error)?.message || 'unknown',
-          });
-        } catch (err2) {
-          console.error('[Main] Failed to initialize SystemAudioCapture (Default):', err2);
-          this.broadcastDeviceSelection({
-            kind: 'output',
-            requested: wantedOutput || null,
-            actual: null,
-            fellBack: true,
-            reason: `Both preferred and default failed: ${(err2 as Error)?.message || 'unknown'}`,
-          });
-        }
+      } catch (err2) {
+        console.error('[Main] Failed to initialize SystemAudioCapture (Default):', err2);
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: wantedOutput || null,
+          actual: null,
+          fellBack: true,
+          reason: `Both preferred and default failed: ${(err2 as Error)?.message || 'unknown'}`,
+        });
       }
     }
 
@@ -2819,13 +2781,6 @@ export class AppState {
         if (!isCurrent()) return;
         try {
           if (channel === 'system') {
-            const screenCapability = await resolveMacScreenCaptureCapability('system audio recovery');
-            if (!isCurrent()) return;
-            if (screenCapability.effectiveDenied) {
-              const health = this._captureHealth.system!;
-              health.beginRecovery(health.bind(), true);
-              return;
-            }
             const fresh = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
             this.systemAudioCapture = fresh;
             this._sysSttRateApplied = false;
@@ -3222,33 +3177,8 @@ export class AppState {
     }
     if (this._isQuitting) return;
 
-    // Check Screen Recording permission required for system audio capture
-    // (CoreAudio Global Process Tap + ScreenCaptureKit both need this).
-    // Startup checks stay passive. This first user-initiated capture use can
-    // trigger authorization; if capture remains unavailable, warn and continue
-    // with microphone-only transcription.
-    if (process.platform === 'darwin') {
-      const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
-      if (this._isQuitting) return;
-      console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
-      if (screenCapability.effectiveDenied) {
-        if (screenCapability.staleGrantSuspected) {
-          const message = this.getStaleScreenRecordingMessage();
-          console.warn('[Main]', message);
-          this.broadcastScreenTccRepairRequired('SCREEN_TCC_STALE_GRANTED', message);
-        } else {
-          // Permission remains unavailable — warn the user via the UI but do NOT
-          // auto-open System Settings. Forcing that window open every meeting start
-          // is extremely disruptive, especially when mic transcription is still working.
-          // The UI will show a non-blocking banner; the user can fix it deliberately.
-          const message = formatPermissionMessage('screen-recording-denied');
-          console.warn('[Main]', message);
-          this.broadcast('system-audio-permission-denied', message);
-        }
-        // NOTE: Do NOT call shell.openExternal() here — it hijacks focus on every meeting
-        // start. The UI banner (system-audio-permission-denied IPC event) handles this.
-      }
-    }
+    // Authorization is checked by the selected native audio backend on start;
+    // do not reject audio based on a separate screen-enumeration probe.
 
     this.logSttRuntimeDiagnostics('meeting-start', 'user');
     this.logSttRuntimeDiagnostics('meeting-start', 'interviewer');
@@ -4684,7 +4614,8 @@ async function initializeApp() {
     readSavedConfig: () => {
       const check = appState.onboardingService!.getSnapshot().checks.ai;
       const settings = SettingsManager.getInstance();
-      return { provider: check.provider!, modelId: check.modelId!, apiKey: credentialsManagerSingleton.getDoubaoLlmApiKey(),
+      return { provider: check.provider!, modelId: check.modelId!, apiKey: check.provider === 'natively' ? credentialsManagerSingleton.getNativelyApiKey()
+          : check.provider === 'doubao' ? credentialsManagerSingleton.getDoubaoLlmApiKey() : undefined,
         transcriptAllowed: settings.get('providerDataScopes')?.transcript !== false,
         codex: require('./services/CodexCliService').CodexCliService.normalizeConfig({
           enabled: settings.get('codexCliEnabled'), path: settings.get('codexCliPath'), model: settings.get('codexCliModel'),
@@ -4871,46 +4802,8 @@ async function initializeApp() {
     console.warn('[Main] powerMonitor unavailable — sleep/wake recovery disabled:', err);
   }
 
-  // macOS Screen Recording status check.
-  //
-  // Do not call desktopCapturer.getSources() here. That protected API triggers
-  // the system Screen Recording TCC dialog, which makes every cold launch feel
-  // like the app is forcing the user into Privacy & Security. Screen capture
-  // permission should be requested lazily when the user starts a meeting, takes
-  // a screenshot, or explicitly opens the permission/repair flow.
-  if (process.platform === 'darwin') {
-    setTimeout(async () => {
-      try {
-        const screenStatus = systemPreferences.getMediaAccessStatus('screen');
-        console.log(`[Init] Screen recording permission status at startup: ${screenStatus}`);
-
-        if (!app.isPackaged) {
-          console.log('[Init] Ignoring screen recording permission check in development mode');
-          return;
-        }
-
-        if (screenStatus === 'not-determined') {
-          console.log('[Init] Screen recording permission is not determined; deferring prompt until first screen/system-audio use.');
-        } else if (screenStatus === 'denied') {
-          console.warn('[Init] Screen recording was previously denied — notifying UI banner without probing screen sources.');
-          const { BrowserWindow } = require('electron');
-          BrowserWindow.getAllWindows().forEach((win: Electron.BrowserWindow) => {
-            if (!win.isDestroyed()) {
-              win.webContents.send(
-                'system-audio-permission-denied',
-                formatPermissionMessage('screen-recording-denied')
-              );
-            }
-          });
-        } else {
-          // 'granted' or 'restricted' — nothing to do.
-          console.log(`[Init] Screen recording permission already resolved: ${screenStatus}`);
-        }
-      } catch (e) {
-        console.warn('[Init] Startup screen recording permission check failed:', e);
-      }
-    }, 800);
-  }
+  // Screen authorization is checked on screenshot use. Native audio capture
+  // requests its own permission when a meeting starts, never at cold launch.
 
   // Recover unprocessed meetings (persistence check)
   appState.getIntelligenceManager().recoverUnprocessedMeetings().catch(err => {

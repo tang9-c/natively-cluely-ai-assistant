@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-29",
+  "source": "production file:// Electron renderer; isolated fixture, network blocked, actual capture disabled",
+  "realSystemAudioVerified": false,
+  "images": [
+    {
+      "file": "permissions-light.png",
+      "theme": "light",
+      "systemTheme": "dark",
+      "width": 1200,
+      "height": 800,
+      "sha256": "8a63a1236b9456b2372acbfadb3a9e07f950a2659567187f3a4c8729eba52541"
+    },
+    {
+      "file": "ai-error-light.png",
+      "theme": "light",
+      "systemTheme": "dark",
+      "width": 1200,
+      "height": 800,
+      "sha256": "1c8c4012e6b01280c9ab8caf01967e07a86e981fcc119be9fb0509718a8be67b"
+    },
+    {
+      "file": "ready-narrow-light.png",
+      "theme": "light",
+      "systemTheme": "dark",
+      "width": 600,
+      "height": 400,
+      "sha256": "4770aad38fd861dda0ee49ce04216d0330d5432d06efa9dd658800d88c33e4ac"
+    },
+    {
+      "file": "flow-error-light.png",
+      "theme": "light",
+      "systemTheme": "dark",
+      "width": 600,
+      "height": 400,
+      "sha256": "eb251d401b6f64311ebc56ce3aba2e31efc71b78e9dafc8ffa882646af424331"
+    },
+    {
+      "file": "permissions-dark.png",
+      "theme": "dark",
+      "systemTheme": "light",
+      "width": 1200,
+      "height": 800,
+      "sha256": "d67224d3440144449c20fbe48935744d6300880bbc5c96b6abf2fd545bdb6638"
+    },
+    {
+      "file": "ai-error-dark.png",
+      "theme": "dark",
+      "systemTheme": "light",
+      "width": 1200,
+      "height": 800,
+      "sha256": "9dac2bc286fd1a7c1d5150ca881c1bdee4dc9f48b0f2c57711f571e9d7dd5a48"
+    },
+    {
+      "file": "ready-narrow-dark.png",
+      "theme": "dark",
+      "systemTheme": "light",
+      "width": 600,
+      "height": 400,
+      "sha256": "add200d9cdf06a896ff8ccc51848707f90bce7488aa956c25864c6292ba272cf"
+    },
+    {
+      "file": "flow-error-dark.png",
+      "theme": "dark",
+      "systemTheme": "light",
+      "width": 600,
+      "height": 400,
+      "sha256": "7b73ef71067fdd483d7a9e1fbfc40007b946feb5185a7672d6b6ae00e32f65f6"
+    },
+    {
+      "file": "meeting-hint-light.png",
+      "theme": "light",
+      "systemTheme": "dark",
+      "width": 566,
+      "height": 83,
+      "sha256": "f248137043b5c529d2c41e31a170c8582e7fdda50ca2f5c09b62cbcabef49943"
+    },
+    {
+      "file": "meeting-hint-dark.png",
+      "theme": "dark",
+      "systemTheme": "light",
+      "width": 566,
+      "height": 83,
+      "sha256": "45b87cd93327150023bc670b25c1eb86f67b615c9f3808efe3a41e05f1d437c7"
+    }
+  ]
+}

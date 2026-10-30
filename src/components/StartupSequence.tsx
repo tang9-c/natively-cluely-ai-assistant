@@ -11,16 +11,16 @@ export default function StartupSequence({ onComplete, pending, error }: StartupS
     <div className="flex min-h-0 flex-col overflow-y-auto px-7 py-6 sm:px-12 sm:py-8">
       <p className="font-celeb text-xl tracking-wide">CueUp</p>
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-5">
-        <p className="mb-3 text-xs text-text-tertiary">欢迎使用 Feigenbaum CueUp</p>
+        <p className="mb-3 text-xs text-text-secondary">欢迎使用 Feigenbaum CueUp</p>
         <h1 className="font-celeb-light text-3xl font-medium leading-tight tracking-tight sm:text-4xl">先完成初始设置<br className="hidden sm:block" />再开始第一场会议</h1>
         <p className="mt-4 text-sm leading-relaxed text-text-secondary">接下来配置声音和 AI，再开始会议。</p>
-        <p className="mt-3 text-xs text-text-tertiary">权限与设备 · 语音识别 · AI 服务</p>
-        {error && <p role="alert" className="mt-3 text-sm text-amber-600 dark:text-amber-400">{error}</p>}
-        <button disabled={pending} onClick={onComplete} className="mt-6 w-full rounded-xl bg-accent-primary px-6 py-3.5 text-sm font-semibold text-white hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary disabled:opacity-50">
+        <p className="mt-3 text-xs text-text-secondary">权限与设备 · 语音识别 · AI 服务</p>
+        {error && <p role="alert" className="mt-3 text-sm text-status-error">{error}</p>}
+        <button disabled={pending} onClick={onComplete} className="mt-6 w-full rounded-xl bg-button-primary-bg hover:bg-button-primary-hover disabled:bg-button-primary-disabled-bg disabled:text-button-primary-disabled-text px-6 py-3.5 text-sm font-semibold text-button-primary-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary disabled:opacity-100">
           {pending ? '正在读取…' : '开始设置'}
         </button>
       </main>
-      <footer className="shrink-0 text-center text-[11px] leading-relaxed text-text-tertiary">
+      <footer className="shrink-0 text-center text-[11px] leading-relaxed text-text-secondary">
         点击开始设置即表示你同意 CueUp 的{' '}
         <button onClick={() => void window.electronAPI?.openExternal?.(TERMS_URL)} className="underline underline-offset-4 focus-visible:outline">服务条款</button> 和{' '}
         <button onClick={() => void window.electronAPI?.openExternal?.(PRIVACY_URL)} className="underline underline-offset-4 focus-visible:outline">隐私政策</button>

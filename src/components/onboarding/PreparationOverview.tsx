@@ -1,4 +1,5 @@
 import React from 'react';
+import { getModelDisplayName } from '../../utils/modelUtils';
 import { Check, ChevronRight, Circle, Loader2, TriangleAlert } from 'lucide-react';
 import type { OnboardingCheck, OnboardingSnapshot, OnboardingStep } from '../../../shared/onboarding';
 export const onboardingLabels: Record<OnboardingStep, string> = { overview: '设置概览', permissions: '权限与设备', speech: '语音识别', ai: 'AI 服务', ready: '开始会议' };
@@ -29,20 +30,23 @@ export default function PreparationOverview({ snapshot, mode = 'overview', focus
       {rows.map(row => {
         const good = ['verified', 'previously_verified'].includes(row.check.status);
         const warning = ['failed', 'limited', 'unsupported'].includes(row.check.status);
+        const statusColor = row.check.status === 'failed' ? 'text-status-error' : good
+          ? row.check.status === 'verified' ? 'text-status-success' : 'text-status-info'
+          : warning ? 'text-status-warning' : row.check.status === 'checking' ? 'text-status-info' : 'text-text-secondary';
         const Icon = row.check.status === 'checking' ? Loader2 : good ? Check : warning ? TriangleAlert : Circle;
         return <div key={row.label} className="flex items-center gap-3 px-4 py-4">
-          <Icon size={17} className={`${good ? 'text-emerald-500' : warning ? 'text-amber-500' : 'text-text-tertiary'} shrink-0 ${row.check.status === 'checking' ? 'motion-safe:animate-spin' : ''}`} />
+          <Icon size={17} className={`${statusColor} shrink-0 ${row.check.status === 'checking' ? 'motion-safe:animate-spin' : ''}`} />
           <div className="min-w-0 flex-1"><p className="text-sm font-medium text-text-primary">{row.label}</p>
-            <p className="mt-1 break-all text-xs text-text-secondary">{row.check.status === 'missing' ? (row.check.configured ? '已配置，待验证' : '尚未配置') : statusLabels[row.check.status]}{row.check.provider ? ` · ${row.check.provider}` : ''}{row.check.modelId ? ` · ${row.check.modelId}` : ''}</p>
+            <p className={`mt-1 break-all text-xs ${statusColor}`}>{row.check.status === 'missing' ? (row.check.configured ? '已配置，待验证' : '尚未配置') : statusLabels[row.check.status]}{row.check.provider ? ` · ${row.check.provider === 'natively' ? 'QCLOUD API' : row.check.provider}` : ''}{row.check.modelId ? ` · ${getModelDisplayName(row.check.modelId)}` : ''}</p>
             {row.check.checkedAt !== undefined && <p className="mt-1 text-xs text-text-tertiary">{new Date(row.check.checkedAt).toLocaleString()} · {row.check.depth === 'model_load' ? '模型加载' : row.check.depth === 'model_response' ? '模型响应' : '凭据访问'}</p>}
-            {row.check.errorCode === 'scope_denied' && <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">当前策略不允许 AI 使用会议内容。</p>}
+            {row.check.errorCode === 'scope_denied' && <p className="mt-1 text-xs text-status-warning">当前策略不允许 AI 使用会议内容。</p>}
             {row.check.errorCode === 'model_missing' && <p className="mt-1 text-xs text-text-secondary">模型尚未下载。</p>}
-            {row.check.status === 'limited' && <p className="mt-1 text-xs leading-relaxed text-amber-600 dark:text-amber-400">可能无法转写会议中其他人的声音。</p>}
+            {row.check.status === 'limited' && <p className="mt-1 text-xs leading-relaxed text-status-warning">可能无法转写会议中其他人的声音。</p>}
           </div>
           <button className="no-drag flex items-center gap-1 rounded-md px-2 py-2 text-xs text-text-secondary hover:bg-bg-item-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary" onClick={() => onNavigate(row.step)} aria-label={`查看${row.label}`}>查看 <ChevronRight size={13} /></button>
         </div>;
       })}
     </div>
-    {!focus && <p className="text-xs leading-relaxed text-text-tertiary">沿用你已保存的服务和设备。历史验证会保留时间，配置变化后需重新检查。</p>}
+    {!focus && <p className="text-xs leading-relaxed text-text-secondary">沿用你已保存的服务和设备。历史验证会保留时间，配置变化后需重新检查。</p>}
   </section>;
 }

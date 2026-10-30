@@ -111,18 +111,18 @@ export default function OnboardingFlow({ snapshot, pending, error, confirmLeave,
               <p>输入：{deviceNames.input} · 输出：{deviceNames.output}</p>
               <p>会议内容保留：{{ forever: '永久', '7d': '7 天', '30d': '30 天', never: '不保存' }[retention] ?? retention} <button className="ml-2 underline" onClick={() => onOpenSettings('general')}>修改保留策略</button></p>
               <p>这将开始真实会议。会议可能使用已配置且策略允许的备用服务。</p>
-              {snapshot.progress.acceptedSystemAudioLimitation && <p className="text-amber-600">你已了解系统音频限制；仍会按原流程尝试捕获并可能请求授权。</p>}
+              {snapshot.progress.acceptedSystemAudioLimitation && <p className="text-status-warning">你已了解系统音频限制；仍会按原流程尝试捕获并可能请求授权。</p>}
               <button disabled={busy} className="rounded-lg border border-border-muted px-3 py-2" onClick={() => void onDefer()}>{snapshot.meeting.isActive ? '返回首页' : '稍后开始'}</button>
             </div>}
           </>}
-          {(error || localError) && <p role="alert" className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-text-primary">{error || localError}</p>}
+          {(error || localError) && <p role="alert" className="mt-4 rounded-lg border border-status-error-border bg-status-error-bg p-3 text-xs text-status-error">{error || localError}</p>}
           {snapshot.meeting.isActive && <p className="mt-4 flex items-center gap-2 text-xs text-text-secondary"><LockKeyhole size={13} />会议进行中，可查看设置情况。</p>}
           </div>
         </main>
         <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-border-subtle bg-bg-primary px-5 py-3">
           <button disabled={pending || index === 0} onClick={() => void onNavigate(steps[Math.max(0, index - 1)])} className="flex items-center gap-1 rounded-lg px-2 py-2 text-xs text-text-secondary disabled:opacity-30"><ArrowLeft size={14} />上一步</button>
           {!(step === 'ai' && provisioning) && <button data-testid="onboarding-primary" disabled={busy || stepBlocked} onClick={() => void (step === 'ready' && (decision.allowed || snapshot.meeting.isActive) ? start() : onNavigate(nextStep ?? next))}
-            className="flex items-center justify-center gap-2 rounded-lg bg-accent-primary px-4 py-2.5 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary disabled:opacity-50">
+            className="flex items-center justify-center gap-2 rounded-lg bg-button-primary-bg hover:bg-button-primary-hover disabled:bg-button-primary-disabled-bg disabled:text-button-primary-disabled-text px-4 py-2.5 text-xs font-semibold text-button-primary-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary disabled:opacity-100">
             {busy ? '正在处理…' : step === 'ready' && (decision.allowed || snapshot.meeting.isActive) ? snapshot.meeting.isActive ? '返回当前会议' : '开始会议' : step === 'speech' && downloadRunning ? '先配置 AI' : nextStep ? '继续' : step === 'overview' ? '继续设置' : '继续设置'}<ArrowRight size={14} /></button>}
         </footer>
       </div>

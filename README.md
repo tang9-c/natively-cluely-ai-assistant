@@ -190,7 +190,7 @@ CueUp 支持只读业务系统知识源。当前重点是 Windchill 知识源：
 CueUp 的默认设计是本地优先：
 
 - 会议历史保存在本地 SQLite。
-- 凭据通过 Electron safeStorage 加密。
+- 凭据保存在应用 userData 目录下的明文 JSON，使用文件权限限制访问；目前未实现 safeStorage 静态加密。SEC-01 为已接受的非阻断风险。
 - API key 不保存在 renderer state 或 localStorage。
 - 日志必须脱敏，不记录原始转录、prompt、截图、证据文本或凭据。
 - 云提供商数据范围可以逐项关闭。

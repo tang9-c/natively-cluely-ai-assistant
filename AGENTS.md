@@ -42,7 +42,7 @@ Clear success criteria give you the ability to execute independently and close t
 
 ## Project Overview
 
-Natively is an AI-powered meeting notes and assistant desktop app (v2.7.0).
+Natively is an AI-powered meeting notes and assistant desktop app (v2.7.20).
 
 - **Frontend**: React 18 + Vite + TypeScript + TailwindCSS + Framer Motion
 - **Desktop**: Electron, with the main process in TypeScript/CommonJS
@@ -170,6 +170,7 @@ Always use `routeWithScopeFallback()` or `assertProviderDataScopes()` when routi
 - Files: PascalCase for classes/components, camelCase for utilities.
 - IPC channels: kebab-case.
 - CSS variables: `--bg-sidebar`, `--text-primary`, `--accent-primary`.
+- New application status UI uses `text-status-info`, `text-status-success`, `text-status-warning`, and `text-status-error`, with matching `bg-status-*-bg` / `border-status-*-border` when needed. Values belong in `src/index.css` and follow application `data-theme`, not OS-driven `dark:` variants. See [semantic status colors](docs/design/semantic-status-colors.md); run the production onboarding theme regression when changing these tokens or the first-run UI.
 - Import groups: external packages, internal aliases, then relative paths.
 - Use `import type` for type-only imports.
 
@@ -185,8 +186,8 @@ Every log line that may contain user data or credentials must be redacted with `
 
 ### Credential Storage
 
-- `CredentialsManager` uses Electron `safeStorage` for encryption at rest.
-- Credentials live under `app.getPath('userData')`, not renderer state, localStorage, or plain text files.
+- `CredentialsManager` currently persists restricted-permission plaintext JSON under `app.getPath('userData')`; it does not implement Electron `safeStorage` encryption at rest. SEC-01 is the user-accepted, non-blocking risk.
+- Do not persist credentials in renderer state or localStorage, and do not describe the current credential file as encrypted.
 
 ### Data Scope Policy
 

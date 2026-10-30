@@ -65,3 +65,13 @@ export function appPermissionEffect(globals = {}) {
   visit(ast); if (!value) throw new Error('Missing actual App permission effect');
   return evaluate(`module.exports = ${value};`, globals);
 }
+
+export function mainInitializer(name, globals = {}) {
+  const ast = source('electron/main.ts'); let value;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === name) value = node.initializer?.getText(ast);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); if (!value) throw new Error(`Missing main initializer ${name}`);
+  return evaluate(`module.exports = ${value};`, globals);
+}

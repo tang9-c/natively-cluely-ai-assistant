@@ -24,9 +24,9 @@ export function createOnboardingReadinessReader(deps: {
         const outputValid = outputs.length > 0 && (!selection.outputDeviceId || selection.outputDeviceId === 'default'
             || (selection.outputDeviceId === 'sck' && permissions.platform === 'darwin') || outputs.some(device => device.id === selection.outputDeviceId));
         const systemAudio: OnboardingCheck = permissionResult.status === 'rejected' ? { status: 'failed', errorCode: 'unsupported_check', evidenceSource: 'unavailable' } : !outputValid ? { status: 'failed', errorCode: 'device_missing', evidenceSource: 'system' }
-            : permissions.platform === 'darwin' && permissions.screen !== 'granted'
+            : permissions.platform === 'darwin' && !permissions.systemAudioHealth?.effectiveGranted && ['denied', 'restricted'].includes(permissions.screen)
                 ? { status: 'limited', errorCode: 'permission_denied', evidenceSource: 'system' }
-                : { status: 'pending_runtime', evidenceSource: permissions.platform === 'darwin' && deps.isPackaged() ? 'system' : 'unavailable' };
+                : { status: 'pending_runtime', evidenceSource: permissions.platform === 'darwin' && deps.isPackaged() && (permissions.systemAudioHealth?.effectiveGranted || permissions.screen === 'granted') ? 'system' : 'unavailable' };
         return { microphone, inputDevice: inputValid ? { status: 'verified', evidenceSource: 'system' }
             : { status: 'missing', errorCode: 'device_missing', evidenceSource: 'system' },
             systemAudio, stt: speech, ai: { status: 'missing' } };

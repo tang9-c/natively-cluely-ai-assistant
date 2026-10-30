@@ -245,3 +245,12 @@ test('per-channel Whisper file changes invalidate the selected speech configurat
   assert.equal(service.getSnapshot().checks.stt.status, 'verified');
   micMtime = 2; assert.equal(service.getSnapshot().checks.stt.status, 'missing');
 });
+
+test('QCLOUD AI validation prepares the legacy saved key revision without replacing the selected service', () => {
+  const h = setup(); h.credentials.credentials = { defaultModel: 'natively', nativelyApiKey: 'legacy-qcloud-key' };
+  const f = factory();
+  f.prepareOnboardingCredentials(h, 'ai');
+  assert.ok(h.credentials.getCredentialVersion('nativelyApiKey'));
+  assert.equal(h.credentials.getDefaultModel(), 'natively');
+  assert.equal(f.readOnboardingConfiguration(h, 'ai').errorCode, undefined);
+});
