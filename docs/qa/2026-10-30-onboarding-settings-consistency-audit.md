@@ -231,3 +231,51 @@ npx cross-env ELECTRON_RUN_AS_NODE=1 electron --test electron/services/__tests__
 ### 异步用户反馈补充
 
 用户随后回复此前的状态询问：“界面可操作，但仍是浅色”。该回复到达时，本轮已观察到暗色帮助页并恢复原始 System；无法仅凭回复到达时间确定用户观察对应切换 Dark 后还是恢复 System 后。因此保留用户所见为独立证据，不把此前浅色现象直接归因为工具截图缓存，也不由此认定主题功能失败。已确认的事实仍是：Dark 曾保存，随后通过原生 Window 菜单激活主窗口后观察到暗色，最后已恢复 System；初始超时及中间画面不同步的底层原因尚未证实。
+
+
+## 2026-11-01：原生工具超时与窗口不同步的根因修复（工作区，未发布）
+
+本节继续前述排查，修正“只有恢复办法、底层原因未证实”的当前结论；不追溯改写此前记录。日常 `/Applications/CueUp.app` 仍为未修改的 2.7.23，以下修复尚未发布或安装到该路径。
+
+### 区分应用阻塞、窗口激活与工具报错
+
+| 现象 | 本轮证据 | 判断及边界 |
+| --- | --- | --- |
+| 绑定应用返回 `timeoutReached`，首窗口迟迟不出现 | 原实例在 `2026-11-01T04:24:36Z` 启动，直到 `04:53:07.015Z` 才 ready，随后创建窗口、加载页面。系统 tccd 日志记录同一 PID 的麦克风旧签名 requirement 不匹配、麦克风及 Documents 授权提示；提示处理后应用才继续 | 应用在首窗口前依赖受保护资源；不能把这段时间全部归为工具故障。原始阻塞时没有栈采样，因此历史日志本身只建立时序关系 |
+| 隔离基线仍超时，且进程存活但无可操作窗口 | 使用正式 2.7.23 代码及原生模块、独立 bundle ID/空白 profile，不授予权限。PID 25760 的 2 秒采样明确停在 `get_input_devices_c_callback → list_input_devices → CPAL supported_input_configs → AudioUnitSetProperty → CoreAudio → mach_msg`；同 PID 的 tccd 日志记录麦克风 `AUTHREQ_PROMPTING` | 获得首窗口前同步输入设备枚举阻塞的直接复现。修改基线身份用于制造未授权条件，不能拿它证明正式包所有超时均为同一原因，也不等于完成真实升级授权连续性验收 |
+| 点击设置或外链返回后画面/控件树滞后 | 日常 2.7.23 再现；原生 `Window → CueUp` 的 `makeKeyAndOrderFront:` 后设置页出现、交通灯由灰转为活动状态。旧 `activate` handler 对 internal visible=true 的窗口不执行 show/focus；真实 Electron 回归中旧实现无法恢复原生隐藏窗口，修复后通过 | 已定位应用的显式激活缺口。内部 visible 标记不能代表原生可见及 key 状态；不是仅凭深色配置文件就判断截图缓存。尚未取得工具内部采集/缓存实现证据，不声称已修复工具供应方所有超时或缓存问题 |
+
+### 最小修复及保持的边界
+
+- `nativeModuleLoader.ts` 的导入期 ABI 检查改用现有本地 `getHardwareId()`，核对 SHA-256 返回契约，继续拒绝空实现、异常与 asar stub；不再为加载模块而同步枚举音频设备。指纹不记录、不上传。实际采音、设备选择、系统音频后端及截图权限检查保留。
+- `main.ts` 调试日志改为 Electron 的应用日志目录 `app.getPath('logs')`，惰性解析并创建目录，保留轮转与失败容错。日志路径 IPC、打开日志、QA 导出及设置页提示同步调整；不迁移或删除旧 Documents 日志，避免为了启动再次访问受保护目录。
+- 非会议状态收到显式 `app.activate` 时，调用现有 `showMainWindow(false)` 恢复可见及焦点；保留会议 overlay 的被动展示规则。没有全局关闭 backgroundThrottling、改变透明窗口方案或放宽权限。Electron 对 [activate 事件](https://www.electronjs.org/docs/latest/api/app#event-activate-macos) 与 [show/showInactive](https://www.electronjs.org/docs/latest/api/base-window) 的区分用于限定修复范围。
+- E2E 隔离边界同时覆盖新的 logs 目录，运行时核对路径，避免测试写入日常日志。
+
+### 回归覆盖与无效尝试
+
+新增 `MainStartupSafety.test.mjs` 执行真实源文件中的日志函数、IPC handler、激活回调和 native loader，仅替换 OS/Electron/native 外部边界；覆盖无 Documents 权限写日志、ready 后重试、10 MB 轮转、日志 IPC 一致、麦克风授权 pending 时加载 ABI、坏原生实现拒绝、可见/隐藏 launcher 聚焦，以及会议不抢焦点。另在 production renderer 场景中使用真实 Electron 窗口 blur/hide 与 `app.activate`，核对可见/焦点，并经主题 IPC 切换亮暗、确认实际 HTML 主题与持久配置回读。
+
+已保留修复前目标断言失败和修复后通过证据：初始 6 项目标失败、日志 IPC 单项失败；真实 Electron 激活场景旧实现失败、恢复修复后通过。不是用源码字面匹配代替实际行为。
+
+以下尝试不计通过：诊断副本最初遗漏 entitlement，后按项目配置补齐；系统日志进一步证实该副本因改名导致 `Unable to find helper app` 退出，恢复原 `CFBundleName` 后才获得上述有效采样，不能把最初崩溃全归为 JIT。另一次测试因磁盘空间耗尽中断；随后的并行诊断期间出现 preload 就绪等待超时，单独复跑冷启动场景通过，未将这些失败删去或归为产品已通过。最终结果以隔离诊断退出、构建串行后的完整复跑为准。
+
+私有 tccd 日志、采样、红绿测试日志和诊断元数据位于 `~/.codex/release-records/2.7.23-device/debug-2026-11-01/`，不提交原始日志、硬件指纹、用户数据或安装包。未修改 TCC、未授予诊断副本麦克风/录屏权限、未读取真实 Key、未启动有声会议；仅退出本轮创建的隔离测试进程，未退出日常 CueUp。
+
+
+### 最终复验结果
+
+| 验证 | 最终结果 |
+| --- | --- |
+| `npm run test:e2e:production`（诊断进程退出后串行完整复跑） | **34/34 通过**；包含真实激活/主题 IPC 场景、QCLOUD、帮助、首次设置权限和 app/OS 四种亮暗组合；含 renderer 类型检查、生产构建及 Electron 编译 |
+| `npm run test:system-audio-permissions` | **122/122 通过**；实际后端、截图和已有系统音频权限边界继续受回归保护 |
+| MainStartupSafety、MacX64NativeSmoke、OverlayWindowRecovery、RedactForLog、SensitiveLogRedaction、QaReportIpc.contract、QaReportService | **43/43 通过**，其中新增启动安全测试 **8/8** |
+| `npm run typecheck:electron`、`npm run build:electron:package` | **通过**；正式主进程编译为 package 模式，未将 E2E 适配器打入候选 |
+| `git diff --check` | **通过** |
+| 隔离打包候选原生首屏 | **通过本次观察**：原生工具首次绑定返回窗口壳，下一次读取取得真实首页 HTML 与截图，不再因导入期设备枚举而没有首屏。PID 29679；数据库实际位于独立 `/private/tmp` profile。使用正式 2.7.23 runtime/原生资源，替换当前生产 renderer 与 package 主进程；仅调整诊断身份/profile，重新核对 ASAR header hash 和严格签名完整性。这是本地诊断候选，非新版本正式发行包 |
+| 候选设置、亮暗与外链返回 | **通过本次观察**：原生点击设置立即显示设置页；Dark/Light 选择、控件文字及截图一致；帮助语音/AI 章节可展开，外链实际打开 AIGW，返回后切换“通用”页截图与控件树一致。候选主题已恢复 System，并经设置中的退出按钮退出；日常正式实例保持运行 |
+| 权限提示边界 | 候选 ready 为 `08:08:37.919Z`，窗口创建 `08:08:38.033Z`、loadURL 成功 `08:08:38.652Z`；tccd 仍在其后 `08:08:38.741Z` 记录麦克风授权提示，未授予。此时窗口已出现且后续操作正常；**不宣称启动后完全没有权限请求，也不将本轮当作实际采音通过** |
+
+本轮对已定位的应用启动阻塞及显式激活缺口完成代码修复和上述复验；无法从本仓库修改原生工具服务内部实现，也未证明其所有潜在缓存、连接或超时原因均已消失。工具曾报告一次目标被同时更改，重新读取最新状态后才继续，未沿用旧索引盲点。截图/AX 以本次工具返回为依据；未将日常界面或诊断包提交仓库。
+
+后续仍需：修复进入正式安装包后的日常实例升级/重启、真实 TCC 授权连续性、真实采音及长时间外链/遮挡/窗口切换稳定性验收；本机仅执行单轮隔离候选操作，不能覆盖所有 macOS 版本、Intel、Windows 或工具断连情况。上述为提交前验收状态；本轮随后按用户指令提交并合并至远程 `ci/intel-mac-workflow`。Git 合并不等于发布，已安装 2.7.23 不包含本次修复。

@@ -87,26 +87,25 @@ function validateNativeModule(mod: any): asserts mod is NativeModule {
         }
     }
 
-    // Functional smoke-test: actually call a cheap synchronous native function.
-    // This catches the Electron asar-stub false-pass: the JS index.js stub
-    // exports all the right names (passing the checks above) but its internal
-    // require('./index.*.node') fails silently when run from inside the sealed
-    // asar. Calling getInputDevices() forces a real native ABI call.
+    // Exercise the native ABI without touching audio hardware. This loader is
+    // imported before the first window; enumerating input devices here can wait
+    // on a macOS microphone prompt after an upgrade changes the code identity.
+    // The local fingerprint is never logged or transmitted by this check.
     //
     // NOTE: The guard MUST be separate from the try/catch that wraps the call.
     // Placing the throw INSIDE the try means our own error gets caught by the
     // same catch block, producing a double-wrapped message and losing the stack.
     let result: unknown;
     try {
-        result = mod.getInputDevices();
+        result = mod.getHardwareId();
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new Error(`NativeModule: functional smoke-test threw (${msg}) — likely loaded asar stub instead of real binary`);
     }
     // Guard is OUTSIDE the try block so our throw propagates cleanly.
-    if (!Array.isArray(result)) {
+    if (typeof result !== 'string' || !/^[0-9a-f]{64}$/i.test(result)) {
         throw new Error(
-            `NativeModule: getInputDevices() returned ${typeof result} instead of Array` +
+            `NativeModule: getHardwareId() returned an invalid fingerprint` +
             ` — likely loaded asar stub instead of real binary`
         );
     }

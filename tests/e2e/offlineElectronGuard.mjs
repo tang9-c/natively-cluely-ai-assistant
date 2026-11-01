@@ -17,7 +17,7 @@ export function offlineElectronEnv(userDataDir) {
 
 export async function prepareOfflineElectronGuard(userDataDir) {
   const appDataDir = path.join(userDataDir, 'isolated-app-data');
-  for (const directory of ['isolated-app-data', 'home', 'tmp', 'documents', 'crashes', 'session']) {
+  for (const directory of ['isolated-app-data', 'home', 'tmp', 'documents', 'crashes', 'session', 'logs']) {
     await fs.mkdir(path.join(userDataDir, directory), { recursive: true });
   }
   await fs.writeFile(path.join(userDataDir, '.cueup-stt-quality-isolated'), 'e2e synthetic only\n');
@@ -29,12 +29,12 @@ const userDataDir = ${JSON.stringify(userDataDir)};
 const appDataDir = ${JSON.stringify(appDataDir)};
 const setPath = app.setPath.bind(app);
 app.setPath = (name, value) => {
-  if (['userData', 'appData', 'home', 'documents', 'crashDumps', 'sessionData'].includes(name) && !path.resolve(value).startsWith(userDataDir + path.sep) && path.resolve(value) !== userDataDir) throw new Error('E2E data path escape blocked');
+  if (['userData', 'appData', 'home', 'documents', 'crashDumps', 'sessionData', 'logs'].includes(name) && !path.resolve(value).startsWith(userDataDir + path.sep) && path.resolve(value) !== userDataDir) throw new Error('E2E data path escape blocked');
   return setPath(name, value);
 };
 app.setPath('appData', appDataDir);
 app.setPath('userData', userDataDir);
-for (const [name, directory] of Object.entries({ home: 'home', documents: 'documents', crashDumps: 'crashes', sessionData: 'session' })) app.setPath(name, path.join(userDataDir, directory));
+for (const [name, directory] of Object.entries({ home: 'home', documents: 'documents', crashDumps: 'crashes', sessionData: 'session', logs: 'logs' })) app.setPath(name, path.join(userDataDir, directory));
 const state = globalThis.__e2eIsolation = { userDataDir, appDataDir, blockedCalls: 0 };
 const blocked = () => { state.blockedCalls++; throw new Error('E2E external boundary disabled'); };
 blocked.__e2eBlocked = true;
@@ -59,7 +59,7 @@ export async function verifyOfflineElectronGuard(electronApp, userDataDir) {
     const state = globalThis.__e2eIsolation;
     const path = process.getBuiltinModule('node:path');
     if (process.cwd() !== expectedPath || process.env.HOME !== path.join(expectedPath, 'home') || process.env.TMPDIR !== path.join(expectedPath, 'tmp')) throw new Error('E2E environment not isolated');
-    for (const [name, directory] of Object.entries({ home: 'home', documents: 'documents', crashDumps: 'crashes', sessionData: 'session' })) {
+    for (const [name, directory] of Object.entries({ home: 'home', documents: 'documents', crashDumps: 'crashes', sessionData: 'session', logs: 'logs' })) {
       if (app.getPath(name) !== path.join(expectedPath, directory)) throw new Error('E2E filesystem path not isolated');
     }
     if (!state || app.getPath('userData') !== expectedPath || app.getPath('appData') !== state.appDataDir || !state.appDataDir.startsWith(expectedPath + process.getBuiltinModule('node:path').sep)) throw new Error('E2E isolation not installed before main');

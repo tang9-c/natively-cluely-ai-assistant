@@ -26,13 +26,17 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // CQ-04 fix: do NOT call app.getPath() at module load time.
-// app.getPath('documents') is not guaranteed to be available before app.whenReady().
+// Electron log paths are resolved lazily; do not request protected user folders.
 // Use a lazy getter instead — the path is resolved on first logToFile() call.
 let _logFile: string | null = null;
 const getLogFile = (): string | null => {
   if (_logFile) return _logFile;
   try {
-    _logFile = path.join(app.getPath('documents'), 'natively_debug.log');
+    // Logging must not wait for a protected Documents-folder prompt before
+    // the first window exists, including after an ad-hoc identity changes.
+    const logDir = app.getPath('logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    _logFile = path.join(logDir, 'natively_debug.log');
     return _logFile;
   } catch {
     // app.ready not yet fired — return null, logToFile will skip silently
@@ -4824,6 +4828,10 @@ async function initializeApp() {
     // If no window exists, create it
     if (appState.getMainWindow() === null) {
       appState.createWindow()
+    } else if (!appState.getIsMeetingActive()) {
+      // Visibility does not imply a key window after showInactive()/an external
+      // link. Explicit application activation must also focus the launcher.
+      appState.showMainWindow(false);
     } else {
       // If the window exists but is hidden, clicking the dock icon should restore it
       if (!appState.isVisible()) {

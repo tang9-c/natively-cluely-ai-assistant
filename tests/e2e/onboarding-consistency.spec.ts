@@ -2,6 +2,29 @@ import { test, expect } from './fixtures';
 test.use({ onboardingMode: 'fresh', onboardingScenario: 'none' });
 const nav = (page: import('@playwright/test').Page, name: RegExp) => page.getByRole('navigation', { name: '初始设置步骤' }).getByRole('button', { name });
 
+test('explicit application activation restores a visible or hidden launcher and live theme updates', async ({ page, electronApp }) => {
+  test.skip(process.platform !== 'darwin', 'application activate is a macOS lifecycle event');
+  for (const hidden of [false, true]) {
+    await electronApp.evaluate(({ BrowserWindow }, hidden) => {
+      const launcher = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes('window=launcher'))!;
+      if (hidden) launcher.hide();
+      else launcher.blur();
+    }, hidden);
+    await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+      .find(win => win.webContents.getURL().includes('window=launcher'))!.isFocused())).toBe(false);
+    await electronApp.evaluate(({ app }) => { app.emit('activate'); });
+    await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
+      const launcher = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes('window=launcher'))!;
+      return { visible: launcher.isVisible(), focused: launcher.isFocused() };
+    })).toEqual({ visible: true, focused: true });
+  }
+  for (const mode of ['dark', 'light'] as const) {
+    await page.evaluate(mode => window.electronAPI.setThemeMode(mode), mode);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
+    expect(await page.evaluate(() => window.electronAPI.getThemeMode())).toEqual({ mode, resolved: mode });
+  }
+});
+
 for (const theme of ['light', 'dark'] as const) test(`in-app help explains current setup and permission boundaries in ${theme} theme`, async ({ page, electronApp }, testInfo) => {
   await page.getByRole('button', { name: '开始设置', exact: true }).click();
   await nav(page, /AI 提供商/).click();
