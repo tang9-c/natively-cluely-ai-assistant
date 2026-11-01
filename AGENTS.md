@@ -44,7 +44,7 @@ Clear success criteria give you the ability to execute independently and close t
 
 Natively is an AI-powered meeting notes and assistant desktop app (v2.7.22).
 
-- **Frontend**: React 18 + Vite + TypeScript + TailwindCSS + Framer Motion
+- **Frontend**: React 19 + Vite + TypeScript + TailwindCSS + Framer Motion
 - **Desktop**: Electron, with the main process in TypeScript/CommonJS
 - **Native**: Rust (`napi-rs`) for audio capture, keyboard tapping, VAD, silence suppression, and stealth window support
 - **Database**: SQLite via `better-sqlite3` plus `sqlite-vec` for RAG vector search

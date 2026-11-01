@@ -1,6 +1,6 @@
 # Archived WhisperLive Local STT Setup
 
-> **Current status (Archived):** This document describes the older WhisperLive-based `Local STT` development path. The current CueUp speech setup is centered on **Local SenseVoice**, **QCLOUD API**, and **Doubao AUC**. Use the in-app **Help & Settings → 音频语音转文字提供商设置** section or the README speech-provider section for the maintained setup path. Do **not** resurrect the WhisperLive adapter — it is not wired into the current SpeechProvider registry.
+> **Current status (Archived; links checked for 2.7.22 on 2026-10-31):** This document describes the older WhisperLive-based `Local STT` development path. The current CueUp speech setup is centered on **Local SenseVoice**, **QCLOUD API**, and **Doubao AUC**. Use [Quickstart](QUICKSTART.md) and [provider/permission reference](REFERENCE.md) for the maintained setup path. Do **not** resurrect the WhisperLive adapter — it is not wired into the current SpeechProvider registry.
 >
 > The old `npm run test:local-stt` command is no longer present in `package.json`; use the current provider-specific tests such as `electron/services/__tests__/LocalSenseVoiceSTT.test.mjs`, `electron/services/__tests__/QCloudApiSpeechChannel.test.mjs`, or `electron/services/__tests__/DoubaoAucRestSTT.test.mjs` when validating speech changes.
 
@@ -54,10 +54,12 @@ npm run typecheck:electron
 npx tsc --noEmit
 npm run build
 npm run build:electron
-ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/LocalSenseVoiceSTT.test.mjs electron/services/__tests__/QCloudApiSpeechChannel.test.mjs electron/services/__tests__/DoubaoAucRestSTT.test.mjs
+npx cross-env ELECTRON_RUN_AS_NODE=1 electron --test electron/services/__tests__/LocalSenseVoiceSTT.test.mjs electron/services/__tests__/QCloudApiSpeechChannel.test.mjs electron/services/__tests__/DoubaoAucRestSTT.test.mjs
 ```
 
 These current speech tests cover the maintained Local SenseVoice, QCLOUD API, and Doubao AUC paths. The archived WhisperLive flow is intentionally **not** covered by a package script and is not part of the recommended setup path.
+
+**Known test debt (checked 2026-10-31 against 2.7.22):** the command above currently reports 60 passed / 1 failed. The failing `QCloudApiSpeechChannel.test.mjs` case expects the settings source to contain the literal `label: 'QCLOUD API'`; the current UI uses `getSpeechProviderLabel('qcloud-stt')`. This source-string assertion is stale, not evidence that the UI displays the internal ID. The display/configuration, language and passive-permission suites separately passed 46 tests during this documentation update. The test itself was not changed; do not report the 61-test command as fully passing.
 
 ## 4. Run CueUp in Development Mode
 
@@ -75,11 +77,11 @@ Open CueUp and navigate **Settings → 音频** (Audio). Pick whichever provider
 
 | Provider | When to choose it | Notes |
 | --- | --- | --- |
-| **Local SenseVoice** | Default for Chinese-first local meetings; do not want raw audio sent to the cloud. | Model is downloaded inside the app on first use; ensure the SenseVoice model is installed in the Local Models panel. |
-| **QCLOUD API** | Need cloud Chinese-first transcription with speaker separation. | Reuses the QCLOUD key already configured under **Settings → AI Providers**. |
+| **Local SenseVoice** | Default for Chinese-first local meetings; do not want raw audio sent to the cloud. | Explicitly download in initial setup or the Local Models panel, then wait for the model-loading check. |
+| **QCLOUD API** | Need cloud Chinese-first transcription with speaker separation. | Reuses the shared key under **Settings → QCLOUD API**; the same key can be reused in initial setup for speech and AI. |
 | **Doubao AUC** | Longer meetings that need speaker separation, sentence-level info, or emotion metadata from the cloud. | Requires a Doubao speech key saved in CueUp. |
 
-Click **Test Connection** after switching providers to confirm the key/credentials are accepted. The audio routing (microphone / speaker loopback / language / accent) is controlled on the same page; see the in-app Help & Settings guide for details.
+In initial setup, click **保存并验证语音服务** for cloud providers, or **检查模型** after local model preparation. Settings also provide provider-specific connection checks. Credential access or model loading does not prove live microphone/system-audio capture. Select a supported meeting language, then verify real transcription in a meeting; do not treat screen-recording preflight as system-audio authorization.
 
 If you specifically need the historic WhisperLive flow, do **not** enable it through CueUp — the binary path is not part of the maintained app and the companion install guide has been removed from this repository. Use the maintained providers above instead.
 
@@ -102,14 +104,14 @@ npm run app:build
 
 ## 7. Expected Behaviour (Current Speech Providers)
 
-- Provider failures are intentionally quiet in the overlay; surface details via the Settings → 音频 → **Test Connection** button.
+- Inspect actual capture errors in the meeting UI and provider configuration/check results in Settings; a successful connection check is not a live transcription result.
 - CueUp does not auto-start or supervise any third-party STT daemon for the maintained providers.
 - Switching providers does not require restarting CueUp — the next capture session uses the new selection.
 
 ## 8. Quick Troubleshooting
 
-- **No provider selected**: open Settings → 音频 and choose one of Local SenseVoice / QCLOUD API / Doubao AUC. The dropdown defaults to Local SenseVoice.
-- **Cloud provider test fails**: confirm the relevant key (QCLOUD or Doubao) is saved under Settings → AI Providers and has permission for STT.
+- **No provider selected**: open initial setup or Settings → 音频 and choose Local SenseVoice / QCLOUD API / Doubao AUC. Initial setup recommends Local SenseVoice when no service has been configured.
+- **Cloud provider test fails**: confirm the QCLOUD shared key under Settings → QCLOUD API, or the separate Doubao speech key under Settings → 音频, and check STT access. Doubao AI credentials are separate.
 - **Local SenseVoice missing**: open the Local Models panel and download the SenseVoice model.
 - **Transcription is empty or in the wrong language**: pick the matching language/accent on the audio settings card.
 - **`Electron failed to install correctly`**: the Electron binary did not download or unpack correctly. Delete `node_modules\electron`, reinstall Electron, then rerun dev mode:
