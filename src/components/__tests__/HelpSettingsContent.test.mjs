@@ -23,78 +23,16 @@ test('HelpSettings header covers permissions, speech, AI, screen, preparation, n
 });
 
 // ---------------------------------------------------------------------------
-// 2. Quick-start: 4 steps with a ready continuation (5th visual node is NOT a step).
+// Setup, privacy, provider guidance and model compatibility are verified through
+// the rendered help page in tests/e2e/onboarding-consistency.spec.ts.
+// The old four-step/source-literal assertions were replaced, not frozen here.
 // ---------------------------------------------------------------------------
 
-test('HelpSettings quick-start keeps 4 setup steps with a separate ready continuation', () => {
-  const source = read('src/components/settings/HelpSettings.tsx');
-
-  // The 4 named setup entries (stable titles).
-  assert.match(source, /title: '授予权限'/);
-  assert.match(source, /title: '设置音频'/);
-  assert.match(source, /title: '连接 AI 模型'/);
-  assert.match(source, /title: '个性化（可选）'/);
-
-  // Subtitle correctly labels the 4 steps, not 5.
-  assert.match(source, /四个步骤即可上手 CueUp/);
-
-  // The 5th visual node is a separate "ready" continuation, not another step.
-  assert.match(source, /readyTitle = '一切就绪'/);
-  assert.match(source, /完成上面四个步骤即可开会/);
-  assert.match(source, /Done state — visually a continuation of the timeline, not a 5th step/);
-
-  // The step array must still have exactly 4 entries (not 5).
-  const stepsMatch = source.match(/const steps = \[([\s\S]*?)\];/);
-  assert.ok(stepsMatch, '应保留 steps 数组');
-  const stepTitles = stepsMatch[1].match(/title: '([^']+)'/g) || [];
-  assert.strictEqual(stepTitles.length, 4, '应只声明 4 个 setup 步骤，第 5 个视觉节点是 ready 续接');
-});
-
-// ---------------------------------------------------------------------------
-// 3. Privacy framing: local-first, NOT "完全在本地运行".
-// ---------------------------------------------------------------------------
-
-test('HelpSettings privacy framing is local-first, not fully-on-device', () => {
-  const source = read('src/components/settings/HelpSettings.tsx');
-
-  assert.match(source, /CueUp 优先在本地运行/);
-  assert.match(source, /本地 SenseVoice 转录、本地模型与本地存储默认启用/);
-  assert.match(source, /数据范围允许时由 CueUp 按需走云端路径/);
-
-  // The over-broad "完全在本地运行" framing must not return.
-  assert.doesNotMatch(source, /CueUp 完全在本地运行/);
-});
 
 // ---------------------------------------------------------------------------
 // 4. Speech: three STT paths and SenseVoice / Whisper / Speaker-verification details.
 // ---------------------------------------------------------------------------
 
-test('HelpSettings documents Local SenseVoice, QCLOUD API and Doubao AUC equally', () => {
-  const source = read('src/components/settings/HelpSettings.tsx');
-
-  assert.match(source, /以三条主路径为核心：本地 SenseVoice、QCLOUD API 和 Doubao AUC/);
-  // 设置音频 step pushes the user toward Local SenseVoice first.
-  assert.match(source, /title: '设置音频'[\s\S]*?desc: '打开设置 → 音频，优先选择 Local SenseVoice/);
-  assert.match(source, /Local SenseVoice/);
-  assert.match(source, /QCLOUD API/);
-  assert.match(source, /Doubao AUC/);
-
-  // Configuring QCLOUD does not override a healthy local embedding provider.
-  assert.match(source, /Embedding 保持本地优先；本地向量模型不可用时/);
-});
-
-test('HelpSettings documents SenseVoice term correction and Whisper per-channel model', () => {
-  const source = read('src/components/settings/HelpSettings.tsx');
-
-  // SenseVoice term correction block.
-  assert.match(source, /Local SenseVoice · 术语\/热词纠错/);
-  assert.match(source, /规范词 \+ 变体/);
-
-  // Whisper per-channel model selection.
-  assert.match(source, /Local Whisper · 麦克风与系统音频/);
-  assert.match(source, /分别为麦克风通道和系统音频通道选择模型/);
-  assert.match(source, /将自动调整/);
-});
 
 test('HelpSettings distinguishes speaker separation from speaker verification', () => {
   const source = read('src/components/settings/HelpSettings.tsx');
@@ -106,20 +44,6 @@ test('HelpSettings distinguishes speaker separation from speaker verification', 
   assert.match(source, /ME 标签/);
 });
 
-// ---------------------------------------------------------------------------
-// 5. AI providers + default chat model.
-// ---------------------------------------------------------------------------
-
-test('HelpSettings lists only currently supported chat providers', () => {
-  const source = read('src/components/settings/HelpSettings.tsx');
-
-  assert.match(source, /默认聊天模型是 Doubao Seed 2\.0 Lite/);
-  assert.match(source, /切换到 QCLOUD API 或自定义端点/);
-  assert.doesNotMatch(source, /OpenAI|Claude|Anthropic|Gemini|Groq|Ollama/);
-
-  // Vision / data-scope awareness in the model engine card.
-  assert.match(source, /屏幕截图只会发送给具备视觉能力且数据范围允许的提供商/);
-});
 
 // ---------------------------------------------------------------------------
 // 6. UI / shortcut placeholder + 8 expert modes + intent keywords.
@@ -311,22 +235,6 @@ test('HelpSettings documents the AI meeting preparation flow and current boundar
   assert.match(source, /只应用已确认的推荐模式/);
 });
 
-// ---------------------------------------------------------------------------
-// 10. QCLOUD side panel documents optional STT and local-first embeddings.
-// ---------------------------------------------------------------------------
-
-test('QCLOUD settings guide explains local-first embeddings and cloud fallback order', () => {
-  const source = read('src/components/settings/NativelyApiSettings.tsx');
-  const help = read('src/components/settings/HelpSettings.tsx');
-
-  assert.match(source, /可在“语音”标签选择 QCLOUD API/);
-  assert.match(source, /Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。/);
-  assert.match(source, /云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。/);
-  assert.match(help, /Embedding 保持本地优先；本地向量模型不可用时，可使用 QCLOUD 或豆包 Embedding 云端回退。/);
-  assert.doesNotMatch(help, /OpenAI|Claude|Anthropic|Gemini|Groq|Ollama/);
-  assert.doesNotMatch(source, /Embedding 不使用 QCLOUD/);
-  assert.doesNotMatch(source, /实时转录和向量模型不使用 QCLOUD/);
-});
 
 // ---------------------------------------------------------------------------
 // 11. SenseVoice term canonicalization: PTC (canonical), not PDC.
@@ -350,11 +258,9 @@ test('HelpSettings accurately describes business system credential storage', () 
   assert.match(source, /凭据保存在本机凭据文件中/);
   assert.match(source, /不会回显已保存的 Key 或密码原文/);
 
-  // safeStorage is the project-wide default for credential at-rest encryption
-  // in user-visible docs, but the current implementation does not actually use
-  // safeStorage for this on-disk file. Don't surface that internal mismatch in
-  // user-facing help. The bare /safeStorage/ guard covers every mention,
-  // including the "凭据通过 Electron safeStorage 加密保存" wording.
+  // The help uses user-facing plaintext/file-permission wording rather than
+  // a storage-library name. Rendered plaintext-storage guidance is also
+  // verified in the production help-page scenario.
   assert.doesNotMatch(source, /safeStorage/);
 });
 

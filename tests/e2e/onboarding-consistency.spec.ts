@@ -2,6 +2,56 @@ import { test, expect } from './fixtures';
 test.use({ onboardingMode: 'fresh', onboardingScenario: 'none' });
 const nav = (page: import('@playwright/test').Page, name: RegExp) => page.getByRole('navigation', { name: '初始设置步骤' }).getByRole('button', { name });
 
+for (const theme of ['light', 'dark'] as const) test(`in-app help explains current setup and permission boundaries in ${theme} theme`, async ({ page, electronApp }, testInfo) => {
+  await page.getByRole('button', { name: '开始设置', exact: true }).click();
+  await nav(page, /AI 提供商/).click();
+  await page.getByRole('button', { name: '返回原设置', exact: true }).click();
+  const settings = page.locator('#settings-panel');
+  await settings.getByRole('button', { name: '设置与帮助', exact: true }).click();
+  await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
+  const help = settings.locator('[data-help-scroll-content]');
+  await expect(help.getByRole('heading', { name: '初始设置：按五步完成', exact: true })).toBeVisible();
+  await expect(help.getByText(/下方动画均为操作示意/)).toBeVisible();
+  for (const title of ['设置概览', '权限与设备', '语音识别', 'AI 提供商', '开始会议']) {
+    await expect(help.getByText(title, { exact: true })).toBeVisible();
+  }
+  await help.screenshot({ path: testInfo.outputPath(`help-setup-${theme}.png`) });
+  await help.getByRole('button', { name: '1. 应用权限设置', exact: true }).click();
+  if (await page.evaluate(() => window.electronAPI.platform === 'darwin')) {
+    await expect(help.getByText(/屏幕录制开关不能单独证明系统音频可用或受限/)).toBeVisible();
+    await expect(help.getByText(/未尝试实际采集时显示“使用时确认”/)).toBeVisible();
+    await expect(help.getByText(/选择本地转写不等于后续 AI 回答一定在本地执行/)).toBeVisible();
+  } else {
+    await expect(help.getByText(/不要以是否出现一次性授权弹窗判断能否采音/)).toBeVisible();
+  }
+  await expect(help.getByText(/CueUp 完全在本地运行/)).toHaveCount(0);
+  await help.getByRole('button', { name: '2. 音频语音转文字提供商设置（麦克风）', exact: true }).click();
+  await expect(help.getByText(/语音识别与 AI 共用已保存的 QCLOUD API Key/)).toBeVisible();
+  await expect(help.getByText(/豆包语音 Key 与豆包 AI Key 分别配置/)).toBeVisible();
+  await expect(help.getByText('1. 本地 SenseVoice', { exact: true })).toBeVisible();
+  await expect(help.getByText(/Embedding 保持本地优先；本地向量模型不可用时/)).toBeVisible();
+  await expect(help.getByText(/规范词 \+ 变体/)).toBeVisible();
+  await expect(help.getByText(/分别为麦克风通道和系统音频通道选择模型/)).toBeVisible();
+  await expect(help.getByText(/语言或模型不兼容时按提示更换/)).toBeVisible();
+  await help.getByRole('button', { name: '3. AI 模型与提示词引擎', exact: true }).click();
+  await expect(help.getByText(/数据范围是一套全局策略/)).toBeVisible();
+  await expect(help.getByText(/不控制云端语音识别的原始音频上传/)).toBeVisible();
+  await expect(help.getByText('Codex CLI 与历史配置', { exact: true })).toBeVisible();
+  await expect(help.getByText(/检测 CLI.*只确认程序可执行/)).toBeVisible();
+  await electronApp.evaluate(({ shell }) => {
+    (globalThis as any).__helpExternalTargets = [];
+    shell.openExternal = async url => { (globalThis as any).__helpExternalTargets.push(url); };
+  });
+  await help.getByRole('button', { name: '打开 QCLOUD API 平台', exact: true }).click();
+  await expect.poll(() => electronApp.evaluate(() => (globalThis as any).__helpExternalTargets)).toEqual(['https://aigw.feigenbaum.com.cn/']);
+  await help.getByRole('button', { name: '11. 窗口与通用设置', exact: true }).click();
+  await expect(help.getByText(/credentials.enc.*明文 JSON/)).toBeVisible();
+  await expect(help.getByText(/macOS.*DMG.*手动安装/)).toBeVisible();
+  await settings.getByRole('button', { name: 'QCLOUD API', exact: true }).click();
+  await expect(settings.getByText(/Embedding 保持本地优先；本地向量模型不可用时/)).toBeVisible();
+  await expect(settings.getByText(/可在“音频”标签选择 QCLOUD API/)).toBeVisible();
+});
+
 for (const selector of ['codex-cli', 'codex-cli:gpt-5.4']) test(`existing Codex ${selector} remains editable and preserves its selector across save and restart`, async ({ page, restartApp }) => {
   await page.evaluate(async selector => {
     await window.electronAPI.setCodexCliConfig({ enabled: true, path: 'codex', model: 'gpt-5.4', timeoutMs: 60000 });
@@ -37,7 +87,15 @@ test('QCLOUD speech names, Chinese display and credential help agree with Settin
   await expect(settings.getByRole('heading', { name: 'QCLOUD API', exact: true })).toBeVisible();
   await expect(settings.getByText('已连接', { exact: true })).toHaveCount(0);
   await settings.getByRole('button', { name: '音频', exact: true }).click();
-  await expect(settings.getByText('QCLOUD API', { exact: true }).last()).toBeVisible();
+  const qcloudChoices = settings.getByRole('button').filter({ hasText: '复用 QCLOUD API Key' });
+  await expect(qcloudChoices).toHaveCount(1);
+  await expect(qcloudChoices.first().getByText('QCLOUD API', { exact: true })).toBeVisible();
+  await qcloudChoices.first().click();
+  await expect(qcloudChoices).toHaveCount(2);
+  await expect(qcloudChoices.last().getByText('QCLOUD API', { exact: true })).toBeVisible();
+  await expect(settings.getByText(/^(qcloud-stt|QCloudSTT|natively)$/i)).toHaveCount(0);
+  await qcloudChoices.last().click();
+  expect(await page.evaluate(() => window.electronAPI.getSttProvider())).toBe('qcloud-stt');
   await expect(settings.getByText('中文', { exact: true })).toBeVisible();
   await settings.getByRole('button', { name: '通用', exact: true }).click();
   await settings.getByRole('button', { name: '初始设置', exact: true }).click();

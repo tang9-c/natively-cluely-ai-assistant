@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -223,13 +224,15 @@ test('QCLOUD API does not forward neutral AUC utterance emotion metadata', async
   assert.equal(transcripts[0].emotionSource, undefined);
 });
 
-test('QCLOUD API speech channel is never shown as qcloud-stt in user-facing settings source', () => {
-  const settings = fs.readFileSync(path.join(root, 'src/components/SettingsOverlay.tsx'), 'utf8');
-  const speechOptionBlock = settings.match(/options=\{\[[\s\S]*?\]\}/)?.[0] || '';
+test('saved QCLOUD provider IDs resolve to the user-facing QCLOUD API name', () => {
+  const source = fs.readFileSync(path.join(root, 'src/utils/settingsDisplay.ts'), 'utf8');
+  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } });
+  const exports = {};
+  new Function('exports', outputText)(exports);
 
-  assert.match(speechOptionBlock, /label:\s*'QCLOUD API'/);
-  assert.doesNotMatch(speechOptionBlock, /label:\s*['"]qcloud-stt['"]/i);
-  assert.doesNotMatch(speechOptionBlock, /label:\s*['"]QCloudSTT['"]/);
+  for (const provider of ['qcloud-stt', 'natively']) {
+    assert.equal(exports.getSpeechProviderLabel(provider), 'QCLOUD API');
+  }
 });
 
 test('QCLOUD API speaker separation settings label uses the active provider name', () => {
