@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.7.24] - 2026-11-01
+
+### Fixed
+
+- Avoid synchronous microphone-device enumeration during native module validation before the first window. Keep real capture and screenshot permission checks in their existing paths.
+- Write debug logs to Electron's application logs directory instead of the protected Documents folder; align log-opening IPC, QA exports and the settings hint.
+- Restore launcher visibility and focus on explicit macOS application activation outside meetings, while retaining passive meeting-overlay behavior.
+
+### Testing and known limitations
+
+- Add startup safety and real Electron activation/theme regressions. Release candidate, three-platform build and attachment results are recorded in `docs/testing/2.7.24-build-release.md`.
+- An isolated local packaged candidate passed native first-window, settings, light/dark and external-link-return checks. This does not replace new-release installer, real TCC continuity, voiced capture or long-running stability acceptance. Signing and plaintext credential storage are unchanged; SEC-01 remains accepted and non-blocking.
+
 ## [2.7.23] - 2026-10-31
 
 ### Fixed
