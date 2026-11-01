@@ -1,6 +1,6 @@
 # CueUp 发布流程与更新方式
 
-核对基线：2.7.22（2026-10-31）。本文描述仓库现有三平台远程构建与草稿发布流程。完整实例见 [2.7.22 发布记录](testing/2.7.22-build-release.md)和[附件清单](testing/2.7.22-release-assets.json)。
+核对基线：2.7.23（2026-10-31）。本文描述仓库现有三平台远程构建与草稿发布流程。完整实例见 [2.7.23 发布记录](testing/2.7.23-build-release.md)和[附件清单](testing/2.7.23-release-assets.json)。
 
 ## 当前更新行为
 
@@ -27,7 +27,7 @@
 
    首次设置及状态主题改动还需执行 `npm run test:e2e:production`；按变更运行类型检查、正式主进程编译和其他相关套件。
 4. 核对 PR 的实际 head 与检查结果，再合并。保留候选与合并提交的文件树对应关系。
-5. 三平台使用同一已审查的 ref，逐一核对运行的 `head_sha`。需要固定来源时，可使用明确指向该提交的标签。当前 release 标签格式是 `v<版本>-sha-<提交前7位>`，例如 `v2.7.22-sha-398ccca`。GitHub 的手动工作流使用分支或标签 ref，不把裸 SHA 直接当作可靠的 dispatch ref。
+5. 三平台使用同一已审查的 ref，逐一核对运行的 `head_sha`。需要固定来源时，可使用明确指向该提交的标签。当前 release 标签格式是 `v<版本>-sha-<提交前7位>`，例如 `v2.7.23-sha-12e62ad`。GitHub 的手动工作流使用分支或标签 ref，不把裸 SHA 直接当作可靠的 dispatch ref。
 
 汇总工作流目前从默认分支检出版本和发布模板，而用触发构建的 SHA 组成标签。因此从候选构建到汇总完成期间，不要推进默认分支到下一版版本号或不匹配的发布模板；必须人工核对版本、模板与标签来源，不能只看到任务成功就公开。
 
@@ -51,13 +51,13 @@
 
 多个平台会触发多个同 SHA 汇总任务。正式公开前等待所有相关汇总终止；可确认一个完整汇总成功后停止冗余任务，但必须确认取消已到终态，避免稍后覆盖附件或写回草稿。
 
-2.7.22 的预期公开附件共 14 项；后续版本替换版本号：
+2.7.23 的预期公开附件共 14 项；后续版本替换版本号：
 
 | 平台 | 附件名称 |
 | --- | --- |
-| Apple Silicon | `CueUp-2.7.22-arm64.dmg`、对应 `.blockmap`、`CueUp-2.7.22-arm64-mac.zip`、对应 `.blockmap` |
-| Intel Mac | `CueUp-2.7.22.dmg`、对应 `.blockmap`、`CueUp-2.7.22-mac.zip`、对应 `.blockmap` |
-| Windows x64 | `CueUp-Setup-2.7.22.exe`、对应 `.blockmap`、`CueUp.2.7.22.exe`、`latest.yml` |
+| Apple Silicon | `CueUp-2.7.23-arm64.dmg`、对应 `.blockmap`、`CueUp-2.7.23-arm64-mac.zip`、对应 `.blockmap` |
+| Intel Mac | `CueUp-2.7.23.dmg`、对应 `.blockmap`、`CueUp-2.7.23-mac.zip`、对应 `.blockmap` |
+| Windows x64 | `CueUp-Setup-2.7.23.exe`、对应 `.blockmap`、`CueUp.2.7.23.exe`、`latest.yml` |
 | Mac 安装辅助 | `INSTALL-UNSIGNED-MACOS.txt`、`OPEN-UNSIGNED-CUEUP-MAC.sh` |
 
 核对清单：

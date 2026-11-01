@@ -42,7 +42,7 @@ Clear success criteria give you the ability to execute independently and close t
 
 ## Project Overview
 
-Natively is an AI-powered meeting notes and assistant desktop app (v2.7.22).
+Natively is an AI-powered meeting notes and assistant desktop app (v2.7.23).
 
 - **Frontend**: React 19 + Vite + TypeScript + TailwindCSS + Framer Motion
 - **Desktop**: Electron, with the main process in TypeScript/CommonJS
