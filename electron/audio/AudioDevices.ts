@@ -1,3 +1,4 @@
+import { systemPreferences } from 'electron';
 import { loadNativeModule } from './nativeModuleLoader';
 
 // NativeModule may be null if the Rust binary isn't built yet (new clone without `npm run build:native`).
@@ -17,6 +18,10 @@ export class AudioDevices {
             return [];
         }
         try {
+            // CPAL enumeration can create AudioUnit and wait synchronously for
+            // TCC. This shared entry also serves passive startup/settings reads.
+            if (process.platform === 'darwin'
+                && systemPreferences.getMediaAccessStatus('microphone') !== 'granted') return [];
             return getInputDevices();
         } catch (e) {
             console.error('[AudioDevices] Failed to get input devices:', e);

@@ -1426,11 +1426,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             // Load settings
             const loadDevices = async () => {
                 try {
-                    const [inputs, outputs] = await Promise.all([
+                    const [inputs, outputs, permissions] = await Promise.all([
                         // @ts-ignore
                         window.electronAPI?.getInputDevices() || Promise.resolve([]),
                         // @ts-ignore
-                        window.electronAPI?.getOutputDevices() || Promise.resolve([])
+                        window.electronAPI?.getOutputDevices() || Promise.resolve([]),
+                        window.electronAPI?.checkPermissions().catch(() => null) || Promise.resolve(null)
                     ]);
 
                     // Map to shape compatible with CustomSelect (which expects MediaDeviceInfo-like objects)
@@ -1444,7 +1445,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                     const inputId = localStorage.getItem('preferredInputDeviceId') || 'default';
                     const outputId = localStorage.getItem('preferredOutputDeviceId') || 'default';
-                    setInputDevices(formatDevices(getAudioDeviceOptions(inputs, inputId)));
+                    setInputDevices(formatDevices(getAudioDeviceOptions(inputs, inputId, !permissions || (permissions.platform === 'darwin' && permissions.microphone !== 'granted'))));
                     setOutputDevices(formatDevices(getAudioDeviceOptions(outputs, outputId)));
 
                     setSelectedInput(inputId);
@@ -1454,11 +1455,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 }
             };
             loadDevices();
+            window.addEventListener('focus', loadDevices);
 
             // Load Experimental SCK pref
             const savedSck = localStorage.getItem('useExperimentalSckBackend') === 'true';
             setUseExperimentalSck(savedSck);
 
+            return () => window.removeEventListener('focus', loadDevices);
         }
     }, [isOpen, selectedInput, selectedOutput]); // Re-run if isOpen changes, or if selected devices are cleared
 

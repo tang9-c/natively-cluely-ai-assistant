@@ -284,3 +284,126 @@ npx cross-env ELECTRON_RUN_AS_NODE=1 electron --test electron/services/__tests__
 ## 2.7.24 发布跟进
 
 上述 macOS 启动阻塞、应用日志目录及非会议显式窗口激活修复已随 [2.7.24](https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.24-sha-8559fc2) 正式发布。来源 `8559fc2064b9120fcc253d5af19272642b5f26a6`；三平台远程构建和包内 runtime smoke、14 项附件实际摘要及公开下载核对通过，见[发布记录](../testing/2.7.24-build-release.md)。此前“工作区未发布”保留为当时状态。未替换本机日常应用，新正式包的真实权限、授权连续性、有声会议和长期稳定性仍未执行。
+
+
+## 2026-11-01：2.7.24 Apple Silicon 正式包本机验收
+
+**当前结论：下载与安装通过，可操作启动未通过；窗口激活、外链返回和亮暗主题未执行。** 本轮使用日常 profile 的正式 `/Applications/CueUp.app`，不是先前独立身份、空白 profile 的诊断候选。此前隔离候选的通过记录不能替代本次正式包结果。
+
+### 安装证据
+
+- 环境：Apple Silicon arm64，macOS 26.1（25B78）。从[2.7.24 正式发布](https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.24-sha-8559fc2)下载 `CueUp-2.7.24-arm64.dmg`，**322104640 字节**；SHA-256 **`900e3b8137b84d76f9b002bfc786a4aa29afcc048466bb93302c85610f863ea3`**，与发布 asset digest 一致。
+- 替换前未运行 CueUp。DMG、暂存应用及安装后应用均通过 `codesign --verify --deep --strict`；Info.plist 为 2.7.24，主程序 `lipo -archs` 为 arm64。此为 ad-hoc 完整性检查，不等于 Developer ID 或 Apple 公证。
+- 已安装至 `/Applications/CueUp.app`。原 2.7.23 保留于本机私有 `~/.codex/release-records/2.7.24-device/backup/CueUp-2.7.23.app`；DMG 已卸载。未重置日常 userData、会议或 TCC，未重新签名应用、清除扩展属性或读取真实密钥。
+- 核对附件清单时发现上轮清单 `assets[].url` 保留了草稿阶段的 `untagged-*` 地址。本轮已与正式发布 API 对照，将 14 项 URL 改为固定正式标签地址；名称、大小、摘要均保持一致。上轮公开 HTTP 200 检查使用正式发布 API 的地址，不能由此认定草稿地址也可用；本次 DMG 确由正式标签地址下载。
+
+### P1：首窗口加载后仍可能被同步输入设备枚举阻塞
+
+原生工具按完整安装路径启动应用后，首次读取返回 `Accessibility error: AXError.cannotComplete`，第二次返回 `Computer Use server error -10005: timeoutReached`。Finder 对照可正常读取。未获得 CueUp 可操作的 AX 树或截图，不将工具尝试本身计为启动通过。
+
+只读日志与采样确认以下事实：
+
+1. 正确进程来自 `/Applications/CueUp.app/Contents/MacOS/CueUp`，PID 16482；采样头确认版本 2.7.24、ARM64。进程 Launch Time 为 `2026-11-01T09:10:19.557Z`。
+2. 新应用日志位于 `~/Library/Logs/CueUp/natively_debug.log`：ready 为 `09:10:23.121Z`，窗口创建 `09:10:23.331Z`、loadURL 成功 `09:10:23.579Z`，随后执行 launcher 显示。ready 至 loadURL 约 0.46 秒；该区间不是整个进程启动耗时，也不证明页面可操作。
+3. 同 PID 的 tccd 日志于 `09:10:25.732Z` 记录 `kTCCServiceMicrophone / AUTHREQ_PROMPTING`。未授予或拒绝新权限，也未重置旧授权。
+4. `09:11:31Z` 开始的 2 秒采样中，主线程停在原生 `get_input_devices_c_callback → list_input_devices → CPAL supported_input_configs → AudioUnitSetProperty → CoreAudio → mach_msg`。这次有应用主线程阻塞的直接证据，不能只归为工具截图缓存或连接问题。
+
+**缺陷范围：2.7.24 移除导入期 ABI 音频枚举后，正式日常实例在窗口加载后的另一条输入设备枚举路径仍可能阻塞主线程。** 此次尚未取得触发该路径的完整 JS 调用点，也未验证处理授权后能否恢复；不扩展为“所有用户必现”或“授权后一定解决”。没有在本轮验收中改产品代码、回退版本、撤回发布或绕过权限。先前“启动后仍可能请求权限”的边界不等于可以把主线程不可操作登记为通过。
+
+### 项目结果及待办
+
+| 验收项 | 本轮结果 | 限定或后续 |
+| --- | --- | --- |
+| 正式包摘要、版本、架构、签名完整性、安装 | **通过** | Gatekeeper 首次隔离下载交互未独立验证 |
+| 正确进程、ready、窗口创建与页面加载日志 | **通过这些检查** | 不等于可操作启动通过 |
+| 可操作启动 | **未通过，P1** | 原生工具失败，同时主线程采样确认输入设备枚举阻塞 |
+| 可见窗口重新激活、隐藏窗口恢复 | **未执行** | 应用阻塞，无法可靠建立初始窗口状态及操作结果 |
+| 应用内 QCLOUD 外链打开与返回 | **未执行** | 未进入可操作设置/帮助页，未冒用旧版本或隔离候选观察 |
+| Light / Dark 主题切换与画面同步 | **未执行** | 未改变主题；安装前偏好为 System，无需恢复主题操作 |
+| 授权连续性、真实采音、会议、热插拔、长期稳定性 | **未执行** | 本轮没有新增授权或启动会议 |
+
+后续应定位并修复首屏之后同步枚举输入设备的调用路径，补充真实已保存配置及权限待确认时的回归，再用正式包复验上述界面项目。当前 2.7.24 保留安装；记录时进程仍运行，未强制终止日常实例。未主动保存包含会议内容的界面或读取凭据。
+
+安装摘要、启动日志脱敏摘要、完整进程采样和 tccd 原始证据保存在本机私有 `~/.codex/release-records/2.7.24-device/`，不提交原始日志、个人数据或安装包。当前只更新文档和清单 URL，未运行与文档改动无关的产品测试，未提交或推送本轮验收记录。
+
+
+## 2026-11-01：2.7.24 首窗口后输入枚举 P1 原生方案（已撤回）
+
+**历史方案，已按用户要求撤回。** 下述 Rust 修改、原生边界测试及两个 Mac workflow 步骤均已移除，恢复原实现；本节仅保留探索记录，不代表当前工作区方案。当前验证与边界以下一节为准。原方案完成源码回归，但完整原生模块重建、新包真机复验未完成。 本节不把上一节正式包 P1 改记为通过。工作分支为 `codex/fix-passive-input-enumeration`，本轮未提交、未推送、未发布；已安装 `/Applications/CueUp.app` 仍为原始 2.7.24。
+
+### 触发路径与根因
+
+源码调用链与上一节的主线程采样对应：
+
+1. `src/hooks/useOnboarding.ts` 初始化时读取 `getOnboardingState(savedSelection())`，重新获得焦点时也会读取。该读取发生在判断是否打开首次引导之前；有已有服务/设备配置、甚至不打开引导时也会执行。
+2. preload 的 `get-onboarding-state` 进入 `registerOnboardingHandlers.ts`，调用 `OnboardingService.refreshChecks()`；`ipcHandlers.ts` 注册的实际 readiness reader 把 `inputDevices` 连接到 `AudioDevices.getInputDevices()`。
+3. `OnboardingReadiness.ts` 的 `Promise.allSettled` 并行安排权限读取和输入设备枚举；`Promise.resolve().then(...)` 仍在 Electron 主线程执行，并不会把同步原生函数搬到后台线程，也不会等待麦克风授权确认。
+4. N-API 的 `get_input_devices()` 调用 `microphone::list_input_devices()`。原先的 CPAL `HostTrait::input_devices()` 会过滤 `supported_input_configs()`；macOS 的格式探测创建 AudioUnit，并进入采样中已证实的 `AudioUnitSetProperty/CoreAudio/mach_msg` 等待。它有权限/设备访问副作用，不能作为纯 UI 元数据查询。
+
+权限与设备页、开始会议前的设备名称读取、原设置页也通过输入设备 IPC 使用同一原生 lister。只删掉导入期 smoke 检查或隐藏一处 UI 读取，不能修复这些入口。本轮在共享原生 lister 修复，而非增加一个无法中断同步调用的 Promise 超时。
+
+### 修复内容
+
+- `native-module/src/microphone.rs` 在 macOS 通过现有 cidre/CoreAudio 设备列表、输入流配置的通道数及设备名称列出麦克风；被动枚举不再进行 CPAL 输入格式协商或创建 AudioUnit。
+- 保留 `default / Default Microphone`、名称作为 ID 的现有契约及原大小写，兼容已保存设备选择与实际采音解析；无输入通道、查询失败或查询期间移除的设备不进入列表。Windows/Linux 继续使用原 CPAL 路径，N-API/IPC 返回类型不变。
+- 实际麦克风捕获时的权限请求、设备解析和格式协商保持原流程；设备元数据可读取不等于已获录音授权。没有用“已授权”状态或空列表掩盖本次阻塞。
+
+### 回归与结果
+
+| 检查 | 本轮结果与边界 |
+| --- | --- |
+| 新增 `PassiveInputDevices.test.mjs` | **1/1 通过**。提取并编译实际 Rust lister，替换 OS/CPAL 边界；把会创建 AudioUnit 的旧格式探测设为授权待确认时不可进入。旧实现以该副作用 panic 明确 RED，修复后 GREEN；核对默认项、保存的 USB/蓝牙名称 ID、零输入通道、设备读取错误及重复刷新。不是源码字符串断言；仍是边界替身，不是完整 N-API/真实 TCC 测试 |
+| 启动安全与 Onboarding IPC | **25/25 通过**。新增已有配置用例执行真实 service/reader/IPC handler，验证初次及再次状态读取保留保存的输入 ID、服务与模型配置；麦克风待确认仍为 `pending_runtime/unavailable`，显式授权状态更新后才显示 verified |
+| `npm run test:e2e:production` 最终完整复跑 | **35/35 通过**。新增 existing profile 场景先保存设备选择、安装待确认权限/设备元数据边界，再重新加载 renderer；实际初始化、focus 事件、IPC 状态读取、主题 IPC 与设置按钮仍有响应，不冒充捕获授权。含其余 QCLOUD、权限和亮暗主题回归；该场景使用就绪状态边界替身，未运行修复后的原生二进制 |
+| `npm run test:system-audio-permissions` | **123/123 通过**，与前述 IPC 套件有交叠，不合计为独立总用例数 |
+| Electron/renderer 类型检查及 renderer 生产构建 | **通过**，renderer 检查和生产构建由 production 命令执行；`npm run typecheck:electron` 单独通过 |
+| Rust 类型检查 | **通过，但不是原生构建通过**：`DOCS_RS=1 CARGO_PROFILE_RELEASE_DEBUG=0 cargo check --release --manifest-path native-module/Cargo.toml --target-dir <私有目录>`。DOCS_RS 只用于本机类型检查跳过 cidre 的 Xcode 桥接构建，不用于生成/发布二进制；保留两项既有 `AudioDropStats` 可见性警告 |
+| 两个 Mac 构建流程 | 已增加 passive enumeration 回归步骤，YAML 解析及步骤核对通过；本轮未触发远程任务，不能记为远程构建通过 |
+| 格式与差异 | 本轮 Rust 函数 `rustfmt --check`、`git diff --check` 通过。整文件格式检查在原 HEAD 亦有既有差异，未批量修改无关格式 |
+
+### 原生构建限制与剩余验收
+
+标准 `cargo build --release` 实际失败于 cidre 桥接构建：本机 active developer directory 是 `/Library/Developer/CommandLineTools`，没有可用完整 Xcode，`xcodebuild` 无法执行。随后尝试独立元数据探针也因缺少 cidre 的 `ca` 静态桥接库而无法链接；未将 DOCS_RS 类型检查、Rust 边界测试或 renderer 的成功写成真实模块构建成功。
+
+曾由实际 crate 类型检查发现并修正 CoreAudio 绑定命名空间错误，说明边界替身本身不能替代真实绑定类型检查；最终以 `cidre::core_audio` 类型检查通过结果为准。原生构建输出均写到本轮私有目录，未覆盖工作区指向其他 checkout 的 `.node` 符号链接，也未替换用户已安装应用。
+
+后续仍须在完整 Xcode 环境构建/链接真正的原生模块，验证新进程在麦克风待确认时不会隐式请求或等待权限，并以已保存设备/服务配置的新安装包复验启动、焦点切换、原设置设备页、外链返回和亮暗主题。真实采音、热插拔、跨版本 TCC 连续性及其他平台 native 构建亦不在本机本轮通过范围内。
+
+未变更系统授权、强制退出日常应用、读取真实 Key 或启动录音。原始 RED/GREEN、生产/权限测试和环境失败日志位于本机私有 `~/.codex/release-records/2.7.24-device/p1-fix/`；原始采样与安装证据保留在其上级目录。保留上一轮尚未提交的验收记录与下载地址修正，没有撤销它们。
+
+
+## 2026-11-01：撤回 Rust 修改，改为统一入口与被动检查授权门控
+
+**当前结果：上层修复与回归通过，保留原 Rust 实现；隔离候选可操作启动通过，正式日常实例尚未升级复验。** 工作分支 `codex/fix-passive-input-enumeration`；未提交、推送或发布。不能据此把前述原始 2.7.24 正式包的 P1 改记为通过。
+
+### 当前修复
+
+- `native-module/src/microphone.rs` 及两个 Mac 构建 workflow 与 HEAD 无差异，撤回本轮 CoreAudio 元数据实现，移除 `PassiveInputDevices.test.mjs`。不改捕获后端、截图检查或 Rust ABI。
+- `AudioDevices.getInputDevices()` 在 macOS 先读取麦克风状态；未确认 granted（包括待确认、未知、拒绝、受限或读取失败）不调用可能同步等待 TCC 的原生枚举。返回空列表仅表示本次没有枚举，不写入配置、不缓存设备不存在；授权后的下一次调用恢复原枚举和原设备 ID。非 macOS 及输出枚举保持原路径。
+- readiness 先等待权限读取，再决定是否枚举输入；macOS 未授权时输入状态为 `pending_runtime/unavailable`，不报设备断开。权限读取异常保留失败状态，拒绝/受限仍由麦克风权限项报错。
+- 初始设置与设置页保留保存的输入 ID，未枚举时显示“已保存设备（待确认）”；不把空列表当成已断开。初始设置说明授权后刷新。设置页获得焦点时重新读取，关闭或 effect 更新时移除监听，避免监听累积。
+- 显式申请权限、检查电平和实际会议采集的授权流程保持原实现；没有伪造 granted。首次设置继续条件未放宽，待确认时可稍后继续。
+
+### 回归证据
+
+| 检查 | 结果及覆盖 |
+| --- | --- |
+| `AudioDeviceAuthorization.test.mjs` | **8/8**。执行实际 AudioDevices 模块，仅替换 Electron/原生边界；原实现 5 项 RED（未授权仍进入 native），修复后不进入；覆盖五种非 granted/异常、授权后恢复、原 ID、输出及 Windows/Linux 行为 |
+| 启动安全与 Onboarding IPC | **26/26**。已有配置初次/重复读取保留服务及设备 ID；权限 Promise 尚未完成或待确认时枚举调用次数为零，授权后恢复；旧并行流程明确 RED |
+| `npm run test:system-audio-permissions` | **132/132**，包含新增统一入口用例；与前述套件交叠，不相加统计 |
+| `npm run test:e2e:production` | **35/35**。已有配置下保留设备、重新加载和 focus、真实 readiness/IPC/统一入口、设置与初始设置刷新、Light/Dark；只替换 OS 麦克风状态边界，不替换 readiness。界面先 RED：原显示“不可用”，修复为“待确认”且无断开误报。包含 renderer 类型检查和生产构建 |
+| Electron 类型检查、package 模式编译 | **通过**：`npm run typecheck:electron`、`npm run build:electron:package` |
+
+### 保留原生二进制的本机隔离候选
+
+从已安装 2.7.24 克隆独立身份候选，仅替换本轮生产 JS/renderer，使用独立 userData；未读取真实账号或密钥。候选与原包 `.node` SHA-256 均为 `2371ea5f48d84aae20bf3657de121ef5e59df98e327b491a8f881d8f110f000a`，确认没有混入撤回的 Rust 修改；候选签名完整性检查通过。不是远程构建或正式安装包。
+
+原生工具约 6.2 秒取得首页 AX，随后打开设置、初始设置及权限页；真实未授权状态显示“麦克风授权确认后再刷新输入设备”，设备保留系统默认。刷新后仍可退出引导并返回首页，未重现原正式包 AX 读取超时/主线程不可操作。未点击允许麦克风、检查电平或开始会议；没有新增权限或录音。仅退出本轮隔离候选。
+
+工具曾在点击后返回旧 AX/截图；对候选窗口执行其支持的 Raise 后读取到已返回首页的新 AX，说明仍存在需要重新激活后核对的工具观察不同步现象。该现象不计为每次点击画面立即同步通过，也不据此宣称工具全部问题已消除。
+
+### 未执行项和结论边界
+
+上层门控回归验证了授权未确认时不会进入已定位的同步枚举路径；隔离候选保留原生模块也能正常启动。尚未验证正式日常 profile 升级、跨版本 TCC 连续性、真实授权完成后的新进程启动、有声采集、设备热插拔、长期稳定性或三平台新安装包。不能保证 granted 后所有驱动/CoreAudio 阻塞均被消除。本轮策略不需要重建 Rust；上节缺少完整 Xcode 的限制不作为当前 JS 修复的构建阻断。
+
+候选使用独立身份和 profile，不能替代原日常实例。候选之后补齐了设置页 focus 监听清理；最终源码由 production 套件复跑覆盖，该清理未重新制作本机候选。已安装 `/Applications/CueUp.app` 未被本轮修复替换。保留既有验收记录及附件 URL 校正，未改远程标签/附件。原始 RED/GREEN、构建与候选元数据位于本机私有 `~/.codex/release-records/2.7.24-device/p1-upper-fix/`，不提交原始日志或个人数据。
