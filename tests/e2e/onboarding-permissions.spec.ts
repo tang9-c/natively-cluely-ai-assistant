@@ -3,6 +3,66 @@ import { enterOnboardingStep, onboardingScript } from './onboarding-actions';
 
 test.use({ onboardingMode: 'fresh', onboardingScenario: 'permission-denied' });
 
+test('microphone request settlement restores saved devices and leaves IPC and navigation responsive', async ({ page, electronApp }) => {
+  await page.evaluate(() => localStorage.setItem('preferredInputDeviceId', 'fixture-input'));
+  await electronApp.evaluate(({ app, ipcMain }) => {
+    const require = process.getBuiltinModule('node:module').createRequire(app.getAppPath() + '/permission-settlement.cjs');
+    const state = require(app.getAppPath() + '/dist-electron/electron/main.js').AppState.getInstance();
+    const { createOnboardingReadinessReader } = require(app.getAppPath() + '/dist-electron/electron/services/onboarding/OnboardingReadiness.js');
+    const fixture = state.onboardingFixture;
+    fixture.permissions.microphone = 'not-determined';
+    fixture.devices.splice(0);
+    state.onboardingService.setCheckReader(createOnboardingReadinessReader({ isPackaged: () => true,
+      readPermissions: async () => fixture.permissions, inputDevices: () => fixture.devices,
+      outputDevices: () => fixture.outputs, speechCheck: () => fixture.readConfiguration('stt') }));
+    // Keep the OS authorization boundary pending without changing real TCC.
+    ipcMain.removeHandler('permissions:request-mic');
+    ipcMain.handle('permissions:request-mic', () => new Promise<boolean>(resolve => {
+      (globalThis as any).__completeMicAuthorization = () => {
+        fixture.permissions.microphone = 'granted';
+        fixture.devices.push({ id: 'fixture-input', name: '测试麦克风' });
+        resolve(true);
+      };
+    }));
+  });
+  await enterOnboardingStep(page, '权限与设备');
+  const input = page.getByLabel('输入设备', { exact: true });
+  const request = page.getByRole('button', { name: '允许访问麦克风', exact: true });
+  await expect(input.locator('option:checked')).toHaveText('已保存设备（待确认）');
+  await request.click();
+  await expect(request).toBeDisabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  const pending = await page.evaluate(() => window.electronAPI.getOnboardingState());
+  expect(pending.success && pending.snapshot.checks.microphone.status).toBe('pending_runtime');
+  expect(await page.evaluate(() => window.electronAPI.getThemeMode())).toHaveProperty('resolved');
+  await expect(request).toBeDisabled();
+  await electronApp.evaluate(() => (globalThis as any).__completeMicAuthorization());
+  await expect(page.getByText('权限已开启', { exact: true })).toBeVisible();
+  await expect(request).toHaveCount(0);
+  await expect(input).toBeEnabled();
+  await expect(input).toHaveValue('fixture-input');
+  await expect(input.locator('option:checked')).toHaveText('测试麦克风');
+  await expect(page.getByText('麦克风授权确认后再刷新输入设备。', { exact: true })).toHaveCount(0);
+  for (let i = 0; i < 2; i++) {
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.getByRole('button', { name: '刷新设备与权限', exact: true }).click();
+    await expect(page.getByText('设备与权限已刷新', { exact: true })).toBeVisible();
+    const nav = page.getByRole('navigation', { name: '初始设置步骤' });
+    await nav.getByRole('button', { name: /设置概览/ }).click();
+    await expect(page.getByText('本次已确认', { exact: true })).toBeVisible();
+    await nav.getByRole('button', { name: /权限与设备/ }).click();
+    await expect(input).toHaveValue('fixture-input');
+  }
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('权限已开启', { exact: true })).toBeVisible();
+  await expect(input).toHaveValue('fixture-input');
+  expect(await page.evaluate(() => localStorage.getItem('preferredInputDeviceId'))).toBe('fixture-input');
+  expect(await electronApp.evaluate(({ app }) => {
+    const require = process.getBuiltinModule('node:module').createRequire(app.getAppPath() + '/permission-settlement.cjs');
+    return require(app.getAppPath() + '/dist-electron/electron/main.js').AppState.getInstance().onboardingFixture.counters.audioStarts;
+  })).toBe(0);
+});
+
 test('manual refresh clears obsolete system audio denial and shows authorized-but-not-captured status', async ({ page, electronApp }, testInfo) => {
   await enterOnboardingStep(page, '权限与设备');
   await expect(page.getByTestId('onboarding-system-audio-permission')).toContainText('系统音频采集权限不可用');
