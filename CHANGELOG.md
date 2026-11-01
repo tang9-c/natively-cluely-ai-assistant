@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.25] - 2026-11-01
+
+### Fixed
+
+- Gate the shared macOS input-device enumeration entry on confirmed microphone authorization, avoiding passive startup/settings reads entering synchronous native probes while authorization is pending. Keep the original Rust implementation and actual capture/screenshot permission checks.
+- Read permissions before passive input readiness checks; preserve saved device IDs and display pending confirmation instead of a disconnected device. Refresh settings devices when the window regains focus and remove the listener when closed.
+
+### Testing and known limitations
+
+- Add shared-entry, existing-configuration, permission-ordering and production UI regressions. Release candidate, three-platform builds and asset verification are recorded in `docs/testing/2.7.25-build-release.md`.
+- An isolated candidate using the original native binary remained usable without granting microphone access. New-release installation, real TCC continuity, voiced capture and long-running stability remain unverified; tool observation synchronization is not fully resolved. Signing and plaintext credential storage are unchanged; SEC-01 remains accepted and non-blocking.
+
 ## [2.7.24] - 2026-11-01
 
 ### Fixed
