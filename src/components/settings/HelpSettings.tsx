@@ -9,6 +9,7 @@ import {
 import { useShortcuts, ShortcutConfig } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
+import { getSpeechProviderLabel } from '../../utils/settingsDisplay';
 import cueUpIcon from '../icon.png';
 
 // ----------------------
@@ -441,8 +442,8 @@ const MockPermissionsAnim = () => {
             </div>
             <div className="text-xs text-text-secondary text-center max-w-[280px]">
                 {isMac
-                    ? 'CueUp 需要辅助功能和屏幕录制权限来分析屏幕内容。'
-                    : 'CueUp 会在你第一次开始会议时请求麦克风权限。'}
+                    ? '屏幕授权示意；截图权限与系统音频采集分别检查。'
+                    : '请检查系统麦克风隐私与桌面应用访问设置。'}
             </div>
         </div>
     );
@@ -572,9 +573,9 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'local-sensevoice', label: 'Local SenseVoice', badge: '', recommended: true, desc: '中文优先，本地实时转录', color: 'green', icon: <img src={cueUpIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="CueUp" /> },
-        { id: 'qcloud-stt', label: 'QCLOUD API', badge: '已保存', recommended: false, desc: '同一把 QCLOUD key，中文优先并支持说话人分离', color: 'blue', icon: <Mic size={14} /> },
-        { id: 'doubao-auc', label: 'Doubao AUC', badge: '已保存', recommended: false, desc: 'AUC BigModel，支持说话人和情绪信息', color: 'orange', icon: <Mic size={14} /> },
+        { id: 'local-sensevoice', label: getSpeechProviderLabel('local-sensevoice'), badge: '', recommended: true, desc: '中文优先，本地实时转录', color: 'green', icon: <img src={cueUpIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="CueUp" /> },
+        { id: 'qcloud-stt', label: getSpeechProviderLabel('qcloud-stt'), badge: '已保存', recommended: false, desc: '共用 QCLOUD API Key，中文优先并支持说话人分离', color: 'blue', icon: <Mic size={14} /> },
+        { id: 'doubao-auc', label: getSpeechProviderLabel('doubao-auc'), badge: '已保存', recommended: false, desc: 'AUC BigModel，支持说话人和情绪信息', color: 'orange', icon: <Mic size={14} /> },
     ];
     const selected = options[0];
 
@@ -671,7 +672,7 @@ const MockApiKeyFlowAnim = () => {
     return (
         <div className="flex justify-center flex-col items-center gap-2 py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
             <div className="w-[380px] space-y-2 relative z-10">
-                <label className="text-xs font-medium text-text-secondary block">QCLOUD / Doubao API 密钥</label>
+                <label className="text-xs font-medium text-text-secondary block">QCLOUD API Key（操作示意）</label>
                 <div className="flex gap-2">
                     <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary flex items-center shadow-inner">
                         <span className={stage > 0 ? "opacity-100" : "opacity-40"}>
@@ -688,7 +689,7 @@ const MockApiKeyFlowAnim = () => {
                         <div className="text-xs bg-bg-input px-3 py-1.5 rounded-md flex items-center gap-2 border border-border-subtle shadow-sm">
                             {stage === 2 ? <RefreshCw size={12} className="text-blue-500 animate-spin" /> : stage > 2 ? <Check size={12} className="text-green-500" /> : <Play size={12} className="text-text-tertiary" />}
                             <span className={stage > 2 ? "text-green-500" : "text-text-primary"}>
-                                {stage === 2 ? '测试中...' : stage > 2 ? '已连接' : '测试 API 密钥'}
+                                {stage === 2 ? '验证中…（示意）' : stage > 2 ? '模型响应通过（示意）' : '保存并验证（示意）'}
                             </span>
                         </div>
                     </div>
@@ -759,44 +760,44 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({ title, icon, childr
     );
 };
 
-const SetupGuide = () => {
-    const cmd = getModifierSymbol('cmd');
-    const shift = getModifierSymbol('shift');
+const SetupGuide = ({ shortcuts }: { shortcuts: ShortcutConfig }) => {
     const steps = [
         {
-            title: '授予权限',
-            desc: isMac
-                ? '在 macOS 隐私与安全性设置中为 CueUp 启用屏幕录制和辅助功能。'
-                : '第一次开始会议时批准麦克风提示（设置 → 隐私 → 麦克风）。',
+            title: '设置概览',
+            desc: '首次启动点击“开始设置”；稍后可从首页“继续设置”或“设置 → 通用 → 初始设置”返回。沿用已有配置，不会自动录音或发送会议内容。',
         },
         {
-            title: '设置音频',
-            desc: '打开设置 → 音频，优先选择 Local SenseVoice；需要云端中文转录或说话人分离时，选择 QCLOUD API 或 Doubao AUC。',
+            title: '权限与设备',
+            desc: '确认麦克风、输入与输出设备，用“检查电平”测试输入。“刷新设备与权限”会显示读取结果；系统音频在实际会议中确认。',
         },
         {
-            title: '连接 AI 模型',
-            desc: '打开设置 → AI 提供商，默认聊天模型是 Doubao；也可以配置 QCLOUD 或自定义端点。',
+            title: '语音识别',
+            desc: '未配置时推荐本地 SenseVoice，显式下载并检查模型。也可选择 QCLOUD API 或 Doubao AUC，保存当前会议语言与服务后验证。',
         },
         {
-            title: '个性化（可选）',
-            desc: '在启动器打开“档案智能”入口，上传简历和职位描述；在启动器打开“公司调研”运行独立公司情报调研；或选择适合你会议的模式。',
+            title: 'AI 提供商',
+            desc: '验证 QCLOUD API、豆包或 Codex CLI。密钥已保存不等于模型响应通过；上次验证通过会保留历史时间，配置变化后重新检查。',
+        },
+        {
+            title: '开始会议',
+            desc: '核对设备与会议保留策略后，点击“开始会议”进入真实会议。可选择“稍后继续”；离开有修改的页面时先保存、放弃或留在原页。',
         },
     ];
 
-    const readyTitle = '一切就绪';
-    const readyDesc = '完成上面四个步骤即可开会。可随时用以下快捷键唤起 CueUp。';
+    const readyTitle = '开始后确认转写';
+    const readyDesc = '已进入会议、音频已启动、已收到转写是不同状态。分别检查自己的声音与电脑播放的会议声音；“开始准备”整理单场会议背景，不是“初始设置”。';
 
     const hotkeys = [
-        { label: '切换显示', kbd: `${cmd}H` },
-        { label: '截图', kbd: `${cmd}${shift}H` },
-        { label: '聊天', kbd: `${cmd}K` },
+        { label: '切换显示', kbd: shortcuts.toggleVisibility.join(' + ') || '未设置' },
+        { label: '区域截图', kbd: shortcuts.selectiveScreenshot.join(' + ') || '未设置' },
+        { label: '聚焦输入', kbd: shortcuts.focusInput.join(' + ') || '未设置' },
     ];
 
     return (
         <div className="mb-10">
             <div className="mb-7">
-                <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">快速开始</h3>
-                <p className="text-[13px] text-text-tertiary mt-0.5">四个步骤即可上手 CueUp；其它设置可在对应设置页随时调整。</p>
+                <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">初始设置：按五步完成</h3>
+                <p className="text-[13px] text-text-tertiary mt-0.5">完成应用配置后再开始真实会议；高级选项保留在对应设置页。</p>
             </div>
 
             <div>
@@ -825,11 +826,11 @@ const SetupGuide = () => {
                     );
                 })}
 
-                {/* Done state — visually a continuation of the timeline, not a 5th step */}
+                {/* Runtime verification remains separate from configuration readiness. */}
                 <div className="flex gap-4">
                     <div className="flex flex-col items-center shrink-0" style={{ width: 28 }}>
-                        <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center shrink-0">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-500" strokeWidth={2.5} />
+                        <div className="w-7 h-7 rounded-full bg-status-info-bg border border-status-info-border flex items-center justify-center shrink-0">
+                            <HelpCircle className="w-4 h-4 text-status-info" strokeWidth={2.5} />
                         </div>
                     </div>
                     <div className="flex-1 min-w-0 pb-0" style={{ paddingTop: 3 }}>
@@ -837,7 +838,7 @@ const SetupGuide = () => {
                         <p className="text-[13px] text-text-secondary leading-relaxed mt-0.5">{readyDesc}</p>
                         <div className="flex items-center gap-4 mt-3 flex-wrap">
                             {hotkeys.map((h, hi) => (
-                                <React.Fragment key={h.kbd}>
+                                <React.Fragment key={h.label}>
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-[12px] text-text-secondary">{h.label}</span>
                                         <kbd className="font-mono text-[11px] font-semibold text-text-primary bg-bg-item-surface border border-border-subtle rounded-md px-1.5 py-0.5 leading-none">{h.kbd}</kbd>
@@ -873,7 +874,8 @@ export const HelpSettings: React.FC = () => {
 
             <div data-help-scroll-content className="flex-1 space-y-2">
 
-                <SetupGuide />
+                <SetupGuide shortcuts={shortcuts} />
+                <p className="text-xs text-text-secondary">下方动画均为操作示意，不显示当前设备、密钥或连接状态。</p>
 
                 <div className="h-10" />
                 <div className="mb-4 flex items-center gap-2 border-b border-border-subtle pb-3">
@@ -884,8 +886,8 @@ export const HelpSettings: React.FC = () => {
                     <div className="space-y-4">
                         <p>
                             {isMac
-                                ? 'CueUp 优先在本地运行：本地 SenseVoice 转录、本地模型与本地存储默认启用。但你可以在“设置 → AI 提供商”和“设置 → 音频”中配置云端 LLM/STT，并在数据范围允许时由 CueUp 按需走云端路径。它仍需要操作系统权限来访问屏幕内容和全局快捷键。你的系统设置应如下所示：'
-                                : 'CueUp 优先在本地运行：本地 SenseVoice、转录与存储默认启用。配置云端 LLM/STT 后仍会按你的设置走云端路径。Windows 会在你第一次开始会议时提示麦克风权限——不需要其他操作系统权限。'}
+                                ? 'CueUp 优先在本地运行，未配置时推荐本地 SenseVoice，但仍需准备模型。云端 AI 与语音服务分别配置；选择本地转写不等于后续 AI 回答一定在本地执行。麦克风、系统音频、截图与全局键盘交互分别检查所需权限。'
+                                : 'CueUp 推荐本地 SenseVoice，模型准备与云端服务配置仍需由你完成。Windows 请检查系统麦克风隐私与桌面应用访问设置，以及当前输入、输出设备；不要以是否出现一次性授权弹窗判断能否采音。'}
                         </p>
                         {isMac && <MockPermissionsAnim />}
                         <div className="space-y-3 mt-4">
@@ -907,15 +909,15 @@ export const HelpSettings: React.FC = () => {
                                             <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit（SCK）
                                         </h5>
                                         <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                            macOS 13.0+ 推荐的后端。使用 Apple 现代的、高度优化的内部框架，安全地实现零延迟回环扬声器捕获。
+                                            用于系统音频采集的一种后端，授权与可用性由实际捕获确认；部分情况下应用会使用或回退到此路径。不要仅根据屏幕开关判断其采集结果。
                                         </p>
                                     </div>
                                     <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                         <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio（旧版）
+                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio
                                         </h5>
                                         <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                            旧硬件的备用引擎。依赖内部设备聚合来捕获输出音频。仅在 SCK 反复丢失扬声器数据包时使用。
+                                            系统音频采集后端之一，不是仅供旧硬件使用。它与 ScreenCaptureKit 的授权和诊断方式可能不同，静音或暂时没有数据不等于屏幕权限被拒绝。
                                         </p>
                                     </div>
                                 </div>
@@ -926,7 +928,7 @@ export const HelpSettings: React.FC = () => {
                                     <Globe size={14} className="text-green-500" /> 语言与地区口音
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    在 <strong>设置 → 音频</strong> 标签下，你必须指定 <strong>语言</strong> 你将使用的语言（例如，中文）。最重要的是，确保选择你特定的地区 <span className={kbdClass}>口音/地区</span> 映射（例如， <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>），因为 STT 后端会根据此映射大幅提升基于地区变音的转录准确性。
+                                    在初始设置或 <strong>设置 → 音频</strong> 选择 <strong>会议语言</strong>。QCLOUD 语音当前支持中文与自动的中文优先策略；本地 SenseVoice 支持中文、英文、日语、韩语。选项列表不代表每个服务都支持所有语言，切换语言、服务或模型后保存并重新检查。
                                 </p>
                             </div>
                         </div>
@@ -943,10 +945,10 @@ export const HelpSettings: React.FC = () => {
 
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <HelpCircle className="w-4 h-4 text-amber-500" /> 截图权限异常
+                                        <HelpCircle className="w-4 h-4 text-amber-500" /> 截图与系统音频的检查边界
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">如果系统阻止了屏幕或系统音频捕获，音频页会显示权限错误。点击“修复并重启”清理 macOS 权限缓存，然后按系统提示重新授权；如果修复失败，请在系统设置中手动重新授予权限。</p>
-                                    <p className="text-[11px] text-text-tertiary">麦克风转写仍可继续，但恢复屏幕录制权限前可能无法捕获系统音频或截图。</p>
+                                    <p className="text-xs opacity-90 mb-2">屏幕录制开关不能单独证明系统音频可用或受限。截图使用自己的屏幕权限检查，音频后端在开始会议时检查实际采集；遇到真实错误时，先核对当前应用、设备和所需授权，完全退出重开后重试。</p>
+                                    <p className="text-[11px] text-text-tertiary">未尝试实际采集时显示“使用时确认”，不是权限拒绝。权限修复会重置本应用的相关授权记录，必须确认后才执行，不应仅为消除待确认状态而重置；清除下载隔离属性不会授予录音权限。</p>
                                 </div>
 
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
@@ -963,7 +965,7 @@ export const HelpSettings: React.FC = () => {
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                         <Mic className="w-4 h-4 text-blue-500" /> 麦克风
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">用于捕获你在会议中说的话。Windows 会在你第一次开始会议时提示。</p>
+                                    <p className="text-xs opacity-90 mb-2">用于捕获你在会议中说的话。检查 Windows 的麦克风隐私与桌面应用访问设置，并确认选中的输入设备正常。</p>
                                     <p className="text-[11px] text-text-tertiary">设置 &gt; 隐私 &gt; 麦克风</p>
                                 </div>
                             </div>
@@ -973,13 +975,13 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="2. 音频语音转文字提供商设置（麦克风）" icon={<Mic className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p>CueUp 的语音页现在以三条主路径为核心：本地 SenseVoice、QCLOUD API 和 Doubao AUC。Local SenseVoice 适合默认本地中文实时转录；QCLOUD API 和 Doubao AUC 适合需要云端中文优先识别、说话人分离或高级分句信息的会议。</p>
+                        <p>CueUp 的语音页现在以三条主路径为核心：本地 SenseVoice、QCLOUD API 和 Doubao AUC。本地 SenseVoice 适合默认本地中文实时转录；QCLOUD API 和 Doubao AUC 适合需要云端中文优先识别、说话人分离或高级分句信息的会议。</p>
 
                         <MockProviderSelectionAnim />
 
                         <div className="space-y-4 pt-2">
                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API 密钥与测试</h4>
-                            <p className="text-xs text-text-secondary">强烈建议在进入正式会议前先测试连接。如果额度或权限异常，系统会显示成功的 ping 或明确的错误信息。</p>
+                            <p className="text-xs text-text-secondary">本地“检查模型”验证能否加载，不录音；云端“保存并验证语音服务”可能发送内置样本，不采集你的声音。凭据访问通过不等于真实会议转写成功。“上次检查通过”是带时间的历史回执，配置改变后重新检查。</p>
 
                             <MockApiKeyFlowAnim />
                         </div>
@@ -989,7 +991,7 @@ export const HelpSettings: React.FC = () => {
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>1. Local SenseVoice</span>
+                                    <span>1. 本地 SenseVoice</span>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     推荐默认方案。模型在本机运行，中文优先，不把原始音频发送到云端。第一次使用前需要在本地模型面板下载 SenseVoice 模型；如果模型未安装，设置页会显示下载入口和状态。
@@ -1001,7 +1003,7 @@ export const HelpSettings: React.FC = () => {
                                     <span>2. QCLOUD API</span>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    使用同一把 QCLOUD key 同时支持 LLM 路由和语音转写。保存 key 后，语音提供商下拉会出现 <strong>QCLOUD API</strong>；它默认中文优先，支持说话人分离。Embedding 保持本地优先；本地向量模型不可用时，可使用 QCLOUD 或豆包 Embedding 云端回退。
+                                    语音识别与 AI 共用已保存的 QCLOUD API Key，在“设置 → QCLOUD API”管理，切换服务后无需重复输入；只有首次填写或主动更换时才需输入。账号与令牌使用 QCLOUD API 平台入口，不使用火山引擎开户指引；服务端须允许相应能力。Embedding 保持本地优先；本地向量模型不可用时，可使用 QCLOUD 或豆包 Embedding 云端回退。
                                 </p>
                             </div>
 
@@ -1011,7 +1013,7 @@ export const HelpSettings: React.FC = () => {
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://www.volcengine.com/docs/6561/1354869') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    高级云端语音通道。AUC BigModel 支持异步任务、说话人分离、分句信息和情绪信息；适合更长音频或需要更完整会议结构的场景。保存 Doubao 语音 key 后可在语音页选择 <strong>Doubao AUC</strong>。
+                                    豆包语音 Key 与豆包 AI Key 分别配置。语音 Key 在“设置 → 音频”管理，AI Key 在“设置 → AI 提供商”管理；开户使用火山引擎的对应指引。AUC 支持异步任务、说话人分离与分句等信息，实际能力取决于服务端响应。
                                 </p>
                             </div>
 
@@ -1023,23 +1025,23 @@ export const HelpSettings: React.FC = () => {
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
-                                <h5 className="font-semibold text-sm text-text-primary">Local SenseVoice · 术语/热词纠错</h5>
+                                <h5 className="font-semibold text-sm text-text-primary">本地 SenseVoice · 术语/热词纠错</h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     本地 SenseVoice 设置页支持按术语维护“规范词 + 变体”，例如把容易听错的客户名、产品代号统一替换为期望写法。每条术语可独立启用或停用，整体纠错开关关闭时所有条目不生效。修改并保存后从下一次转写会话开始生效，已经写出的旧转录不会被回填。
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
-                                <h5 className="font-semibold text-sm text-text-primary">Local Whisper · 麦克风与系统音频</h5>
+                                <h5 className="font-semibold text-sm text-text-primary">本地 Whisper · 麦克风与系统音频</h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Local Whisper 是保留的兼容路径，不是当前默认的本地语音主力。已有 Whisper 配置时，仍可分别为麦克风通道和系统音频通道选择模型；选择语言后，CueUp 会自动判断模型是否兼容，必要时给出“将自动调整”的明确提示并落到实际支持的模型上，避免静默切换。新配置优先使用 Local SenseVoice。
+                                    本地 Whisper 是保留的兼容路径，不是当前推荐的本地语音主力。已有配置时仍可分别为麦克风通道和系统音频通道选择模型；语言或模型不兼容时按提示更换，不能把语言选择当作模型已具备该能力。初始设置沿用已有每通道配置，高级修改返回原设置。
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary">说话人验证 vs. 通用说话人分离</h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    语音页的 <strong>Speaker separation</strong> 只是把音频按声学特征切成不同说话人；<strong>我的声音</strong>（设置侧“说话人验证”标签）则会注册本机声纹，把识别出的“本人”发言打上 ME 标签，用于后续角色化记录。两者各司其职，没有覆盖关系。
+                                    语音页的 <strong>Speaker separation</strong> 只是把音频按声学特征切成不同说话人；<strong>我的声音</strong>（设置侧“我的声音”标签）则会注册本机声纹，把识别出的“本人”发言打上 ME 标签，用于后续角色化记录。两者各司其职，没有覆盖关系。
                                 </p>
                             </div>
                         </div>
@@ -1049,10 +1051,10 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="3. AI 模型与提示词引擎" icon={<Key className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解屏幕、转录、模式、参考资料和个人上下文。默认聊天模型是 Doubao Seed 2.0 Lite；你也可以在“设置 → AI 提供商”中切换到 QCLOUD API 或自定义端点。QCLOUD API 的密钥和连通性测试位于独立的“设置 → QCLOUD API”页。</p>
+                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解屏幕、转录、模式、参考资料和个人上下文。未配置时的默认聊天模型是 Doubao Seed 2.0 Lite，调用仍需对应凭据；也可选择 QCLOUD API、Codex CLI 或自定义端点。QCLOUD 密钥在独立的“设置 → QCLOUD API”管理，保存状态不代表连接或模型响应已经验证。</p>
 
                         <div className="space-y-3 pt-2">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. 当前云端模型</h4>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. 可配置的 AI 提供商</h4>
 
                             <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
@@ -1061,7 +1063,7 @@ export const HelpSettings: React.FC = () => {
                                     </span>
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.volcengine.com/ark') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
                                 </h5>
-                                <p className="text-[11px] opacity-80 mb-2">当前默认聊天模型是 <strong>Doubao Seed 2.0 Lite</strong>。适合中文优先的实时回答，也可填写 Doubao Embedding Endpoint ID 用于云端向量。</p>
+                                <p className="text-[11px] opacity-80 mb-2">未配置时的聊天默认模型是 <strong>Doubao Seed 2.0 Lite</strong>，调用仍需对应服务凭据。也可填写 Doubao Embedding Endpoint ID 用于策略允许的云端向量处理。</p>
                                 <span className={kbdClass}>doubao-seed-2-0-lite-260215</span>
                             </div>
 
@@ -1070,9 +1072,15 @@ export const HelpSettings: React.FC = () => {
                                     <span className="flex items-center gap-2">
                                         <img src={cueUpIcon} alt="QCLOUD API" className="w-4 h-4 object-contain force-black-icon opacity-80" /> QCLOUD API
                                     </span>
+                                    <button onClick={() => { void window.electronAPI.openExternal('https://aigw.feigenbaum.com.cn/'); }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 打开 QCLOUD API 平台</button>
                                 </h5>
-                                <p className="text-[11px] opacity-80 mb-2">一把 key 可用于 LLM 路由和可选语音转写。保存时如果当前仍是自动默认模型，CueUp 会把聊天默认切到 QCLOUD；如果你已手动选择模型，会先询问确认。</p>
+                                <p className="text-[11px] opacity-80 mb-2">QCLOUD API 平台负责账号、令牌、额度与服务权限；语音与 AI 复用同一 Key。原设置保存 Key 时可能提示是否更换聊天默认模型；初始设置的保存与验证针对当前选择，不应把“密钥已保存”视为模型响应通过。</p>
                                 <span className={kbdClass}>sk-...</span>
+                            </div>
+
+                            <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                <h5 className="font-semibold text-sm text-text-primary mb-1">Codex CLI 与历史配置</h5>
+                                <p className="text-[11px] text-text-secondary leading-relaxed">初始设置可验证 Codex CLI；“检测 CLI”只确认程序可执行，不代表已登录或推理成功，仍需验证当前配置。其他已保存提供商和自定义模型保留，在原设置维护；友好显示名不会改变底层配置 ID。</p>
                             </div>
 
                             <div className="mt-2 bg-bg-item-surface p-4 rounded-xl border border-border-subtle shadow-sm flex gap-3">
@@ -1117,16 +1125,17 @@ export const HelpSettings: React.FC = () => {
                         <div className="space-y-3 pt-4">
                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">云提供商数据范围</h4>
                             <p className="text-xs text-text-secondary leading-relaxed">
-                                CueUp 把每一类用户数据抽象成独立的数据范围，让你能逐项决定是否允许云端提供商接收。当前共 6 项：
+                                数据范围是一套全局策略，在“设置 → AI 提供商 → AI 数据范围”管理，影响使用该策略的 AI 路径，不是每个提供商独立一套开关。未显式关闭时按允许处理；当前共 6 项：
                                 <strong className="text-text-primary">转写内容</strong>、<strong className="text-text-primary">截图</strong>、<strong className="text-text-primary">参考文件</strong>、<strong className="text-text-primary">画像历史</strong>、<strong className="text-text-primary">云端向量</strong>、<strong className="text-text-primary">会后总结</strong>。
                                 关闭某一项后，CueUp 会尽量使用本地路径或降级到不依赖该项的模型，但能否完全离线取决于当时可用的本地模型与通道——并非所有场景都能保证完全本地化。
                             </p>
+                            <p className="text-xs text-text-secondary leading-relaxed">“允许 AI 使用转写内容”与初始设置共用策略，不控制云端语音识别的原始音频上传。关闭后无法完成首次 AI 设置，可稍后继续；若要避免音频为转写外发，应选择本地语音识别。</p>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-[13px] text-text-primary">典型取舍</h5>
                                 <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                     <li>关闭 <strong>截图</strong> 后，云端模型无法看到你的屏幕内容，但本地视觉模型仍可能可用；不存在视觉替代时会给出明确降级提示。</li>
                                     <li>关闭 <strong>转写内容</strong> 后，会议期间的实时上下文将不再发送给云端，依赖该数据的提示（例如会议追问）将受限制。</li>
-                                    <li>关闭 <strong>云端向量</strong> 后，向量检索仍优先走本地 Embedding；只有显式选用云端 Embedding 时才会真正拦截。</li>
+                                    <li>关闭 <strong>云端向量</strong> 后仍可使用本地 Embedding；云端回退同样受此范围约束，不能绕过已关闭的策略。</li>
                                     <li>关闭 <strong>会后总结</strong> 后，本地规则提取仍会执行，但 LLM 增强的总结、行动项等会跳过云端路径或直接返回本地结果。</li>
                                 </ul>
                             </div>
@@ -1317,7 +1326,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="6. 会议智能" icon={<Calendar className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">会话结束后，CueUp 会把会议保存到本地数据库，并生成包含转录、AI 用量和结构化摘要的会议详情。</p>
+                        <p className="text-[13px]">保留策略允许保存时，CueUp 在会议结束后写入本地记录，会议详情包含可用的转录、AI 用量和摘要结果；会后 AI 处理仍取决于服务与数据范围。</p>
 
                         <MockMeetingInterfaceAnim />
 
@@ -1336,7 +1345,7 @@ export const HelpSettings: React.FC = () => {
                                     <Volume2 className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" /> 原始转录
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    深入精确的对话时间线。说话人分离尝试使用音量阈值区分"我"和"对方"，捕获所有实际说出的话及时间戳。
+                                    深入精确的对话时间线。按可用的采集通道、语音服务说话人信息和本人声音验证结果辅助区分发言，并显示转写与时间戳；来源不明确或转写错误时仍需人工核对。
                                 </p>
                             </div>
 
@@ -1783,8 +1792,11 @@ export const HelpSettings: React.FC = () => {
                         <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                             <h4 className="font-semibold text-sm mb-2 text-text-primary">通用开关</h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed">
-                                通用设置还包括登录时打开 CueUp、不保存会议、显示面试官转录文本、自动滚动、主题、会议界面风格和 AI 响应语言。开启“不保存会议”后，会议结束时会丢弃转录、摘要和历史记录；主题与界面风格只影响外观，AI 响应语言控制建议和笔记的输出语言。应用版本区域可检查并安装更新。
+                                通用设置还包括登录时打开 CueUp、不保存会议、显示面试官转录文本、自动滚动、主题、会议界面风格和 AI 响应语言。开启“不保存会议”后，本次会议结束时不写入会议历史；不会自动删除已有会议。主题与界面风格只影响外观，AI 响应语言控制建议和笔记的输出语言。“关于”页可检查更新。macOS 根据架构下载 DMG 并手动安装；Windows 安装版使用更新清单和安装器。当前不自动下载或在退出时安装，也不因版本带 beta 就自动切换更新通道。
                             </p>
+                            <p className="mt-2 text-[11px] text-text-secondary leading-relaxed">会议保留可选择永久保存或不保存会议。历史 7/30 天值会保留并标注“自动清理未启用”，不表示当前有定时删除任务；初始设置展示同一策略。</p>
+                            <p className="mt-2 text-[11px] text-text-secondary leading-relaxed">会议和本地索引主要在 natively.db；部分应用设置及首次设置进度在 settings.json。凭据文件 credentials.enc 的内容仍为明文 JSON，扩展名不表示已加密；保存时使用受限文件权限，尚未实现静态加密。不要把真实密钥粘贴到资料或问题报告中。</p>
+                            <p className="mt-2 text-[11px] text-text-secondary leading-relaxed">macOS 当前使用 ad-hoc 完整性签名，未增加 Developer ID 或 Apple 公证。更新后授权是否连续有效仍需实际检查，不能只凭签名完整性通过推断录音权限正常。</p>
                         </div>
 
                         <div className="grid gap-3">
@@ -1837,7 +1849,7 @@ export const HelpSettings: React.FC = () => {
                                 </h4>
                                 <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                     <li>支持 <strong>PDF、DOCX、Markdown、TXT、PPTX</strong> 五种格式。</li>
-                                    <li><strong>PPTX</strong> 需要先在“设置 → 语音”配置并选择 <strong>QCLOUD API</strong>，旧版 <code className="bg-bg-tertiary px-1 rounded text-[10px]">.ppt</code> 不支持。</li>
+                                    <li><strong>PPTX</strong> 需要先在“设置 → QCLOUD API”保存共享 Key，并在“设置 → AI 提供商”选择 <strong>QCLOUD API</strong>，旧版 <code className="bg-bg-tertiary px-1 rounded text-[10px]">.ppt</code> 不支持。</li>
                                     <li>上传后资料会进入“加入索引队列”，处理完成变为“已索引”，失败会标记错误并可重试。</li>
                                     <li>当语义索引不可用（未配置 Embedding 或部分资料索引失败）时，CueUp 会退回<strong>关键词匹配</strong>，并在面板上以琥珀色横幅提示。</li>
                                     <li>已索引资料支持 <strong>重新索引</strong>（基于已提取文本重建）和 <strong>重新上传新文件</strong>，但不会回填历史会议结果。</li>

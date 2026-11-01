@@ -101,3 +101,57 @@ P1 表示已影响现有受支持配置的正常识别与验证入口；P2 表�
 实现主要涉及[共享展示定义](../../src/utils/settingsDisplay.ts)、[模型展示与 selector 适配](../../src/utils/modelUtils.ts)、初始设置组件、设置音频/AI/QCLOUD 面板与 onboarding 安全名称元数据；未创建另一套配置存储。
 
 原始本地日志位于 `.tmp/onboarding-consistency/`；最终日志为 `unit-final.log`、`dev-final.log`、`production-verified.log` 及两端类型日志。测试使用独立 userData、假 Key 与阻断外联的 guard；Codex 保存场景不启动真实推理。没有调用真实 QCLOUD 账号，也没有发布或替换本机应用。真实云端请求、真实系统权限、有声会议、物理设备热插拔与新发行包安装复验仍未执行；此前 SEC-01 的用户接受结论不变。
+
+## 2026-10-31 验证维护：QCLOUD 名称断言
+
+本次基于 2.7.22 源码及已合并文档，修复文档命令实跑发现的过时测试；不修改产品行为、提供商 ID 或配置保存逻辑，不补记发行包真机通过。
+
+根因是 `QCloudApiSpeechChannel.test.mjs` 用正则读取 `SettingsOverlay.tsx` 的源码，要求内联 `label: 'QCLOUD API'`。当前两个入口已通过 `getSpeechProviderLabel()` 统一显示名称，因此旧断言失败不能证明用户看见内部 ID。
+
+- 单元回归现在执行真实 `settingsDisplay.ts`，独立断言当前 `qcloud-stt` 与历史 `natively` 均显示为 `QCLOUD API`，不再要求特定源码写法。
+- 原 production 跨页用例保留首次设置的选中项验证，并明确检查设置页已选提供商、展开列表选项均显示 QCLOUD API，用户可见文字不出现内部 ID；选择后保存值仍为 `qcloud-stt`。
+- 私有隔离副本把真实名称映射改为返回原始 ID，新断言以 `ERR_ASSERTION` 正确失败（实际 `qcloud-stt`、预期 `QCLOUD API`），排除只因启动或导入失败而变红。正常工作区映射未改动。
+
+| 检查 | 本次结果 |
+| --- | --- |
+| 旧源码断言单独复现 | 修复前按预期失败，保留 RED 证据 |
+| 旧语音指南中的三份 provider 套件 | **61/61 通过**，此前为 60/61 |
+| 显示/配置、语言兼容、权限四份相关单元套件 | **46/46 通过** |
+| `npm run test:e2e:production` | **31/31 通过**；包含生产 renderer 构建/类型检查与 Electron 编译 |
+| 私有映射错误反例 | 新断言检出，未留下产品源码改动 |
+
+语音命令仍为：
+
+```bash
+npx cross-env ELECTRON_RUN_AS_NODE=1 electron --test electron/services/__tests__/LocalSenseVoiceSTT.test.mjs electron/services/__tests__/QCloudApiSpeechChannel.test.mjs electron/services/__tests__/DoubaoAucRestSTT.test.mjs
+```
+
+相关单元命令：
+
+```bash
+npx cross-env ELECTRON_RUN_AS_NODE=1 electron --test electron/services/__tests__/OnboardingIpc.test.mjs electron/services/__tests__/OnboardingSettingsDisplay.test.mjs electron/services/__tests__/SttLanguageCompatibility.test.mjs electron/services/__tests__/QCloudApiSettings.test.mjs
+```
+
+原始日志保存在本机私有验证目录，包含旧断言 RED、私有反例 RED、61/46 项单元与 production GREEN。上述类别不合计为唯一用例数。UI 使用隔离主进程适配器、测试凭据并阻断外联，不证明真实 QCLOUD 账号、系统音频或安装包真机验收；本机已安装应用未被操作。
+
+## 2026-10-31 软件内帮助同步（未发布）
+
+仓库 Markdown 不会自动同步到软件内的“设置 → 设置与帮助”。本轮更新 `HelpSettings.tsx`，保留现有章节和动画结构，未改动实际采音、权限、服务路由或凭据保存逻辑。
+
+- 快速开始改为设置概览、权限与设备、语音识别、AI 提供商、开始会议五步；区分“初始设置”和单场会议“开始准备”，说明稍后继续、配置验证和实际转写是不同阶段。
+- 麦克风、截图与系统音频分别解释；不再把 CoreAudio 写成仅供旧硬件使用，不承诺 SCK 零延迟，不用屏幕开关代替音频采集结果。Windows 改为检查隐私与桌面应用访问，不承诺一定出现一次性弹窗。
+- QCLOUD 语音与 AI 共用 Key，并提供独立平台入口；豆包语音与 AI 分开配置，Codex 程序检测不等于实际推理通过。模型准备、语言兼容、历史回执、保存与验证分别说明。
+- 数据范围明确为全局策略；转写文本开关不控制 STT 原始音频上传，云端 Embedding 回退也受范围限制。补齐凭据明文 JSON、保留策略、当前更新方式、签名与授权连续性边界，修正 PPTX 配置指路。
+- 动画明确标注示意，不显示当前密钥或连接状态；入门快捷键读取现有快捷键配置，不继续硬编码旧按键。
+
+验证中，原帮助内容套件基线为 23/24，已有一项仍匹配旧“语音”标签源码。另有五项会把旧四步入门、默认模型准备或旧指路固化。六项相关源码断言迁至实际帮助页的亮/暗两项 Electron 场景；不是简单删除失败断言后宣称通过，其余 18 项保留。
+
+| 检查 | 结果 |
+| --- | --- |
+| 修改前新帮助场景 | 亮/暗两项均在缺少新版五步标题的可见性断言处失败，保留 RED 证据 |
+| 剩余帮助内容套件 | **18/18 通过** |
+| 冻结后 `npm run test:e2e:production` | **33/33 通过**，含原31项及新增2项；命令同时完成 renderer 类型检查/生产构建与 Electron 编译 |
+| QCLOUD 帮助平台入口 | 实际按钮经现有 IPC 到达外部链接边界；截获 shell.openExternal 确认为 QCLOUD 平台地址，未打开真实浏览器 |
+| 展开与主题 | 实际设置页依次展开权限、语音、AI、通用说明，核对关键边界，并查看 QCLOUD 设置指路；亮/暗首屏截图留存，未把示意动画当作系统实际状态 |
+
+当前版本仍为 2.7.22；这些帮助修正尚未构建/发布新安装包，已安装版本不会因源码或 Markdown 更新而自动改变。没有操作用户正在使用的已安装应用，也未执行新包真机权限、真实账号和有声会议验收。原始日志与合成截图保存在本机私有验证目录，不提交安装包或真实数据。
