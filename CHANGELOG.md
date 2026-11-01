@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.23] - 2026-10-31
+
+### Fixed
+
+- Update in-app Settings and Help for the five-step initial setup, shared QCLOUD API key, separate screenshot and system-audio permission checks, provider configuration, global data scopes, retention, plaintext credential storage and manual macOS updates. Use configured shortcuts and clearly label demonstration animations.
+- Replace the stale QCLOUD source-literal assertion with runtime name mapping and actual settings dropdown display/selection checks; add light/dark production help regressions.
+
+### Testing and known limitations
+
+- Related unit checks passed 125/125 and production renderer scenarios passed 33/33 before release preparation. Final candidate and remote build results are recorded in `docs/testing/2.7.23-build-release.md`.
+- Real account, macOS TCC, voiced capture, physical device and new-installer acceptance remain unverified. Signing and credential storage are unchanged; SEC-01 remains an accepted, non-blocking risk.
+
 ## [2.7.22] - 2026-10-30
 
 ### Fixed
