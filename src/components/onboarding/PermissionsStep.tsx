@@ -72,19 +72,21 @@ export default function PermissionsStep({ snapshot, refresh, registerFormGuard }
   const systemAudio = snapshot.checks.systemAudio;
   const systemAudioAuthorized = ['verified', 'previously_verified'].includes(systemAudio.status)
     || (systemAudio.status === 'pending_runtime' && systemAudio.evidenceSource === 'system' && !systemAudio.errorCode);
-  const unavailable = input !== 'default' && !inputs.some(device => device.id === input);
+  const inputUnconfirmed = !readComplete || snapshot.checks.inputDevice.evidenceSource === 'unavailable';
+  const unavailable = !inputUnconfirmed && input !== 'default' && !inputs.some(device => device.id === input);
   return <section className="space-y-5">
     <div><h1 tabIndex={-1} className="text-2xl font-medium">权限与设备</h1><p className="mt-2 text-sm text-text-secondary">让 CueUp 听到你和会议中的其他人。</p></div>
     <fieldset disabled={busy} className="space-y-4 rounded-xl border border-border-muted p-4">
       <legend className="px-1 text-sm font-medium">麦克风 · 必需</legend>
-      <p className={`text-xs ${permissions?.microphone === 'restricted' ? 'text-status-error' : snapshot.checks.microphone.status === 'verified' ? 'text-status-success' : 'text-text-secondary'}`}>{permissions?.microphone === 'restricted' ? '系统限制了麦克风访问，请联系设备管理员。' : snapshot.checks.microphone.status === 'verified' ? '权限已开启' : '会议开始时确认麦克风权限'}</p>
+      <p className={`text-xs ${permissions?.microphone === 'restricted' ? 'text-status-error' : snapshot.checks.microphone.status === 'verified' ? 'text-status-success' : 'text-text-secondary'}`}>{permissions?.microphone === 'restricted' ? '系统限制了麦克风访问，请联系设备管理员。' : snapshot.checks.microphone.status === 'verified' ? '权限已开启' : isMac && permissions?.microphone !== 'granted' ? '麦克风权限尚未开启，请允许访问后刷新设备。' : '会议开始时确认麦克风权限'}</p>
       {permissions?.microphone !== 'granted' && permissions?.microphone !== 'restricted' && <button className={button} onClick={async () => {
         setPending(true); try { if (!await api.requestMicPermission()) setError('麦克风授权被拒绝，请在系统设置中开启。'); await read(); } catch { setError(onboardingErrorText('permission_denied')); } finally { setPending(false); }
       }}>允许访问麦克风</button>}
       {isMac && <button className={button} onClick={() => void api.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone')}>打开麦克风设置</button>}
       <label className="block text-sm">输入设备<select aria-label="输入设备" className={control} value={input} onChange={e => { stop(); setFallback(null); setInput(e.target.value); }}>
-        {getAudioDeviceOptions(inputs, input).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        {getAudioDeviceOptions(inputs, input, inputUnconfirmed).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
       </select></label>
+      {inputUnconfirmed && <p className="text-xs text-text-secondary">麦克风授权确认后再刷新输入设备。</p>}
       {unavailable && <p role="alert" className="text-xs text-status-error">已保存的输入设备已断开，请重新选择。</p>}
       <button className={button} onClick={() => void check()}>{testing ? '停止检查' : '检查电平'}</button>
       {testing && <div className="space-y-2"><meter aria-label="声音输入电平" min={0} max={1} value={level} className="h-2 w-full" /><p className="text-xs text-text-secondary">仅检查输入音量，不录制、不转写。没有电平时请检查静音或说话。</p></div>}

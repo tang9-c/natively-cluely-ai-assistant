@@ -131,7 +131,7 @@ test('a failed permission read remains an error rather than an audio grant or a 
     inputDevices: () => [{ id: 'default' }], outputDevices: () => [{ id: 'default' }], speechCheck: () => ({ status: 'missing' }) });
   const checks = await read();
   assert.equal(checks.systemAudio.status, 'failed'); assert.equal(checks.systemAudio.errorCode, 'unsupported_check');
-  assert.equal(checks.microphone.errorCode, 'unsupported_check'); assert.equal(checks.inputDevice.status, 'verified');
+  assert.equal(checks.microphone.errorCode, 'unsupported_check'); assert.equal(checks.inputDevice.status, 'failed');
 });
 test('positive system audio authorization does not hide a missing output device', async () => {
   const { createOnboardingReadinessReader } = require('../../../dist-electron/electron/services/onboarding/OnboardingReadiness.js');
@@ -139,4 +139,61 @@ test('positive system audio authorization does not hide a missing output device'
     readPermissions: async () => ({ platform: 'darwin', microphone: 'granted', screen: 'granted', systemAudioHealth: { effectiveGranted: true } }),
     inputDevices: () => [{ id: 'default' }], outputDevices: () => [], speechCheck: () => ({ status: 'missing' }) });
   assert.equal((await read()).systemAudio.errorCode, 'device_missing');
+});
+
+test('existing configuration survives startup and focus readiness reads while microphone authorization is pending', async () => {
+  const { createOnboardingReadinessReader } = require('../../../dist-electron/electron/services/onboarding/OnboardingReadiness.js');
+  let microphone = 'not-determined';
+  const saved = { version: 1, origin: 'existing', lastStep: 'permissions',
+    meetingHintsDismissed: { transcript: false, answer: false }, acceptedSystemAudioLimitation: false,
+    configRevision: { stt: 0, ai: 0 }, validationReceipts: {} };
+  const readChecks = createOnboardingReadinessReader({ isPackaged: () => true,
+    readPermissions: async () => ({ platform: 'darwin', microphone, screen: 'denied' }),
+    // OS metadata remains available independently of capture authorization.
+    inputDevices: () => { assert.equal(microphone, 'granted', 'passive refresh must not enter native enumeration before grant'); return [{ id: 'Saved USB Mic', name: 'Saved USB Mic' }]; },
+    outputDevices: () => [{ id: 'default', name: 'Default Speaker' }],
+    speechCheck: () => ({ status: 'missing', configured: true, provider: 'local-sensevoice', modelId: 'saved-model' }) });
+  const service = new OnboardingService({ load: () => saved, save() {}, readChecks,
+    readLegacyEvidence: () => ({ hasNonDemoMeeting: false, hasSavedServiceConfiguration: true }),
+    readConfiguration: target => target === 'ai' ? { configured: true, provider: 'natively', modelId: 'natively' }
+      : { configured: true, provider: 'local-sensevoice', modelId: 'saved-model' },
+    now: () => 100, platform: () => 'darwin' });
+  const handlers = new Map();
+  register({ service, safeHandle: (name, fn) => handlers.set(name, fn), getSenderRole: () => 'launcher',
+    validator: { validate() { throw new Error('startup must not validate a service'); } }, openLauncher() {}, broadcast() {} });
+  service.initialize({ legacySeenStartup: false, legacyPermissionsShown: false });
+  const getState = selection => handlers.get('get-onboarding-state')({ sender: { id: 1 } }, selection);
+  for (const selection of [{ inputDeviceId: 'Saved USB Mic', outputDeviceId: 'default' }, undefined]) {
+    const result = await getState(selection);
+    assert.equal(result.success, true);
+    assert.equal(result.snapshot.progress.origin, 'existing');
+    assert.equal(result.snapshot.devices.inputDeviceId, 'Saved USB Mic');
+    assert.equal(result.snapshot.checks.inputDevice.status, 'pending_runtime');
+    assert.equal(result.snapshot.checks.inputDevice.errorCode, undefined);
+    assert.equal(result.snapshot.checks.microphone.status, 'pending_runtime');
+    assert.equal(result.snapshot.checks.microphone.evidenceSource, 'unavailable');
+    assert.equal(result.snapshot.checks.ai.provider, 'natively');
+    assert.equal(result.snapshot.checks.stt.modelId, 'saved-model');
+  }
+  microphone = 'granted';
+  assert.equal((await getState()).snapshot.checks.microphone.status, 'verified');
+});
+
+
+test('passive readiness waits for the permission result before scheduling native input enumeration', async () => {
+  const { createOnboardingReadinessReader } = require('../../../dist-electron/electron/services/onboarding/OnboardingReadiness.js');
+  let resolvePermission, nativeCalls = 0;
+  const read = createOnboardingReadinessReader({ isPackaged: () => true,
+    readPermissions: () => new Promise(resolve => { resolvePermission = resolve; }),
+    inputDevices: () => { nativeCalls++; return [{ id: 'saved', name: 'Saved' }]; },
+    outputDevices: () => [{ id: 'default', name: 'Speaker' }], speechCheck: () => ({ status: 'missing' }) });
+  const pending = read({ inputDeviceId: 'saved' });
+  await new Promise(setImmediate);
+  const callsBeforePermission = nativeCalls;
+  resolvePermission({ platform: 'darwin', microphone: 'not-determined', screen: 'granted' });
+  const checks = await pending;
+  assert.equal(callsBeforePermission, 0, 'native enumeration cannot race an unresolved authorization read');
+  assert.equal(checks.inputDevice.status, 'pending_runtime');
+  assert.equal(checks.inputDevice.errorCode, undefined);
+  assert.equal(nativeCalls, 0);
 });

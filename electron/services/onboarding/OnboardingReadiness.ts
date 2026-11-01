@@ -9,10 +9,16 @@ export function createOnboardingReadinessReader(deps: {
     speechCheck(): OnboardingCheck;
 }): (selection?: OnboardingDeviceSelection) => Promise<OnboardingSnapshot['checks']> {
     return async (selection = {}) => {
-        const [permissionResult, inputResult, outputResult, speechResult] = await Promise.allSettled([
-            deps.readPermissions(), Promise.resolve().then(deps.inputDevices), Promise.resolve().then(deps.outputDevices), Promise.resolve().then(deps.speechCheck),
-        ]);
+        // Await the passive permission read before any input probe: wrapping a
+        // synchronous native call in a Promise does not move it off the main thread.
+        const [permissionResult] = await Promise.allSettled([deps.readPermissions()]);
         const permissions = permissionResult.status === 'fulfilled' ? permissionResult.value : { platform: 'unknown', microphone: 'unknown', screen: 'unknown' };
+        const canEnumerateInput = permissionResult.status === 'fulfilled'
+            && (permissions.platform !== 'darwin' || permissions.microphone === 'granted');
+        const [inputResult, outputResult, speechResult] = await Promise.allSettled([
+            canEnumerateInput ? Promise.resolve().then(deps.inputDevices) : Promise.resolve([]),
+            Promise.resolve().then(deps.outputDevices), Promise.resolve().then(deps.speechCheck),
+        ]);
         const inputs = inputResult.status === 'fulfilled' ? inputResult.value : [], outputs = outputResult.status === 'fulfilled' ? outputResult.value : [];
         const speech: OnboardingCheck = speechResult.status === 'fulfilled' ? speechResult.value : { status: 'failed', errorCode: 'storage_failed', messageKey: 'onboarding.configuration_unavailable' };
         const blocked = ['denied', 'restricted'].includes(permissions.microphone);
@@ -26,7 +32,9 @@ export function createOnboardingReadinessReader(deps: {
         // Screen preflight cannot establish audio access; the selected capture backend checks it at meeting start.
         const systemAudio: OnboardingCheck = permissionResult.status === 'rejected' ? { status: 'failed', errorCode: 'unsupported_check', evidenceSource: 'unavailable' } : !outputValid ? { status: 'failed', errorCode: 'device_missing', evidenceSource: 'system' }
             : { status: 'pending_runtime', evidenceSource: 'unavailable' };
-        return { microphone, inputDevice: inputValid ? { status: 'verified', evidenceSource: 'system' }
+        return { microphone, inputDevice: permissionResult.status === 'rejected'
+            ? { status: 'failed', errorCode: 'unsupported_check', evidenceSource: 'unavailable' }
+            : !canEnumerateInput ? { status: 'pending_runtime', evidenceSource: 'unavailable' } : inputValid ? { status: 'verified', evidenceSource: 'system' }
             : { status: 'missing', errorCode: 'device_missing', evidenceSource: 'system' },
             systemAudio, stt: speech, ai: { status: 'missing' } };
     };

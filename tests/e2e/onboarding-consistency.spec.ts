@@ -218,3 +218,43 @@ test('custom provider display names survive a read-only round-trip without expos
   await expect(page.locator('#settings-panel').getByRole('button', { name: '聊天默认模型', exact: true })).toContainText('Example Custom');
   expect((await page.evaluate(() => window.electronAPI.getDefaultModel())).model).toBe(id);
 });
+
+test.describe('existing configuration with pending microphone authorization', () => {
+  test.use({ onboardingMode: 'existing', onboardingScenario: 'none' });
+  test('renderer initialization/focus refresh preserves the saved input and leaves settings responsive without certifying capture', async ({ page, electronApp }) => {
+    test.skip(process.platform !== 'darwin', 'macOS microphone authorization gate');
+    await electronApp.evaluate(({ systemPreferences }) => {
+      const original = systemPreferences.getMediaAccessStatus.bind(systemPreferences);
+      systemPreferences.getMediaAccessStatus = kind => kind === 'microphone' ? 'not-determined' : original(kind);
+    });
+    await page.evaluate(() => localStorage.setItem('preferredInputDeviceId', 'Saved USB Mic'));
+    // Recreate the renderer with saved preferences and the pending permission
+    // reader already installed, rather than only changing an initialized UI.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect.poll(() => page.evaluate(() => typeof window.electronAPI?.getOnboardingState)).toBe('function');
+    for (let i = 0; i < 2; i++) {
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      const result = await page.evaluate(() => window.electronAPI.getOnboardingState({ inputDeviceId: 'Saved USB Mic', outputDeviceId: 'default' }));
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error('state read failed');
+      expect(result.snapshot.progress.origin).toBe('existing');
+      expect(result.snapshot.devices.inputDeviceId).toBe('Saved USB Mic');
+      expect(result.snapshot.checks.inputDevice).toEqual({ status: 'pending_runtime', evidenceSource: 'unavailable' });
+      expect(result.snapshot.checks.microphone).toEqual({ status: 'pending_runtime', evidenceSource: 'unavailable' });
+      await page.evaluate(mode => window.electronAPI.setThemeMode(mode), i === 0 ? 'dark' : 'light');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', i === 0 ? 'dark' : 'light');
+    }
+    await page.getByRole('button', { name: '打开设置', exact: true }).click();
+    await expect(page.locator('#settings-panel')).toBeVisible();
+    expect(await page.evaluate(() => window.electronAPI.getInputDevices())).toEqual([]);
+    await page.getByRole('button', { name: '初始设置', exact: false }).click();
+    await nav(page, /权限与设备/).click();
+    await expect(page.getByLabel('输入设备', { exact: true })).toHaveValue('Saved USB Mic');
+    await expect(page.getByLabel('输入设备', { exact: true }).locator('option:checked')).toHaveText('已保存设备（待确认）');
+    await expect(page.getByText('已保存的输入设备已断开，请重新选择。', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('麦克风授权确认后再刷新输入设备。', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '刷新设备与权限', exact: true }).click();
+    await expect(page.getByText('设备与权限已刷新', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('preferredInputDeviceId'))).toBe('Saved USB Mic');
+  });
+});

@@ -27,8 +27,8 @@ export const TRANSCRIPT_SCOPE_DESCRIPTION = '保存全局转写内容策略，�
 export function getMeetingRetentionLabel(value: string): string {
   return ({ forever: '永久保存', never: '不保存会议', '7d': '7 天（自动清理未启用）', '30d': '30 天（自动清理未启用）' } as Record<string, string>)[value] ?? '未知保留策略';
 }
-export function getAudioDeviceOptions(devices: { id: string; name: string }[], selected = 'default') {
+export function getAudioDeviceOptions(devices: { id: string; name: string }[], selected = 'default', enumerationPending = false) {
   return [{ id: 'default', name: '系统默认' },
-    ...(selected !== 'default' && !devices.some(device => device.id === selected) ? [{ id: selected, name: '已保存设备（不可用）' }] : []),
+    ...(selected !== 'default' && !devices.some(device => device.id === selected) ? [{ id: selected, name: enumerationPending ? '已保存设备（待确认）' : '已保存设备（不可用）' }] : []),
     ...devices.filter(device => device.id !== 'default')];
 }

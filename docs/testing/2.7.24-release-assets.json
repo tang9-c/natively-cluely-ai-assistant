@@ -11,98 +11,98 @@
       "size": 307168760,
       "digest": "sha256:114a6fc863e12ae6835f606bd0d3b75a9dbca0dfdf1b966cad9e7b58f690d418",
       "sha512": "Dab2S36fG3m7BUDq+goJo5x52JOmQ9CcpqYsC0sWR3S+cY9zN6uOG/kCQsL0L4VzqaYQRGQlfFFOVZ4oZt1tHw==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-2.7.24-arm64-mac.zip"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-2.7.24-arm64-mac.zip"
     },
     {
       "name": "CueUp-2.7.24-arm64-mac.zip.blockmap",
       "size": 310282,
       "digest": "sha256:5269bdbb0048514ea092d3c94ae528c01bf2cc843441221bf309f112acf02750",
       "sha512": "7DYNUSrsXqoLVZZRJjLMPZnSldTkidvjaSpr72+O6tt//uvP2SzdCE/FsAusQsGVSKlI+dOj+8JtmSI/QbPLrg==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-2.7.24-arm64-mac.zip.blockmap"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-2.7.24-arm64-mac.zip.blockmap"
     },
     {
       "name": "CueUp-2.7.24-arm64.dmg",
       "size": 322104640,
       "digest": "sha256:900e3b8137b84d76f9b002bfc786a4aa29afcc048466bb93302c85610f863ea3",
       "sha512": "zzF/FlQGAbkwLzPJUMKbOsnUUNRcs9Q8KMWlJTesln8dPzJbwVPMs08a1vkf3uSxE1hg14zcNmqHG3h8aWKVSQ==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-2.7.24-arm64.dmg"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-2.7.24-arm64.dmg"
     },
     {
       "name": "CueUp-2.7.24-arm64.dmg.blockmap",
       "size": 334966,
       "digest": "sha256:6e6ec10470ae7a727e26f1fe49b36dbca445d207d9857b39fbb863461562f065",
       "sha512": "o0GlrzR49T+sMHeWCZxGQJt9UHLe5JuRRa+v3wHODCCs6bdxROKZud8g3TsMT8ThXZKAr54a9b30ALWgPoIohw==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-2.7.24-arm64.dmg.blockmap"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-2.7.24-arm64.dmg.blockmap"
     },
     {
       "name": "CueUp-2.7.24-mac.zip",
       "size": 311989908,
       "digest": "sha256:303f9c03bdec99eeaa142d5429499be6b643a4779ddb170efd2def80fc53791b",
       "sha512": "PFY1Kd41mEgzekmz3qmWktHk+51oASxHTqquDZcTt+YfPTn81vnunMsRgEqDYAyLs8HSjLYYDYl0Bqc1aIh/kQ==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-2.7.24-mac.zip"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-2.7.24-mac.zip"
     },
     {
       "name": "CueUp-2.7.24-mac.zip.blockmap",
       "size": 317424,
       "digest": "sha256:0cafdf084afabeb781afd41910120c265a128550d58754f3ae9b882e2f2f1933",
       "sha512": "U73kxD485TVhBT7ixwNvG/cbbBwhNA8Z9XcA2TX9xJs1QWnPJ0rNTsLW1KxLwhkfuxA4B1qe0wA3YHQGlUoPqw==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-2.7.24-mac.zip.blockmap"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-2.7.24-mac.zip.blockmap"
     },
     {
       "name": "CueUp-2.7.24.dmg",
       "size": 326909081,
       "digest": "sha256:b2d447bc5cc36e6410d58b6e3eae407cd72bf03ffbc878395224d31a1d158827",
       "sha512": "8xrczhf3iHnzPNiB7LDBy93HcGY8HOO+IBRv4L3FAwLZnZXVFr9XEq+j99a+Nz444cojZ2InGcgLkxJCsYnEKg==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-2.7.24.dmg"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-2.7.24.dmg"
     },
     {
       "name": "CueUp-2.7.24.dmg.blockmap",
       "size": 343287,
       "digest": "sha256:035b4547dd452a28327bfcfbe7fae5f34c9877e8a81ed87eb337fc6f0daa096d",
       "sha512": "8cFLv+8KgQfCA57yua8A8LoZpZMnCaAzmhBixyh8brtJ3OnIL9hygj09FbAEKxppwreovkEXKanggszNKtK33A==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-2.7.24.dmg.blockmap"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-2.7.24.dmg.blockmap"
     },
     {
       "name": "CueUp-Setup-2.7.24.exe",
       "size": 272232983,
       "digest": "sha256:833b34d2a716ddbd69dfd13411711ddb927e2f314bd657f6e5b05a4d491d0ab1",
       "sha512": "OequuR5f+duhyFxpeVgnLBXr7I4BaXD0rSV4IKREV1O6OM/olwGPwtbYZw7K+fGPznHJOgGgnaEep0KkLWdiPA==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-Setup-2.7.24.exe"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-Setup-2.7.24.exe"
     },
     {
       "name": "CueUp-Setup-2.7.24.exe.blockmap",
       "size": 283987,
       "digest": "sha256:d6a7fd3067723925917e9ff89f2afff0f3dc766521125963c722d9d41b815f9f",
       "sha512": "7U5pCxFTB1l1o2LzdKYh4ZwFSff+ruTPuoWYO1oyjVfVWo6JkhsuGnpREsIB3g44u6bU/QRiH0UgenWsnclYRg==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp-Setup-2.7.24.exe.blockmap"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp-Setup-2.7.24.exe.blockmap"
     },
     {
       "name": "CueUp.2.7.24.exe",
       "size": 271988092,
       "digest": "sha256:9cd9a133ddcdb9f545baa28d3566843cc64ed3b09df70a5b0e3c292c6cbc36a1",
       "sha512": "/QlopEDF5RFTMS4ngNstpol2bNFl5lhmi6vFRUWCxtUtrluJIUJWGo3sdGTwHLUVJ0MWnIAQcL43ocMA/svXtQ==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/CueUp.2.7.24.exe"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/CueUp.2.7.24.exe"
     },
     {
       "name": "INSTALL-UNSIGNED-MACOS.txt",
       "size": 595,
       "digest": "sha256:b0eeda2281edaff805ad3658e54ecb592622de839c23b5966c730d705ffb52b9",
       "sha512": "GeqH/AOpuddVozKBq63Ow0MSdAvTCAqRf5K6aSg2HLcZFy7WHWlCZ3snInSa3tQPlo8qCwW6rkucBaU3udGxHA==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/INSTALL-UNSIGNED-MACOS.txt"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/INSTALL-UNSIGNED-MACOS.txt"
     },
     {
       "name": "latest.yml",
       "size": 342,
       "digest": "sha256:e6c25768573278612797a54114762c69f65ae7e8b8418f9f03f38e686abb7045",
       "sha512": "RzKwVEqczI0/aO8HH5CsH0Ch6eDT1AAY4O1BM+gIbMj5kPWwIUIV5m7pC/WoVTwUWhXMBQSxogDRwkhvkbCFUQ==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/latest.yml"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/latest.yml"
     },
     {
       "name": "OPEN-UNSIGNED-CUEUP-MAC.sh",
       "size": 712,
       "digest": "sha256:dbe354af3d4ef3af24174e920a1198ba53347b6cf939560659d57c76d93e02e4",
       "sha512": "gbCecX7WpmIFRdV+klYVfd+Ald9xpzp435z12B8rKlgAYcJMu9Z6bVMB54tmq7ZsJqPFh6un+wNNbXGI4S9bPg==",
-      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/untagged-ce278fd20a7592a7d18b/OPEN-UNSIGNED-CUEUP-MAC.sh"
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.24-sha-8559fc2/OPEN-UNSIGNED-CUEUP-MAC.sh"
     }
   ],
   "builds": [
