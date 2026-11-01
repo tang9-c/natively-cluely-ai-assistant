@@ -1,3 +1,4 @@
+import { llmFetch } from '../../llm/LlmHttpTransport';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 
@@ -21,7 +22,7 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
   }
 
   async embed(text: string): Promise<number[]> {
-    const res = await fetch('https://api.openai.com/v1/embeddings', {
+    const res = await llmFetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: { 
         'Authorization': `Bearer ${this.apiKey}`,
@@ -39,7 +40,7 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
-    const res = await fetch('https://api.openai.com/v1/embeddings', {
+    const res = await llmFetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: { 
         'Authorization': `Bearer ${this.apiKey}`,

@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { getLlmUserAgent } from '../llm/LlmHttpTransport';
 
 export interface ProviderModel {
     id: string;
@@ -40,7 +41,7 @@ export async function fetchProviderModels(
 
 async function fetchOpenAIModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get('https://api.openai.com/v1/models', {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: { 'User-Agent': getLlmUserAgent(), Authorization: `Bearer ${apiKey}` },
         timeout: 15000,
     });
 
@@ -67,7 +68,7 @@ async function fetchOpenAIModels(apiKey: string): Promise<ProviderModel[]> {
 
 async function fetchGroqModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get('https://api.groq.com/openai/v1/models', {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: { 'User-Agent': getLlmUserAgent(), Authorization: `Bearer ${apiKey}` },
         timeout: 15000,
     });
 
@@ -94,6 +95,7 @@ async function fetchGroqModels(apiKey: string): Promise<ProviderModel[]> {
 async function fetchAnthropicModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get('https://api.anthropic.com/v1/models', {
         headers: {
+            'User-Agent': getLlmUserAgent(),
             'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
         },
@@ -131,6 +133,7 @@ async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
         {
+            headers: { 'User-Agent': getLlmUserAgent() },
             timeout: 15000,
         }
     );
@@ -171,7 +174,7 @@ async function fetchDoubaoModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get(
         'https://ark.cn-beijing.volces.com/api/v3/models',
         {
-            headers: { Authorization: `Bearer ${apiKey}` },
+            headers: { 'User-Agent': getLlmUserAgent(), Authorization: `Bearer ${apiKey}` },
             timeout: 15000,
         }
     );

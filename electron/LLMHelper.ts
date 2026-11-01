@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import fs from "fs"
 import { createHash } from "crypto"
 import sharp from "sharp"
+import { getLlmUserAgent, llmFetch } from "./llm/LlmHttpTransport"
 import { ModelVersionManager, ModelFamily, TextModelFamily, VISION_FALLBACK_CHAIN, TEXT_FALLBACK_CHAIN, VISION_PROVIDER_ORDER } from './services/ModelVersionManager'
 import {
   HARD_SYSTEM_PROMPT, GROQ_SYSTEM_PROMPT, OPENAI_SYSTEM_PROMPT, CLAUDE_SYSTEM_PROMPT,
@@ -256,27 +257,27 @@ export class LLMHelper {
     // Initialize Groq client if API key provided
     if (groqApiKey) {
       this.groqApiKey = groqApiKey
-      this.groqClient = new Groq({ apiKey: groqApiKey })
+      this.groqClient = new Groq({ fetch: llmFetch, apiKey: groqApiKey })
       console.log(`[LLMHelper] Groq client initialized with model: ${GROQ_MODEL}`)
     }
 
     // Initialize OpenAI client if API key provided
     if (openaiApiKey) {
       this.openaiApiKey = openaiApiKey
-      this.openaiClient = new OpenAI({ apiKey: openaiApiKey })
+      this.openaiClient = new OpenAI({ fetch: llmFetch, apiKey: openaiApiKey })
       console.log(`[LLMHelper] OpenAI client initialized with model: ${OPENAI_MODEL}`)
     }
 
     // Initialize Claude client if API key provided
     if (claudeApiKey) {
       this.claudeApiKey = claudeApiKey
-      this.claudeClient = new Anthropic({ apiKey: claudeApiKey })
+      this.claudeClient = new Anthropic({ fetch: llmFetch, apiKey: claudeApiKey })
       console.log(`[LLMHelper] Claude client initialized with model: ${CLAUDE_MODEL}`)
     }
 
     if (doubaoApiKey) {
       this.doubaoApiKey = doubaoApiKey
-      this.doubaoClient = new OpenAI({ apiKey: doubaoApiKey, baseURL: DOUBAO_BASE_URL })
+      this.doubaoClient = new OpenAI({ fetch: llmFetch, apiKey: doubaoApiKey, baseURL: DOUBAO_BASE_URL })
       console.log(`[LLMHelper] Doubao client initialized with model: ${DOUBAO_MODEL}`)
     }
 
@@ -292,7 +293,7 @@ export class LLMHelper {
       // Initialize with v1alpha API version for Gemini 3 support
       this.client = new GoogleGenAI({
         apiKey: apiKey,
-        httpOptions: { apiVersion: "v1alpha" }
+        httpOptions: { apiVersion: "v1alpha", headers: { "User-Agent": getLlmUserAgent() } }
       })
       // console.log(`[LLMHelper] Using Google Gemini 3 with model: ${this.geminiModel} (v1alpha API)`)
     } else if (!isElectronNodeTestRuntime() && !warnedMissingPrimaryApiKey) {
@@ -305,7 +306,7 @@ export class LLMHelper {
     this.apiKey = apiKey;
     this.client = new GoogleGenAI({
       apiKey: apiKey,
-      httpOptions: { apiVersion: "v1alpha" }
+      httpOptions: { apiVersion: "v1alpha", headers: { "User-Agent": getLlmUserAgent() } }
     })
     console.log("[LLMHelper] Gemini API Key updated.");
   }
@@ -320,32 +321,32 @@ export class LLMHelper {
   }
 
   public setGroqApiKey(apiKey: string) {
-    this.groqClient = new Groq({ apiKey });
+    this.groqClient = new Groq({ fetch: llmFetch, apiKey });
     this._groqLocalDisabled = false;
     console.log("[LLMHelper] Groq API Key updated.");
   }
 
   public setOpenaiApiKey(apiKey: string) {
     this.openaiApiKey = apiKey;
-    this.openaiClient = new OpenAI({ apiKey });
+    this.openaiClient = new OpenAI({ fetch: llmFetch, apiKey });
     console.log("[LLMHelper] OpenAI API Key updated.");
   }
 
   public setClaudeApiKey(apiKey: string) {
     this.claudeApiKey = apiKey;
-    this.claudeClient = new Anthropic({ apiKey });
+    this.claudeClient = new Anthropic({ fetch: llmFetch, apiKey });
     console.log("[LLMHelper] Claude API Key updated.");
   }
 
   public setDoubaoApiKey(apiKey: string) {
     this.doubaoApiKey = apiKey;
-    this.doubaoClient = new OpenAI({ apiKey, baseURL: DOUBAO_BASE_URL });
+    this.doubaoClient = new OpenAI({ fetch: llmFetch, apiKey, baseURL: DOUBAO_BASE_URL });
     console.log("[LLMHelper] Doubao API Key updated.");
   }
 
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
-    this.qcloudClient = key ? new OpenAI({ apiKey: key, baseURL: QCLOUD_OPENAI_SDK_BASE_URL }) : null;
+    this.qcloudClient = key ? new OpenAI({ fetch: llmFetch, apiKey: key, baseURL: QCLOUD_OPENAI_SDK_BASE_URL }) : null;
     console.log(`[LLMHelper] QCLOUD key ${key ? 'set' : 'cleared'}`);
   }
 
@@ -845,7 +846,7 @@ export class LLMHelper {
         }
       };
       if (this.isThinkingModel(this.ollamaModel)) ollamaBody.think = false;
-      const response = await fetch(`${this.ollamaUrl}/api/chat`, {
+      const response = await llmFetch(`${this.ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ollamaBody),
@@ -879,7 +880,7 @@ export class LLMHelper {
       }
       const capabilities = getModelCapabilities(this.ollamaModel, true);
       if (needsVision && !capabilities.supportsImages) return false;
-      const response = await fetch(`${this.ollamaUrl}/api/show`, {
+      const response = await llmFetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: this.ollamaModel }),
@@ -909,7 +910,7 @@ export class LLMHelper {
       }
 
       // /api/show validates the model is loadable without spending tokens.
-      const showResp = await fetch(`${this.ollamaUrl}/api/show`, {
+      const showResp = await llmFetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: this.ollamaModel }),
@@ -2658,7 +2659,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         throw qcloudAbortController.signal.reason || new Error(`QCLOUD API request timed out after ${timeoutMs}ms`);
       }
 
-      const response = await fetch(endpointUrl, {
+      const response = await llmFetch(endpointUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -2873,7 +2874,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const response = await axios({
         method: curlConfig.method || 'POST',
         url: url,
-        headers: headers,
+        headers: { ...Object.fromEntries(new Headers(headers)), 'user-agent': getLlmUserAgent() },
         data: data,
         signal: options.abortSignal,
         ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
@@ -3044,7 +3045,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       options.timeoutMs ?? 30_000,
     );
     try {
-      const response = await fetch(url, {
+      const response = await llmFetch(url, {
         method: requestConfig.method || 'POST',
         headers: headers,
         body: JSON.stringify(body),
@@ -4168,7 +4169,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       limiterWaitMs = Date.now() - limiterStartedAt;
       firstTokenTimer = setTimeout(() => abortWith('QCLOUD API first token timeout'), firstTokenTimeoutMs);
       connectTimer = setTimeout(() => abortWith('QCLOUD API connect timeout'), 10_000);
-      response = await fetch(QCLOUD_CHAT_COMPLETIONS_ENDPOINT, {
+      response = await llmFetch(QCLOUD_CHAT_COMPLETIONS_ENDPOINT, {
         method: 'POST',
         headers: streamHeaders,
         body: JSON.stringify(body),
@@ -4823,7 +4824,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         }
       };
       if (this.isThinkingModel(this.ollamaModel)) streamBody.think = false;
-      const response = await fetch(`${this.ollamaUrl}/api/chat`, {
+      const response = await llmFetch(`${this.ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(streamBody),
@@ -4920,7 +4921,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const streamAbort = new AbortController();
     const streamTimeout = setTimeout(() => streamAbort.abort(), 30_000);
     try {
-      const response = await fetch(url, {
+      const response = await llmFetch(url, {
         method: requestConfig.method || 'POST',
         headers: headers,
         body: JSON.stringify(body),
@@ -5022,7 +5023,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${baseUrl}/api/tags`, {
+      const response = await llmFetch(`${baseUrl}/api/tags`, {
         signal: controller.signal
       });
 
@@ -5626,7 +5627,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       this.apiKey = apiKey;
       this.client = new GoogleGenAI({
         apiKey: apiKey,
-        httpOptions: { apiVersion: "v1alpha" }
+        httpOptions: { apiVersion: "v1alpha", headers: { "User-Agent": getLlmUserAgent() } }
       });
     } else if (!this.client) {
       throw new Error("No Gemini API key provided and no existing client");

@@ -61,3 +61,27 @@ QCLOUD UI 用例通过真实凭据 IPC 在独立 fresh userData 写入假 key，
 2.7.20 之后发现的首次设置服务切换问题已在工作区修复：语音与 AI 页通过安全的凭据存在标志复用同一份 QCLOUD Key，语音草稿不会显示旧配置的语言错误或成功状态，主进程也不再把旧语言错误附到新配置身份上。原有“复用已保存 Key”的覆盖只验证了 QCLOUD 已为当前服务的情形，本次补齐从其他服务切入、显式更换后切回及重启场景。详见[本机验收记录的后续修复](2026-10-30-2.7.20-device-acceptance.md)。此修复尚未发布，旧安装包验收缺口继续保留。
 
 本次最终验证：159 项单元/契约（132 onboarding + 27 语言及语音通道）、41 项开发态界面、18 项 production file:// 界面均通过，两端类型检查通过。真实账号调用与新安装包复验仍未执行。
+
+## 2026-11-01：LLM User-Agent 统一（工作区，尚未发布）
+
+原行为通过本地 HTTP 收包确认：QCLOUD 普通请求和 SSE 请求使用 fetch 默认的 `node`，工具调用使用 `OpenAI/JS 6.38.0`；其他 SDK、Axios 和自定义 cURL 也各自发送不同标识。因此只改 QCLOUD 普通请求的 headers 无法统一应用标识。
+
+当前实现将应用管理的 LLM HTTP 请求统一为 `CueUp/<当前应用版本>`。主进程使用运行中应用的 `app.getVersion()`；Node 模式没有 Electron app 时使用 package.json 版本。QCLOUD 普通、流式、工具调用与连接测试共用传输约定；其他内置 SDK、Ollama 聊天/视觉、Embedding、云端模型列表和两种自定义 cURL 路径也已接入。自定义 User-Agent 按大小写不敏感规则替换，不影响 Authorization、JSON 内容、取消信号、范围守卫与原工具目录。
+
+新增 `electron/llm/__tests__/LLMHelper.UserAgent.test.mjs`，通过真实应用编译产物、真实 SDK/Axios 和本地 HTTP 服务验证实际收到的头部。测试只重定向传输目的地，不手工拼造目标请求；假 key 为 `local-dummy`，所有流量限制在 loopback，不读取用户凭据。应用版本替身为 `9.8.7`，特意区别于仓库版本，防止实现写死版本号。
+
+| 覆盖 | 验收标准 |
+|---|---|
+| QCLOUD 普通请求 | 实际收到 `CueUp/9.8.7`、原鉴权头和消息，返回正常回答 |
+| QCLOUD SSE | 同一标识，仍按 SSE 正常输出文本 |
+| QCLOUD 原生工具调用 | 通过 selected-model factory 和真实 OpenAI SDK，标识正确且工具 schema 保留 |
+| 其他 SDK | OpenAI、Groq、豆包、Anthropic、Gemini 初始化与换 Key 后标识一致；Gemini 切换及工具调用的单次 timeout 配置不覆盖标识 |
+| 自定义 cURL | fetch 普通/流式与 Axios 原始 cURL 均覆盖混合大小写的旧标识，保留鉴权 |
+| Embedding 与模型查询 | QCLOUD、OpenAI、Gemini、豆包、Ollama Embedding，以及五种云端模型列表使用同一标识 |
+| 传输约定 | 保留 Request 的方法/正文，支持对象、元组、Headers，未修改调用者头部；已取消请求不发送 |
+
+专用回归 `npm run test:llm-user-agent`：**9/9 通过**。修复前 QCLOUD 三条路径分别在默认 fetch/SDK 标识处失败，Embedding、模型列表和 Axios cURL 的新增断言也先复现旧标识。Electron 类型检查通过。现有 QCLOUD Embedding 测试改用标准 Headers 读取鉴权值，兼容传输层的头部表示。
+
+最终联合回归：**273/273 通过，0 跳过**，涵盖全部 `LLMHelper.*.test.mjs`、QCLOUD 聊天/预算/配置/超时/推理选项、Embedding 提供方与解析、OpenAI-compatible/Anthropic/Gemini 工具适配、首次设置 IPC/AI 验证及视觉回退链；`npm run typecheck:electron` 与 `git diff --check` 通过。依赖产生既有 punycode 弃用提示，未出现测试失败。
+
+限制：未执行真实 QCLOUD 账号请求、网关上游头部核对或发行包安装验收；此记录不代表现有 2.7.25 安装包已经具备新行为。外部 Codex CLI 自行控制 HTTP 请求，无法由 CueUp 的客户端配置统一；STT、模型文件下载等网络流量不在本轮范围内。SDK 其他诊断头保留。

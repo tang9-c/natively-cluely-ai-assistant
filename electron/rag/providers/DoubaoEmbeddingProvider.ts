@@ -1,3 +1,4 @@
+import { llmFetch } from '../../llm/LlmHttpTransport';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 
@@ -58,7 +59,7 @@ export class DoubaoEmbeddingProvider implements IEmbeddingProvider {
 
   private async _embedWithEndpoint(endpoint: string, text: string): Promise<number[]> {
     const isMultimodal = endpoint.includes('/multimodal');
-    const res = await fetch(endpoint, {
+    const res = await llmFetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
@@ -116,7 +117,7 @@ export class DoubaoEmbeddingProvider implements IEmbeddingProvider {
 
   private async _embedBatchWithEndpoint(endpoint: string, texts: string[]): Promise<number[][]> {
     const isMultimodal = endpoint.includes('/multimodal');
-    const res = await fetch(endpoint, {
+    const res = await llmFetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,

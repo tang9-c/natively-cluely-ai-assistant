@@ -1,3 +1,4 @@
+import { llmFetch } from './llm/LlmHttpTransport';
 import { registerOnboardingHandlers } from './services/onboarding/registerOnboardingHandlers';
 import { createOnboardingReadinessReader } from './services/onboarding/OnboardingReadiness';
 import { readOnboardingConfiguration } from './services/onboarding/OnboardingConfiguration';
@@ -149,7 +150,7 @@ function validateQCloudApiKeyFormat(apiKey: string): string | null {
 }
 
 async function testQCloudApiKeyConnection(apiKey: string): Promise<void> {
-  const response = await fetch(QCLOUD_CHAT_COMPLETIONS_ENDPOINT, {
+  const response = await llmFetch(QCLOUD_CHAT_COMPLETIONS_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
