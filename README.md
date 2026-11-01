@@ -33,6 +33,12 @@ CueUp 是一个桌面应用，运行在 macOS 和 Windows 上。它可以在会�
 
 第一次使用请先阅读[快速入门指南](docs/QUICKSTART.md)：其中包含 macOS 与 Windows 权限、本地 SenseVoice 与云端语音服务、会议模式、会后搜索和导出的实际操作步骤。
 
+当前正式版为 **2.7.22**（文档核对日期为 2026-10-31）。首次启动会引导完成“初始设置”，可稍后继续；它与用于整理会议背景的“开始准备”是两个入口。初始设置最后启动的是真实会议。
+
+- QCLOUD API 的语音识别与 AI 共用已保存的 Key，切换服务无需重复输入；豆包语音与豆包 AI 使用各自的配置。
+- 系统音频在会议开始时由实际采集后端确认；首次设置显示“使用时确认”不等于权限被拒绝，也不等于已经录到声音。
+- 本轮功能与验收边界见 [2.7.22 发布记录](docs/testing/2.7.22-build-release.md)，完整操作见[功能与设置参考](docs/REFERENCE.md)。
+
 完整功能文档、操作指南、设置参考与架构说明见[文档目录](docs/README.md)。
 
 ## CueUp 是什么
@@ -191,8 +197,8 @@ CueUp 的默认设计是本地优先：
 
 - 会议历史保存在本地 SQLite。
 - 凭据保存在应用 userData 目录下的明文 JSON，使用文件权限限制访问；目前未实现 safeStorage 静态加密。SEC-01 为已接受的非阻断风险。
-- API key 不保存在 renderer state 或 localStorage。
-- 日志必须脱敏，不记录原始转录、prompt、截图、证据文本或凭据。
+- 已保存的 API key 由主进程管理，不写入 localStorage；首次填写时输入框会短暂持有用户输入，提交后清空，不回传已保存的密钥正文。
+- 日志按项目约定脱敏，不应记录原始转录、prompt、截图、证据文本或凭据。
 - 云提供商数据范围可以逐项关闭。
 - 关闭某类数据范围后，CueUp 会尽量使用本地模型或降级路径。
 
@@ -234,7 +240,7 @@ npm run app:build
 
 你可以在设置里配置：
 
-- 默认聊天模型为 Doubao Seed 2.0 Lite；也可配置 QCLOUD API 或自定义端点。
+- 未配置时聊天默认模型为 Doubao Seed 2.0 Lite，需要对应凭据才可调用；也可选择 QCLOUD API、Codex CLI 或自定义端点。
 - 语音提供商，例如 Local SenseVoice、QCLOUD API、Doubao AUC。
 - 屏幕理解模式。
 - 云提供商数据范围。
@@ -262,7 +268,7 @@ Electron Main
   DynamicActionEngine, RAGManager, PostCallWorkflow
 
 Renderer
-  React 18 + Vite + TypeScript
+  React 19 + Vite + TypeScript
   Launcher, Overlay, Settings, MeetingDetails
   ModesSettings, SkillsSettings, AI provider settings
 
@@ -272,12 +278,13 @@ Native Module
 
 Storage
   SQLite + sqlite-vec
-  local transcript, summaries, vectors, settings
+  local transcript, summaries, vectors, modes
+  settings.json / credentials.enc (JSON), local UI preferences
 ```
 
 ## 技术栈
 
-- React 18
+- React 19
 - Vite
 - TypeScript
 - TailwindCSS
