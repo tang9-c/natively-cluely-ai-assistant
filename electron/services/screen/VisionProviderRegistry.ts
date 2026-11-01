@@ -13,6 +13,7 @@
 // without booting the whole LLM stack.
 
 import fs from 'node:fs/promises';
+import { llmFetch } from '../../llm/LlmHttpTransport';
 import type {
   VisionProviderConfig,
   VisionInvocationParams,
@@ -304,7 +305,7 @@ async function callOllamaVision(baseUrl: string, model: string, params: VisionIn
     stream: false,
   };
 
-  const res = await fetch(url, {
+  const res = await llmFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

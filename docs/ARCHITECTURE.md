@@ -67,6 +67,14 @@ sequenceDiagram
   LLM-->>UI: 流式回答或动态动作
 ```
 
+## LLM 请求的应用标识
+
+工作区更新（2026-11-01，尚未发布）：应用管理的 LLM HTTP 请求统一发送 `User-Agent: CueUp/<当前应用版本>`。版本由主进程读取 `app.getVersion()`；无 Electron app 对象的 Node 测试使用仓库 package.json 的版本，不写死发布版本号。
+
+`electron/llm/LlmHttpTransport.ts` 为 fetch 请求设置标识，并作为 OpenAI、Anthropic、Groq SDK 的传输函数；Gemini SDK 和 Axios 模型列表查询使用同一版本生成函数。覆盖 QCLOUD 普通请求、SSE 流式请求、原生工具调用、连接测试，以及内置提供方、Ollama 聊天与视觉、Embedding 和自定义 cURL 请求。自定义 cURL 中不同大小写的 User-Agent 也会被替换；鉴权、请求内容、取消信号和数据范围策略保持原有行为。
+
+外部 Codex CLI 的出站请求由 CLI 控制，不受上述 HTTP 客户端配置约束。此约定也不包含 STT、模型文件下载等其他网络流量，不承诺网关转发上游时保留此头。SDK 的其他诊断头仍由 SDK 管理。回归入口为 `npm run test:llm-user-agent`，验证记录见 [QCLOUD 核查记录](qa/2026-10-29-onboarding-qcloud-api.md)。
+
 ## 为什么数据范围是路由条件
 
 CueUp 不把“选择哪个模型”和“能发送哪些数据”混为一谈。请求会声明其携带的范围，例如转录、截图、参考文件、档案历史、Embedding 或会后摘要；`ProviderRouter` 先检查该提供商是否被授权处理这些范围，再选择可用路径或返回明确的拒绝原因。

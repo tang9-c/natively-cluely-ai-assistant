@@ -1,3 +1,4 @@
+import { llmFetch } from '../../llm/LlmHttpTransport';
 import { IEmbeddingProvider, EmbedOptions } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 
@@ -67,7 +68,7 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   // ── Single document embed ───────────────────────────────────────────────────
   async embed(text: string, opts: EmbedOptions = {}): Promise<number[]> {
     const formatted = this.formatDocument(text, opts.title);
-    const res = await fetch(this.url('embedContent'), {
+    const res = await llmFetch(this.url('embedContent'), {
       method: 'POST',
       headers: this.headers,
       body: JSON.stringify({
@@ -85,7 +86,7 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
   // ── Asymmetric retrieval query ──────────────────────────────────────────────
   async embedQuery(text: string, opts: EmbedOptions = {}): Promise<number[]> {
     const formatted = this.formatQuery(text, opts.taskHint);
-    const res = await fetch(this.url('embedContent'), {
+    const res = await llmFetch(this.url('embedContent'), {
       method: 'POST',
       headers: this.headers,
       body: JSON.stringify({
@@ -112,7 +113,7 @@ export class GeminiEmbeddingProvider implements IEmbeddingProvider {
     }));
     let res: Response;
     try {
-      res = await fetch(this.url('batchEmbedContents'), {
+      res = await llmFetch(this.url('batchEmbedContents'), {
         method: 'POST',
         headers: this.headers,
         body: JSON.stringify({ requests })

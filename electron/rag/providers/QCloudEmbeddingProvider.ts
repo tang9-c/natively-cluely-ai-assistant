@@ -1,3 +1,4 @@
+import { llmFetch } from '../../llm/LlmHttpTransport';
 import {
   QCLOUD_EMBEDDING_BACKING_MODEL,
   QCLOUD_EMBEDDING_MODEL,
@@ -62,7 +63,7 @@ export class QCloudEmbeddingProvider implements IEmbeddingProvider {
   private async request(input: string | string[], expectedCount: number): Promise<number[][]> {
     let response: Response;
     try {
-      response = await fetch(QCLOUD_EMBEDDINGS_ENDPOINT, {
+      response = await llmFetch(QCLOUD_EMBEDDINGS_ENDPOINT, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,

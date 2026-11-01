@@ -1,3 +1,4 @@
+import { llmFetch } from '../../llm/LlmHttpTransport';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 
@@ -18,7 +19,7 @@ export class OllamaEmbeddingProvider implements IEmbeddingProvider {
   async isAvailable(): Promise<boolean> {
     try {
       // Check if Ollama is running AND the model is pulled
-      const res = await fetch(`${this.baseUrl}/api/tags`);
+      const res = await llmFetch(`${this.baseUrl}/api/tags`);
       if (!res.ok) return false;
       const data = await res.json();
       return data.models?.some((m: any) => m.name.startsWith(this.model)) ?? false;
@@ -28,7 +29,7 @@ export class OllamaEmbeddingProvider implements IEmbeddingProvider {
   async embed(text: string): Promise<number[]> {
     // nomic-embed-text is asymmetric — documents get a prefix
     const prefixed = `search_document: ${text}`;
-    const res = await fetch(`${this.baseUrl}/api/embeddings`, {
+    const res = await llmFetch(`${this.baseUrl}/api/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: this.model, prompt: prefixed })
@@ -41,7 +42,7 @@ export class OllamaEmbeddingProvider implements IEmbeddingProvider {
   async embedQuery(text: string): Promise<number[]> {
     // nomic-embed-text is asymmetric — queries get a different prefix
     const prefixed = `search_query: ${text}`;
-    const res = await fetch(`${this.baseUrl}/api/embeddings`, {
+    const res = await llmFetch(`${this.baseUrl}/api/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: this.model, prompt: prefixed })

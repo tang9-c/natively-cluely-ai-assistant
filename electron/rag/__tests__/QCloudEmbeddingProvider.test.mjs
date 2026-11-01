@@ -47,7 +47,7 @@ test('QCloudEmbeddingProvider sends the wire alias and exposes the canonical mod
     assert.deepEqual(vector, [0.1, 0.2, 0.3]);
     assert.equal(request.url, constants.QCLOUD_EMBEDDINGS_ENDPOINT);
     assert.equal(request.init.method, 'POST');
-    assert.equal(request.init.headers.Authorization, 'Bearer sk-test');
+    assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer sk-test');
     assert.deepEqual(JSON.parse(request.init.body), {
       model: 'embedding-vision',
       input: '会议文本',
