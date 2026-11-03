@@ -43,7 +43,7 @@ export function SpeakerIdentityMenu({ segment, onChange, onSelect, disabled, lab
     <button ref={trigger} type="button" disabled={disabled || applying} aria-haspopup="menu" aria-expanded={open}
       className="rounded px-1 text-xs font-semibold text-text-secondary hover:bg-white/10 focus-visible:outline focus-visible:outline-2"
       title={identity.detail} onClick={() => setOpen(!open)}>{label ?? identity.label}</button>
-    {open && createPortal(<div ref={menuRef} role="menu" aria-label="修改发言身份" className="fixed z-[10000] min-w-52 rounded-lg border border-white/10 p-1 shadow-xl" style={{ backgroundColor: 'var(--bg-primary, #202024)', left: Math.min(trigger.current?.getBoundingClientRect().left ?? 0, window.innerWidth - 230), top: Math.max(4, Math.min((trigger.current?.getBoundingClientRect().bottom ?? 0) + 4, window.innerHeight - 290)) }}>
+    {open && createPortal(<div ref={menuRef} role="menu" aria-label="修改发言身份" data-overlay-interactive="true" className="fixed z-[10000] min-w-52 rounded-lg border border-white/10 p-1 shadow-xl" style={{ backgroundColor: 'var(--bg-primary, #202024)', left: Math.min(trigger.current?.getBoundingClientRect().left ?? 0, window.innerWidth - 230), top: Math.max(4, Math.min((trigger.current?.getBoundingClientRect().bottom ?? 0) + 4, window.innerHeight - 290)) }}>
       <p className="px-2 py-1 text-xs text-text-tertiary">{identity.detail}</p>
       {((segment.rawSegmentIds?.length ?? 0) > 1 || (segment.coalescedFromCount ?? 0) > 1) && <p className="max-w-64 px-2 py-1 text-xs text-text-tertiary">此段已合并，修改适用于整段</p>}
       {choices.map(([value, text], index) => <button key={text} type="button" role="menuitem" autoFocus={index === 0} disabled={disabled || applying}
