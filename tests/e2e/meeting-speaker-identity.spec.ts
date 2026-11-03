@@ -61,7 +61,14 @@ test('saved identity correction persists and selected batch remains virtualized'
 });
 
 
-test('live correction targets canonical merged scope and stale sessions fail safely', async ({electronApp,page})=>{
+test('live and dynamic-card correction target canonical scope without native click-through', async ({electronApp,page})=>{
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const original = BrowserWindow.prototype.setIgnoreMouseEvents;
+    BrowserWindow.prototype.setIgnoreMouseEvents = function (ignore, ...options) {
+      (this as any).__identityTestIgnoreMouseEvents = ignore;
+      return original.call(this, ignore, ...options);
+    };
+  });
   await electronApp.evaluate(()=>{
     const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'offline-fixture.cjs'));
     const blocked=()=>{throw new Error('E2E external inference disabled');};
@@ -76,21 +83,72 @@ test('live correction targets canonical merged scope and stale sessions fail saf
   const live=electronApp.windows().find(p=>p.url().includes('window=overlay'))!;
   await live.waitForLoadState('domcontentloaded');
   await expect(live.getByRole('button',{name:'纠正发言身份',exact:true})).toBeHidden();
+  await live.evaluate(() => {
+    window.electronAPI.onNativeAudioTranscriptBatch(batch => {
+      const segment = batch.items.filter(item => item.final).at(-1);
+      if (segment) (window as any).__identityFixtureSegment = {
+        ...segment, segmentId: segment.canonicalSegmentId ?? segment.segmentId,
+        text: segment.canonicalText ?? segment.text,
+      };
+    });
+    window.electronAPI.onSpeakerIdentityCorrected(segment => {
+      (window as any).__identityFixtureCorrection = segment;
+    });
+  });
   const now=Date.now();
   await live.evaluate(async now=>{
     await window.electronAPI.benchmarkInjectTranscript({segmentId:'raw-a',speaker:'user',text:'我会提供',timestamp:now,final:true});
     await window.electronAPI.benchmarkInjectTranscript({segmentId:'raw-b',speaker:'user',text:'虚构的测试资料',timestamp:now+100,final:true});
   },now);
+  await expect(live.getByRole('button',{name:'纠正发言身份',exact:true})).toBeVisible();
+  const confirmation = await live.evaluate(() => (window as any).__identityFixtureSegment);
+  expect(confirmation.sessionGeneration).toBeTruthy();
+  await electronApp.evaluate(({ BrowserWindow }, speakerConfirmation) => {
+    const overlay = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes('window=overlay'))!;
+    overlay.webContents.send('intelligence-dynamic-action', { action: {
+      id: 'identity-menu-card', sessionId: 'identity-menu-session', modeId: 'general', modeTemplateType: 'general',
+      type: 'action_item', label: '虚构动作', confidence: 1, priority: 100, evidenceRefs: [],
+      status: 'shown', createdAt: Date.now(), promptInstruction: '', autoSurfacePolicy: 'card',
+      productContract: { userAction: '记录行动项', whyNow: '虚构身份测试', outputType: 'action_item', outputPromise: '测试', riskState: 'normal' },
+      speakerConfirmation,
+    } });
+  }, confirmation);
+  const card = live.getByTestId('dynamic-action-card-identity-menu-card');
+  await card.getByRole('button', { name: '修改身份', exact: true }).click();
+  await live.getByRole('menuitem', { name: '标记为其他参会者', exact: true }).hover();
+  await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
+    const overlay = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes('window=overlay'));
+    return (overlay as any)?.__identityTestIgnoreMouseEvents;
+  })).toBe(false);
+  await live.getByRole('menuitem', { name: '标记为其他参会者', exact: true }).click();
+  await expect(live.getByRole('menu', { name: '修改发言身份' })).toBeHidden();
+  await expect.poll(() => live.evaluate(() => (window as any).__identityFixtureCorrection?.speakerIdentityCorrection?.identity)).toBe('other');
+  await card.getByRole('button', { name: '修改身份', exact: true }).click();
+  await live.getByRole('menuitem', { name: '恢复自动判断', exact: true }).click();
+  await expect.poll(() => live.evaluate(() => (window as any).__identityFixtureCorrection?.speakerIdentityCorrection)).toBeFalsy();
   await live.getByRole('button',{name:'纠正发言身份',exact:true}).click();
   await expect(live.getByText('我会提供虚构的测试资料',{exact:true})).toBeVisible();
+  await expect(live.getByRole('button',{name:'身份未确认',exact:true})).toBeVisible();
   await live.getByRole('button',{name:'身份未确认',exact:true}).click();
   await expect(live.getByText('此段已合并，修改适用于整段',{exact:true})).toBeVisible();
+  // Portal options live outside the overlay shell. CDP click alone can pass
+  // even when Electron is passing real mouse clicks through to another app.
+  await live.getByRole('menuitem',{name:'标记为我',exact:true}).hover();
+  await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
+    const overlay = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes('window=overlay'));
+    return (overlay as any)?.__identityTestIgnoreMouseEvents;
+  })).toBe(false);
   await live.screenshot({path:'.tmp/v28-t2/live-canonical-menu.png'});
   await live.getByRole('menuitem',{name:'标记为我',exact:true}).click();
   await expect(live.getByRole('button',{name:'我',exact:true})).toBeVisible();
   await live.getByRole('button',{name:'我',exact:true}).click();
   await live.getByRole('menuitem',{name:'标记为身份未确认',exact:true}).click();
   await expect(live.getByRole('button',{name:'身份未确认',exact:true})).toHaveAttribute('title','人工标记为未确认');
+  await live.mouse.move(1, 1);
+  await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
+    const overlay = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes('window=overlay'));
+    return (overlay as any)?.__identityTestIgnoreMouseEvents;
+  })).toBe(true);
   const stale=await live.evaluate(()=>window.electronAPI.speakerVerificationSetSessionOverride({segmentId:'raw-a',sessionGeneration:'expired',action:'force_me'}));
   expect(stale.success).toBe(false);
 });

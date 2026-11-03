@@ -649,7 +649,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => window.electronAPI.onSpeakerIdentityCorrected(segment => {
     setRollingSegments(previous => previous.map(item => item.segmentId === segment.segmentId
-      ? { ...item, ...segment, final: true } : item));
+      ? { ...item, ...segment, speakerIdentityCorrection: segment.speakerIdentityCorrection, final: true } : item));
   }), []);
 
   // Stability gate for code-visibility transitions. Scroll fires at ~60Hz;
