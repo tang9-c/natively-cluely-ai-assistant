@@ -69,7 +69,7 @@ sequenceDiagram
 
 ## LLM 请求的应用标识
 
-工作区更新（2026-11-01，尚未发布）：应用管理的 LLM HTTP 请求统一发送 `User-Agent: CueUp/<当前应用版本>`。版本由主进程读取 `app.getVersion()`；无 Electron app 对象的 Node 测试使用仓库 package.json 的版本，不写死发布版本号。
+自 2.7.26（2026-11-02）起，应用管理的 LLM HTTP 请求统一发送 `User-Agent: CueUp/<当前应用版本>`。版本由主进程读取 `app.getVersion()`；无 Electron app 对象的 Node 测试使用仓库 package.json 的版本，不写死发布版本号。
 
 `electron/llm/LlmHttpTransport.ts` 为 fetch 请求设置标识，并作为 OpenAI、Anthropic、Groq SDK 的传输函数；Gemini SDK 和 Axios 模型列表查询使用同一版本生成函数。覆盖 QCLOUD 普通请求、SSE 流式请求、原生工具调用、连接测试，以及内置提供方、Ollama 聊天与视觉、Embedding 和自定义 cURL 请求。自定义 cURL 中不同大小写的 User-Agent 也会被替换；鉴权、请求内容、取消信号和数据范围策略保持原有行为。
 

@@ -1,0 +1,453 @@
+{
+  "version": "2.7.26",
+  "tag": "v2.7.26-sha-960e952",
+  "source_sha": "960e95254295c984fa10058baaed2f0108a09c50",
+  "draft": false,
+  "prerelease": false,
+  "latest": true,
+  "published_at": "2026-11-03T07:52:56Z",
+  "assets": [
+    {
+      "name": "CueUp-2.7.26-arm64-mac.zip",
+      "size": 307168796,
+      "digest": "sha256:d369c539b36f3be98622f69c1dfa4f2c0eaa48e47da60b7a61d44f9a4283ead6",
+      "sha512": "8tlJ9lmMPg1rJacQgl9IcHEAn1xZvumuXeQWkciveeU6ZxYLoLjvsog1bREN8fSSErThPQv61k0DokzMA/u7nQ==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-2.7.26-arm64-mac.zip"
+    },
+    {
+      "name": "CueUp-2.7.26-arm64-mac.zip.blockmap",
+      "size": 310323,
+      "digest": "sha256:c597e9eb178e68b928b7c344542873de875c76bb9bb3b7799c4523a5cc18bc6b",
+      "sha512": "wmyNiV8yz1uKG3CPcobw8+pXKGormlvWT1FWRjjgjCWGeny52MsKpVTAOQAFNFLD+Hnb5hPlJXTKcWsB2g3EIw==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-2.7.26-arm64-mac.zip.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.26-arm64.dmg",
+      "size": 322092937,
+      "digest": "sha256:3e6dd264ccc90b7b5f1e510e27118fbbb95cb066269f7ba3413eedbf35f124bf",
+      "sha512": "OgElgOuui1eZzGcISp5T07A9B6uJ8NkZm4+bCwmcNsJW2qWCZGiiIXpaKji17pApFpxTjk5GV/aFhXfPKFWscQ==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-2.7.26-arm64.dmg"
+    },
+    {
+      "name": "CueUp-2.7.26-arm64.dmg.blockmap",
+      "size": 334683,
+      "digest": "sha256:5f49ced53d50b341213c082cd83dfa4925e5f34438b143f789147d2522a5670e",
+      "sha512": "pNUS5bwgVDYGhuA5Ay6NunvCnI84UomkzcLZ9QUXISD0GETIdKhxgorCsGJMR0FU+24e3t6i+qev91GMgVdi8A==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-2.7.26-arm64.dmg.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.26-mac.zip",
+      "size": 311989741,
+      "digest": "sha256:c2d148a46d391ba2c9298bfe6222bf8a58faa944ab91b44c9d22814fcdcb97aa",
+      "sha512": "7qIU0/rasruh1KUSXqxifbu1Sl4/AVNfV5lsj6ZlSR/0GYOfUwdp0VF0zyvZJovwStodZdXnpcoz0SfhwJ06Tg==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-2.7.26-mac.zip"
+    },
+    {
+      "name": "CueUp-2.7.26-mac.zip.blockmap",
+      "size": 317292,
+      "digest": "sha256:d7444b0b1c536010eac89546c4612e48288d5ef0e4cc17a85a6b37bfda320f41",
+      "sha512": "UAI+n65zWLkqENyAK9ennZruQc5thrpKBzvzWYzSn1yVo2x/0sZImvPxlIKb852uyNTpgVx/c7XEAkGAzdCyQA==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-2.7.26-mac.zip.blockmap"
+    },
+    {
+      "name": "CueUp-2.7.26.dmg",
+      "size": 326909176,
+      "digest": "sha256:7b6d6b2c05b1c376dc6b8d5ae32e72d00718730733ca3f0f8127ebc751470f86",
+      "sha512": "ods3rHNa+y+byqQWrirErDYvt6nz+ovdPicqZtq2oRdvlCCMEEl5cSnfyroQChtOqD5FQHHMb0yW2CjODAc1ow==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-2.7.26.dmg"
+    },
+    {
+      "name": "CueUp-2.7.26.dmg.blockmap",
+      "size": 343276,
+      "digest": "sha256:ddc7a0e2b0966200761efa31631bc2c3d9f55124330a39f4acaba729952a91d1",
+      "sha512": "ogL0o1rknC2IpjhG0A6EHa7HGKm+9gEY//QAWM2nTfH6Yk1ogbF6qJJdAT5HlM02sGuzPMdI/2a6VWEwMyzMoA==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-2.7.26.dmg.blockmap"
+    },
+    {
+      "name": "CueUp-Setup-2.7.26.exe",
+      "size": 272233577,
+      "digest": "sha256:1fe8d70768a234171e22ba0dccc099ac9e54cc4e72c0469e9ec72bf2d7e73a3b",
+      "sha512": "b4o/MLJpgxuBHdvo7EJ1TCUUlByyFBJFQDI3F6wI3JomSRvT4pGUYKhqy0coQ7XkKlTIwE991jGNsYASlPFgog==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-Setup-2.7.26.exe"
+    },
+    {
+      "name": "CueUp-Setup-2.7.26.exe.blockmap",
+      "size": 284038,
+      "digest": "sha256:5a2b25996b8712db3435a7a4d3cbcb56b0aa13e3dfda7742b6db87ebb0d8b62a",
+      "sha512": "ZhgoSGzD7MlZOpupuKX8T1/HOFTRRGgyOpa48GCa1WBV8aatHYz00134OVFLhsZDZ6U9t9cb4JeWubwTjDwDaA==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp-Setup-2.7.26.exe.blockmap"
+    },
+    {
+      "name": "CueUp.2.7.26.exe",
+      "size": 271988757,
+      "digest": "sha256:6fa5d4d8209055e95c0c45c1885590fb5bfd7d2b9c576b1e10dcb4a86636a879",
+      "sha512": "sSEatdaH6/K6dHBZQBg49qhuZVU6oUv5QaE6Ms+hvEDioV31KTEkhqJhQNJtluXoCDvD73s08iUz9U9KKa5zxg==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/CueUp.2.7.26.exe"
+    },
+    {
+      "name": "INSTALL-UNSIGNED-MACOS.txt",
+      "size": 595,
+      "digest": "sha256:b0eeda2281edaff805ad3658e54ecb592622de839c23b5966c730d705ffb52b9",
+      "sha512": "GeqH/AOpuddVozKBq63Ow0MSdAvTCAqRf5K6aSg2HLcZFy7WHWlCZ3snInSa3tQPlo8qCwW6rkucBaU3udGxHA==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/INSTALL-UNSIGNED-MACOS.txt"
+    },
+    {
+      "name": "latest.yml",
+      "size": 342,
+      "digest": "sha256:4b49adf9e2b1e1bc7799f3d0de73154c3e6ea180d3c4763c07d63d3758a4f802",
+      "sha512": "8tAL8iWoiCyjVNhQp2u0DzYSyNPEEntZH1ni0tdC6pzb4gsILdsAO1Q4s/hWo1WWpp0v/j344hPNgNMUrABmgA==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/latest.yml"
+    },
+    {
+      "name": "OPEN-UNSIGNED-CUEUP-MAC.sh",
+      "size": 712,
+      "digest": "sha256:dbe354af3d4ef3af24174e920a1198ba53347b6cf939560659d57c76d93e02e4",
+      "sha512": "gbCecX7WpmIFRdV+klYVfd+Ald9xpzp435z12B8rKlgAYcJMu9Z6bVMB54tmq7ZsJqPFh6un+wNNbXGI4S9bPg==",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v2.7.26-sha-960e952/OPEN-UNSIGNED-CUEUP-MAC.sh"
+    }
+  ],
+  "builds": [
+    {
+      "id": 41596546833,
+      "name": "Build Windows x64",
+      "head_sha": "960e95254295c984fa10058baaed2f0108a09c50",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41596546833",
+      "attempt": 1,
+      "conclusion": "success",
+      "artifacts": [
+        {
+          "id": 13212583835,
+          "node_id": "MDg6QXJ0aWZhY3QxMzIxMjU4MzgzNQ==",
+          "name": "cueup-windows-x64-41596546833",
+          "size_in_bytes": 544589371,
+          "url": "https://api.github.com/repos/tang9-c/natively-cluely-ai-assistant/actions/artifacts/13212583835",
+          "archive_download_url": "https://api.github.com/repos/tang9-c/natively-cluely-ai-assistant/actions/artifacts/13212583835/zip",
+          "expired": false,
+          "digest": "sha256:f6722c71fa05d7ed70b481835fd3d6c77ac64d53ca627933be3692e7c36c7088",
+          "created_at": "2026-11-03T07:36:51Z",
+          "updated_at": "2026-11-03T07:36:51Z",
+          "expires_at": "2026-11-17T07:36:37Z",
+          "workflow_run": {
+            "id": 41596546833,
+            "repository_id": 1255944495,
+            "head_repository_id": 1255944495,
+            "head_branch": "v2.7.26-sha-960e952",
+            "head_sha": "960e95254295c984fa10058baaed2f0108a09c50"
+          }
+        }
+      ],
+      "downloaded_zip_sha256": "f6722c71fa05d7ed70b481835fd3d6c77ac64d53ca627933be3692e7c36c7088",
+      "packaged_app_version": null,
+      "reports": {
+        "native-architecture-report.json": {
+          "ok": true,
+          "platform": "win32",
+          "arch": "x64",
+          "errors": []
+        },
+        "runtime-smoke-report.json": {
+          "ok": true,
+          "platform": "win32",
+          "arch": "x64",
+          "results": {
+            "pdf": {
+              "ok": true,
+              "chars": 38
+            },
+            "pptx": {
+              "ok": true,
+              "slideCount": 1
+            },
+            "embedding": {
+              "ok": true,
+              "dimensions": 384
+            },
+            "database": {
+              "ok": true
+            },
+            "rag": {
+              "ok": true,
+              "topRowId": 1
+            },
+            "sensevoice": {
+              "ok": true,
+              "chars": 239,
+              "providerRequested": "cueup-invalid-gpu",
+              "providerActual": "cpu",
+              "fallbackReason": "candidate_initialization_failed",
+              "fallbackVerified": true
+            }
+          }
+        }
+      },
+      "size_summary": {
+        "totalBytes": 878746953,
+        "minBytes": 734003200,
+        "maxBytes": 891289600,
+        "withinBudget": true
+      }
+    },
+    {
+      "id": 41596546788,
+      "name": "Build ARM64 Mac",
+      "head_sha": "960e95254295c984fa10058baaed2f0108a09c50",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41596546788",
+      "attempt": 1,
+      "conclusion": "success",
+      "artifacts": [
+        {
+          "id": 13212926874,
+          "node_id": "MDg6QXJ0aWZhY3QxMzIxMjkyNjg3NA==",
+          "name": "cueup-arm64-mac-41596546788",
+          "size_in_bytes": 629090360,
+          "url": "https://api.github.com/repos/tang9-c/natively-cluely-ai-assistant/actions/artifacts/13212926874",
+          "archive_download_url": "https://api.github.com/repos/tang9-c/natively-cluely-ai-assistant/actions/artifacts/13212926874/zip",
+          "expired": false,
+          "digest": "sha256:af757a80863a41d9e24731c1103897f5c2bea07617f2e7ee41a5bbeb63797e1f",
+          "created_at": "2026-11-03T07:38:27Z",
+          "updated_at": "2026-11-03T07:38:27Z",
+          "expires_at": "2026-11-17T07:38:02Z",
+          "workflow_run": {
+            "id": 41596546788,
+            "repository_id": 1255944495,
+            "head_repository_id": 1255944495,
+            "head_branch": "v2.7.26-sha-960e952",
+            "head_sha": "960e95254295c984fa10058baaed2f0108a09c50"
+          }
+        }
+      ],
+      "downloaded_zip_sha256": "af757a80863a41d9e24731c1103897f5c2bea07617f2e7ee41a5bbeb63797e1f",
+      "packaged_app_version": "2.7.26",
+      "reports": {
+        "native-architecture-report.json": {
+          "ok": true,
+          "platform": "darwin",
+          "arch": "arm64",
+          "errors": []
+        },
+        "runtime-smoke-report.json": {
+          "ok": true,
+          "platform": "darwin",
+          "arch": "arm64",
+          "results": {
+            "pdf": {
+              "ok": true,
+              "chars": 38
+            },
+            "pptx": {
+              "ok": true,
+              "slideCount": 1
+            },
+            "embedding": {
+              "ok": true,
+              "dimensions": 384
+            },
+            "database": {
+              "ok": true
+            },
+            "rag": {
+              "ok": true,
+              "topRowId": 1
+            },
+            "sensevoice": {
+              "ok": true,
+              "chars": 240,
+              "providerRequested": "cueup-invalid-gpu",
+              "providerActual": "cpu",
+              "fallbackReason": "candidate_initialization_failed",
+              "fallbackVerified": true
+            }
+          }
+        }
+      },
+      "size_summary": {
+        "totalBytes": 806090053,
+        "minBytes": 734003200,
+        "maxBytes": 891289600,
+        "withinBudget": true
+      }
+    },
+    {
+      "id": 41596546562,
+      "name": "Build Intel Mac",
+      "head_sha": "960e95254295c984fa10058baaed2f0108a09c50",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41596546562",
+      "attempt": 1,
+      "conclusion": "success",
+      "artifacts": [
+        {
+          "id": 13213042116,
+          "node_id": "MDg6QXJ0aWZhY3QxMzIxMzA0MjExNg==",
+          "name": "cueup-intel-mac-41596546562",
+          "size_in_bytes": 638761033,
+          "url": "https://api.github.com/repos/tang9-c/natively-cluely-ai-assistant/actions/artifacts/13213042116",
+          "archive_download_url": "https://api.github.com/repos/tang9-c/natively-cluely-ai-assistant/actions/artifacts/13213042116/zip",
+          "expired": false,
+          "digest": "sha256:4752fac21cb98f11454265d6bd29f2c1c0cdb07cd76986df5b30a65e3363b8df",
+          "created_at": "2026-11-03T07:43:35Z",
+          "updated_at": "2026-11-03T07:43:35Z",
+          "expires_at": "2026-11-17T07:43:06Z",
+          "workflow_run": {
+            "id": 41596546562,
+            "repository_id": 1255944495,
+            "head_repository_id": 1255944495,
+            "head_branch": "v2.7.26-sha-960e952",
+            "head_sha": "960e95254295c984fa10058baaed2f0108a09c50"
+          }
+        }
+      ],
+      "downloaded_zip_sha256": "4752fac21cb98f11454265d6bd29f2c1c0cdb07cd76986df5b30a65e3363b8df",
+      "packaged_app_version": "2.7.26",
+      "reports": {
+        "native-architecture-report.json": {
+          "ok": true,
+          "platform": "darwin",
+          "arch": "x64",
+          "errors": []
+        },
+        "runtime-smoke-report.json": {
+          "ok": true,
+          "platform": "darwin",
+          "arch": "x64",
+          "results": {
+            "pdf": {
+              "ok": true,
+              "chars": 38
+            },
+            "pptx": {
+              "ok": true,
+              "slideCount": 1
+            },
+            "embedding": {
+              "ok": true,
+              "dimensions": 384
+            },
+            "database": {
+              "ok": true
+            },
+            "rag": {
+              "ok": true,
+              "topRowId": 1
+            },
+            "sensevoice": {
+              "ok": true,
+              "chars": 239,
+              "providerRequested": "cueup-invalid-gpu",
+              "providerActual": "cpu",
+              "fallbackReason": "candidate_initialization_failed",
+              "fallbackVerified": true
+            }
+          }
+        }
+      },
+      "size_summary": {
+        "totalBytes": 808033659,
+        "minBytes": 734003200,
+        "maxBytes": 891289600,
+        "withinBudget": true
+      }
+    }
+  ],
+  "aggregations": [
+    {
+      "conclusion": "success",
+      "databaseId": 41598243424,
+      "headSha": "960e95254295c984fa10058baaed2f0108a09c50",
+      "status": "completed",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41598243424"
+    },
+    {
+      "conclusion": "cancelled",
+      "databaseId": 41597686290,
+      "headSha": "960e95254295c984fa10058baaed2f0108a09c50",
+      "status": "completed",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41597686290"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 41597507561,
+      "headSha": "960e95254295c984fa10058baaed2f0108a09c50",
+      "status": "completed",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41597507561"
+    }
+  ],
+  "verification": {
+    "all_assets_streamed_and_sha256_matched": true,
+    "artifact_archive_sha256_matched": true,
+    "windows_metadata_matched": true,
+    "mac_zip_metadata_matched": true,
+    "mac_packaged_version_matched": true,
+    "public_downloads": [
+      {
+        "name": "CueUp-2.7.26-arm64-mac.zip",
+        "status": 200
+      },
+      {
+        "name": "CueUp-2.7.26-arm64-mac.zip.blockmap",
+        "status": 200
+      },
+      {
+        "name": "CueUp-2.7.26-arm64.dmg",
+        "status": 200
+      },
+      {
+        "name": "CueUp-2.7.26-arm64.dmg.blockmap",
+        "status": 200
+      },
+      {
+        "name": "CueUp-2.7.26-mac.zip",
+        "status": 200
+      },
+      {
+        "name": "CueUp-2.7.26-mac.zip.blockmap",
+        "status": 200
+      },
+      {
+        "name": "CueUp-2.7.26.dmg",
+        "status": 200
+      },
+      {
+        "name": "CueUp-2.7.26.dmg.blockmap",
+        "status": 200
+      },
+      {
+        "name": "CueUp-Setup-2.7.26.exe",
+        "status": 200
+      },
+      {
+        "name": "CueUp-Setup-2.7.26.exe.blockmap",
+        "status": 200
+      },
+      {
+        "name": "CueUp.2.7.26.exe",
+        "status": 200
+      },
+      {
+        "name": "INSTALL-UNSIGNED-MACOS.txt",
+        "status": 200
+      },
+      {
+        "name": "latest.yml",
+        "status": 200
+      },
+      {
+        "name": "OPEN-UNSIGNED-CUEUP-MAC.sh",
+        "status": 200
+      }
+    ]
+  },
+  "permission_ci": [
+    {
+      "conclusion": "success",
+      "databaseId": 41596527918,
+      "status": "completed",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41596527918"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 41596527970,
+      "status": "completed",
+      "url": "https://github.com/tang9-c/natively-cluely-ai-assistant/actions/runs/41596527970"
+    }
+  ]
+}

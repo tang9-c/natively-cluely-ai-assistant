@@ -85,3 +85,7 @@ QCLOUD UI 用例通过真实凭据 IPC 在独立 fresh userData 写入假 key，
 最终联合回归：**273/273 通过，0 跳过**，涵盖全部 `LLMHelper.*.test.mjs`、QCLOUD 聊天/预算/配置/超时/推理选项、Embedding 提供方与解析、OpenAI-compatible/Anthropic/Gemini 工具适配、首次设置 IPC/AI 验证及视觉回退链；`npm run typecheck:electron` 与 `git diff --check` 通过。依赖产生既有 punycode 弃用提示，未出现测试失败。
 
 限制：未执行真实 QCLOUD 账号请求、网关上游头部核对或发行包安装验收；此记录不代表现有 2.7.25 安装包已经具备新行为。外部 Codex CLI 自行控制 HTTP 请求，无法由 CueUp 的客户端配置统一；STT、模型文件下载等网络流量不在本轮范围内。SDK 其他诊断头保留。
+
+## 2.7.26 发布跟进（2026-11-02）
+
+LLM User-Agent 统一已随 [2.7.26](https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.26-sha-960e952) 正式发布，来源 `960e95254295c984fa10058baaed2f0108a09c50`。上文“工作区，尚未发布”为修复完成时的历史状态；候选 User-Agent 专项 9/9、production 38/38、权限专项 132/132 及三平台构建/附件核对结果见[发布记录](../testing/2.7.26-build-release.md)。真实账号、网关上游头部及新包人工安装仍未验收，外部 Codex CLI 自行管理请求头的边界不变。
