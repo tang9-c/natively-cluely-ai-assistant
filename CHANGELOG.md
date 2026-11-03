@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.7.26] - 2026-11-02
+
+### Fixed
+
+- Identify application-managed LLM HTTP requests as `CueUp/<running app version>`, including QCLOUD ordinary generation, SSE streaming, native tool calls and connection tests. Apply the same identity to other built-in SDKs, custom cURL requests, embeddings and cloud model discovery while preserving authentication and cancellation.
+- Keep speaker identity menus interactive outside the meeting overlay shell so mouse clicks on dynamic-action and live transcript identity options do not pass through to other applications.
+- Clear the old manual identity in the live transcript UI when restoring automatic speaker identification.
+
+### Testing and known limitations
+
+- Add wire-level User-Agent regressions and native mouse-policy assertions for dynamic-action identity editing, restoration and transparent overlay regions. Include identity editing in production renderer regression coverage. Validation and three-platform release evidence are recorded in `docs/testing/2.7.26-build-release.md`.
+- External Codex CLI requests control their own User-Agent. New-release installation, real provider requests, gateway forwarding, hardware mouse interaction, TCC continuity and voiced meetings require separate device acceptance. Signing and plaintext credential storage are unchanged; SEC-01 remains accepted and non-blocking.
+
 ## [2.7.25] - 2026-11-01
 
 ### Fixed

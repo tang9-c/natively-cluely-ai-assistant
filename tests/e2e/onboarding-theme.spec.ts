@@ -47,7 +47,11 @@ for (const theme of ['light', 'dark'] as const) for (const system of ['light', '
   test.describe(`onboarding colors app=${theme} system=${system}`, () => {
     test.use({ onboardingMode: 'fresh', onboardingScenario: 'permission-denied' });
     test('all setup pages use semantic colors across application and OS themes', async ({ page, electronApp }, testInfo) => {
-      await appTheme(page, theme, system); await paletteContrast(page);
+      await appTheme(page, theme, system);
+      // A new Electron window can inherit the pointer over the primary button.
+      // Check its default color before deliberately exercising the hover state.
+      await page.mouse.move(0, 0);
+      await paletteContrast(page);
       await tokenColor(page.getByRole('heading', { name: '先完成初始设置 再开始第一场会议' }), '--text-primary');
       await tokenColor(page.getByRole('button', { name: '开始设置', exact: true }), '--btn-primary-bg', 'background-color');
       await tokenColor(page.getByRole('button', { name: '开始设置', exact: true }), '--btn-primary-text');
