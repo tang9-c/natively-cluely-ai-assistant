@@ -7,6 +7,7 @@ export function createOnboardingReadinessReader(deps: {
     inputDevices(): { id: string; name: string }[];
     outputDevices(): { id: string; name: string }[];
     speechCheck(): OnboardingCheck;
+    systemAudioCheck?(selection: OnboardingDeviceSelection): OnboardingCheck | undefined;
 }): (selection?: OnboardingDeviceSelection) => Promise<OnboardingSnapshot['checks']> {
     return async (selection = {}) => {
         // Await the passive permission read before any input probe: wrapping a
@@ -30,8 +31,9 @@ export function createOnboardingReadinessReader(deps: {
         const outputValid = outputs.length > 0 && (!selection.outputDeviceId || selection.outputDeviceId === 'default'
             || (selection.outputDeviceId === 'sck' && permissions.platform === 'darwin') || outputs.some(device => device.id === selection.outputDeviceId));
         // Screen preflight cannot establish audio access; the selected capture backend checks it at meeting start.
-        const systemAudio: OnboardingCheck = permissionResult.status === 'rejected' ? { status: 'failed', errorCode: 'unsupported_check', evidenceSource: 'unavailable' } : !outputValid ? { status: 'failed', errorCode: 'device_missing', evidenceSource: 'system' }
-            : { status: 'pending_runtime', evidenceSource: 'unavailable' };
+        const runtimeAudio = deps.systemAudioCheck?.(selection);
+        const systemAudio: OnboardingCheck = runtimeAudio ?? (permissionResult.status === 'rejected' ? { status: 'failed', errorCode: 'unsupported_check', evidenceSource: 'unavailable' } : !outputValid ? { status: 'failed', errorCode: 'device_missing', evidenceSource: 'system' }
+            : { status: 'pending_runtime', evidenceSource: 'unavailable' });
         return { microphone, inputDevice: permissionResult.status === 'rejected'
             ? { status: 'failed', errorCode: 'unsupported_check', evidenceSource: 'unavailable' }
             : !canEnumerateInput ? { status: 'pending_runtime', evidenceSource: 'unavailable' } : inputValid ? { status: 'verified', evidenceSource: 'system' }

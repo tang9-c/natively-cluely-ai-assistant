@@ -28,6 +28,24 @@ test('onboarding error strings are fixed and do not expose provider exception de
   assert.doesNotMatch(onboardingErrorText('secret-key-in-provider-error'), /secret/);
 });
 
+test('saved-only validation refreshes the current revision and does not require a save callback', async () => {
+  const { validateSavedOnboarding } = helpers();
+  const events = [];
+  const result = await validateSavedOnboarding({ target: 'stt',
+    refresh: async () => { events.push('refresh'); return { success: true, snapshot: { progress: { configRevision: { stt: 12 } } } }; },
+    validate: async revision => { events.push(revision); return { success: false, errorCode: 'authentication_failed', messageKey: 'onboarding.authentication_failed' }; },
+  });
+  assert.deepEqual(events, ['refresh', 12]);
+  assert.equal(result.errorCode, 'authentication_failed');
+});
+
+test('missing credentials and unsupported page access have explicit actionable errors', () => {
+  const { onboardingErrorText } = helpers();
+  assert.match(onboardingErrorText('credentials_missing'), /密钥|凭据/);
+  assert.match(onboardingErrorText('forbidden'), /窗口|设置/);
+  assert.match(onboardingErrorText('invalid_request'), /刷新/);
+});
+
 test('QCLOUD onboarding explicitly defers network validation until after secure save, while legacy settings keep preflight', async () => {
   const { ipcHandler } = await import('./helpers/onboardingRuntime.mjs');
   const events = [];

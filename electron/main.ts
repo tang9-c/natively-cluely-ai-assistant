@@ -398,10 +398,10 @@ import { CredentialsManager } from "./services/CredentialsManager"
 import { createOnboardingService, prepareOnboardingCredentials } from './services/onboarding/OnboardingConfiguration';
 import { OnboardingValidation, createSpeechExecutor, createAiExecutor } from './services/onboarding/OnboardingValidation';
 import { AudioTestSession } from './audio/AudioTestSession';
-import type { AudioTestResult, OnboardingErrorCode } from '../shared/onboarding';
+import type { AudioTestResult, OnboardingCheck, OnboardingErrorCode, ValidationTarget } from '../shared/onboarding';
 import { OnboardingError } from './services/onboarding/OnboardingService';
 import type { OnboardingService } from './services/onboarding/OnboardingService';
-import { deriveFirstRunStartDecision } from '../shared/onboarding';
+import { deriveFirstRunStartDecision, supportsInMeetingValidation } from '../shared/onboarding';
 import type { OnboardingMeetingEvent, OnboardingStep } from '../shared/onboarding';
 import { SettingsManager } from "./services/SettingsManager"
 import { setVerboseLoggingFlag } from "./verboseLog"
@@ -2068,8 +2068,9 @@ export class AppState {
     await this.adaptivePreloadManager.disposeIdleResources();
   }
 
-  public isOnboardingBusy(): boolean {
-    return this.isMeetingActive || !!this._meetingStartInFlight || this._isDraining || !!this.preparationDictation || !!this.audioTestCapture;
+  public isOnboardingBusy(validation?: { target: ValidationTarget; check: OnboardingCheck }): boolean {
+    if (this._meetingStartInFlight || this._isDraining || this.preparationDictation || this.audioTestCapture) return true;
+    return !!this.isMeetingActive && !(validation && supportsInMeetingValidation(validation.target, validation.check?.provider));
   }
 
   public async prepareLocalModelMutation(modelId: string): Promise<void> {
@@ -2690,6 +2691,19 @@ export class AppState {
   private _audioCaptureReleases = new Set<Promise<void>>();
   private _audioRecoveryOwners: Partial<Record<'system' | 'mic', object>> = {};
   private _audioRecoveryWaits = new Map<'system' | 'mic', { timer: NodeJS.Timeout; resolve: () => void }>();
+
+  /** Current-session capture evidence only; screen preflight is not an audio permission check. */
+  public getOnboardingSystemAudioCheck(selection: { outputDeviceId?: string } = {}): OnboardingCheck | undefined {
+    if (!this.isMeetingActive || this._meetingStartInFlight) return undefined;
+    const requested = this._lastRequestedOutputDeviceId || 'default';
+    if ((selection.outputDeviceId || 'default') !== requested) return undefined;
+    const health = this._captureHealth.system;
+    if (health?.state === 'failed') return { status: 'failed', evidenceSource: 'runtime', messageKey: 'onboarding.system_audio_failed' };
+    if (this.systemAudioCapture && health?.isCapturing && health.state === 'healthy') {
+      return { status: 'verified', evidenceSource: 'runtime' };
+    }
+    return undefined;
+  }
 
   private wireCaptureHealth(channel: 'system' | 'mic', capture: SystemAudioCapture | MicrophoneCapture): void {
     const health = this._captureHealth[channel] ??= new AudioCaptureHealthMonitor({
@@ -4631,7 +4645,7 @@ async function initializeApp() {
   appState.onboardingValidation = new OnboardingValidation({
     now: appState.onboardingFixture?.now,
     service: appState.onboardingService,
-    isBusy: () => appState.isOnboardingBusy(),
+    isBusy: (target, check) => appState.isOnboardingBusy({ target, check }),
     prepare: target => prepareOnboardingCredentials({ credentials: credentialsManagerSingleton, settings: SettingsManager.getInstance() }, target),
     execute: (target, check, signal) => appState.onboardingFixture ? appState.onboardingFixture.execute(target, check, signal)
       : target === 'stt' ? speechExecutor(check, signal) : aiExecutor(check, signal),

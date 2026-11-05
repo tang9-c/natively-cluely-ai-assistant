@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { OnboardingSnapshot, OnboardingStateResult } from '../../../shared/onboarding';
 import type { OnboardingFormGuard } from '../../hooks/useOnboarding';
 import { DEFAULT_CHAT_MODEL_ID, STANDARD_CLOUD_MODELS, codexCliSelectorId, getModelDisplayName, normalizeAiProvider, getCodexCliModelId, getAiModelDisplayName, resolveAiModelInput, CODEX_CLI_MODEL_PRESETS } from '../../utils/modelUtils';
-import { onboardingErrorText, saveAndValidateOnboarding } from '../../utils/onboardingActions';
+import { onboardingErrorText, saveAndValidateOnboarding, validateSavedOnboarding } from '../../utils/onboardingActions';
+import { supportsInMeetingValidation } from '../../../shared/onboarding';
 import { getAiProviderLabel, getAiSettingsTab, TRANSCRIPT_SCOPE_LABEL, TRANSCRIPT_SCOPE_DESCRIPTION } from '../../utils/settingsDisplay';
 const control = 'mt-2 w-full rounded-lg border border-border-muted bg-bg-elevated px-3 py-2 text-sm';
 const button = 'rounded-lg border border-border-muted px-3 py-2 text-xs hover:bg-bg-item-active disabled:opacity-40';
@@ -40,6 +41,8 @@ export default function AiServiceStep({ snapshot, refresh, registerFormGuard, on
   const currentCheck = provider === normalizeAiProvider(check.provider) && model.trim() === (provider === 'codex-cli' ? getCodexCliModelId(check.modelId ?? '', codex?.model) : check.modelId);
   const checkError = currentCheck ? check.errorCode : undefined;
   const dirty = !!key || provider !== saved.provider || model !== saved.model || scope !== savedScope || (provider === 'codex-cli' && !!codex && codex.path !== savedCodexPath);
+  const canValidateSaved = currentCheck && !dirty && !changingKey && hasSavedKey && !!check.configIdentity && supportsInMeetingValidation('ai', check.provider);
+  const validationBusy = pending || snapshot.meeting.isStarting || check.status === 'checking' || (snapshot.meeting.isActive && !canValidateSaved);
   useEffect(() => {
     let active = true;
     api.getProviderDataScopes().then(scopes => { if (active) { setScope(scopes.transcript); setSavedScope(scopes.transcript); } }).catch(() => { if (active) setError('无法读取范围策略，请重试。'); });
@@ -86,15 +89,18 @@ export default function AiServiceStep({ snapshot, refresh, registerFormGuard, on
   };
   useEffect(() => registerFormGuard({ isDirty: () => dirty, save, discard: () => { setKey(''); setProvider(saved.provider); setModel(saved.model); setScope(savedScope); setCodex(current => current ? { ...current, path: savedCodexPath } : current); } }), [dirty, key, provider, model, scope, savedScope, saved, codex, savedCodexPath, busy, registerFormGuard]);
   const validate = async () => {
-    if (busy) return;
+    if (validationBusy) return;
     if (!model.trim()) { setInvalidField('model'); setError('请填写 AI 模型。'); modelInput.current?.focus(); return; }
     if (['doubao', 'natively'].includes(provider) && (!hasSavedKey || changingKey) && !key.trim()) {
       setInvalidField('key'); setError(provider === 'natively' ? '请填写 QCLOUD API Key。' : '请填写 AI 密钥。'); keyInput.current?.focus(); return;
     }
     if (provider === 'codex-cli' && !codex?.path.trim()) { setInvalidField('path'); setError('请填写可执行文件。'); pathInput.current?.focus(); return; }
     setInvalidField(null); setPending(true); setError(null);
-    const result = await saveAndValidateOnboarding({ target: 'ai', save, clear: () => setKey(''), refresh,
-      validate: expectedRevision => api.validateOnboardingService({ target: 'ai', expectedRevision }) });
+    const validateSaved = { target: 'ai' as const, refresh,
+      validate: (expectedRevision: number) => api.validateOnboardingService({ target: 'ai', expectedRevision }) };
+    const result = snapshot.meeting.isActive
+      ? { ...await validateSavedOnboarding(validateSaved), saved: true }
+      : await saveAndValidateOnboarding({ ...validateSaved, save, clear: () => setKey('') });
     setPending(false);
     if (result.saved) setStatus(result.success ? '本次模型响应通过' : '已保存，尚未验证所选模型');
     if (!result.success) setError(onboardingErrorText(result.errorCode));
@@ -133,9 +139,13 @@ export default function AiServiceStep({ snapshot, refresh, registerFormGuard, on
         {savedScope === undefined && <option value="inherit">沿用当前策略（允许）</option>}<option value="allow">允许</option><option value="deny">不允许</option>
       </select></label>
       <p className="text-xs leading-relaxed text-text-secondary">{TRANSCRIPT_SCOPE_DESCRIPTION}</p>
-      {['natively', 'doubao', 'codex-cli'].includes(provider) && <button className={button} onClick={() => void validate()}>{provider === 'codex-cli' ? '验证当前配置' : '保存并验证'}</button>}
+      {!snapshot.meeting.isActive && ['natively', 'doubao', 'codex-cli'].includes(provider) && <button className={button} onClick={() => void validate()}>{provider === 'codex-cli' ? '验证当前配置' : '保存并验证'}</button>}
     </fieldset>
-    <p role="status" className={`text-xs ${pending || currentCheck && check.status === 'previously_verified' ? 'text-status-info' : currentCheck && check.status === 'verified' ? 'text-status-success' : 'text-text-secondary'}`}>{pending ? '正在保存并验证…' : !currentCheck ? '配置已更改，保存后重新检查。' : status ?? (check.status === 'verified' ? '本次模型响应通过' : check.status === 'previously_verified' ? '上次验证通过' : check.configured ? '已保存，尚未验证所选模型' : '尚未配置')}{currentCheck && check.checkedAt ? ` · ${new Date(check.checkedAt).toLocaleString()}` : ''}</p>
+    {snapshot.meeting.isActive && <div className="space-y-2">
+      <button disabled={validationBusy} className={button} onClick={() => void validate()}>验证已保存的 AI 服务</button>
+      {!canValidateSaved && <p className="text-xs text-status-info">会中只能验证已保存且未改动的云端配置。修改配置或验证本地程序，请结束会议后继续。</p>}
+    </div>}
+    <p role="status" className={`text-xs ${pending || currentCheck && check.status === 'previously_verified' ? 'text-status-info' : currentCheck && check.status === 'verified' ? 'text-status-success' : 'text-text-secondary'}`}>{pending ? snapshot.meeting.isActive ? '正在验证已保存的 AI 服务…' : '正在保存并验证…' : !currentCheck ? '配置已更改，保存后重新检查。' : status ?? (check.status === 'verified' ? '本次模型响应通过' : check.status === 'previously_verified' ? '上次验证通过' : check.configured ? '已保存，尚未验证所选模型' : '尚未配置')}{currentCheck && check.checkedAt ? ` · ${new Date(check.checkedAt).toLocaleString()}` : ''}</p>
     {(error || checkError) && <p id="onboarding-ai-error" role="alert" className={`text-xs ${!error && ['scope_denied', 'unsupported_check'].includes(checkError ?? '') ? 'text-status-warning' : 'text-status-error'}`}>{error ?? onboardingErrorText(checkError)}</p>}
     <button className={button} onClick={() => onOpenSettings(getAiSettingsTab(provider))}>返回原设置</button>
     {!['natively', 'doubao', 'codex-cli'].includes(provider) && <><p className="text-xs text-status-warning">引导暂不能验证此配置，原服务仍然保留。</p><button className={button} onClick={() => { setProvider('doubao'); setModel(DEFAULT_CHAT_MODEL_ID); }}>选择支持的服务</button></>}

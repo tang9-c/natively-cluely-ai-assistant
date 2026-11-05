@@ -70,6 +70,7 @@ export function mainInitializer(name, globals = {}) {
   const ast = source('electron/main.ts'); let value;
   function visit(node) {
     if (ts.isVariableDeclaration(node) && node.name.getText(ast) === name) value = node.initializer?.getText(ast);
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.left.getText(ast) === name) value = node.right.getText(ast);
     ts.forEachChild(node, visit);
   }
   visit(ast); if (!value) throw new Error(`Missing main initializer ${name}`);

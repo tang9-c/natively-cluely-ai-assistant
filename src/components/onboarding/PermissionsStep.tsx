@@ -46,8 +46,11 @@ export default function PermissionsStep({ snapshot, refresh, registerFormGuard }
       if (state.operationId !== operation.current) return;
       if (state.status !== 'running') { operation.current = null; setTesting(false); if (state.errorCode) setError(onboardingErrorText(state.errorCode)); }
     });
-    return () => { readGeneration.current++; window.removeEventListener('focus', read); offLevel(); offState(); stop(); };
-  }, [api, read, stop]);
+    const offCapture = api.onAudioCaptureFailed(event => {
+      if (event.channel === 'system' && event.source === 'capture') void read();
+    });
+    return () => { offCapture(); readGeneration.current++; window.removeEventListener('focus', read); offLevel(); offState(); stop(); };
+  }, [api, read, stop, snapshot.meeting.isActive]);
   useEffect(() => { if (snapshot.meeting.isActive || snapshot.meeting.isStarting) stop(); }, [snapshot.meeting.isActive, snapshot.meeting.isStarting, stop]);
   const save = async () => {
     if (busy) return false;
@@ -70,8 +73,7 @@ export default function PermissionsStep({ snapshot, refresh, registerFormGuard }
   };
   const isMac = permissions?.platform === 'darwin';
   const systemAudio = snapshot.checks.systemAudio;
-  const systemAudioAuthorized = ['verified', 'previously_verified'].includes(systemAudio.status)
-    || (systemAudio.status === 'pending_runtime' && systemAudio.evidenceSource === 'system' && !systemAudio.errorCode);
+  const systemAudioAuthorized = systemAudio.status === 'verified' && systemAudio.evidenceSource === 'runtime';
   const inputUnconfirmed = !readComplete || snapshot.checks.inputDevice.evidenceSource === 'unavailable';
   const unavailable = !inputUnconfirmed && input !== 'default' && !inputs.some(device => device.id === input);
   return <section className="space-y-5">
@@ -99,11 +101,13 @@ export default function PermissionsStep({ snapshot, refresh, registerFormGuard }
     <div className="space-y-3 rounded-xl border border-border-muted p-4"><h2 className="text-sm font-medium">会议中的其他人</h2>
       <p className="text-xs text-text-secondary">{isMac ? 'macOS 的系统音频授权取决于采集方式，屏幕与系统音频录制、仅系统音频录制的权限可能不同。' : '会议开始时确认系统音频。请检查输出设备与系统权限。'} 截图理解在使用该功能时检查授权。</p>
       {isMac && <button className={button} onClick={() => void api.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')}>打开系统音频设置</button>}
-      <p data-testid="onboarding-system-audio-permission" className={`text-xs leading-relaxed ${systemAudio.errorCode === 'permission_denied' ? 'text-status-warning' : systemAudio.errorCode ? 'text-status-error' : 'text-status-info'}`}>
-        {systemAudioAuthorized ? '系统授权已开启，实际捕获将在会议开始时确认。'
+      <p data-testid="onboarding-system-audio-permission" className={`text-xs leading-relaxed ${systemAudioAuthorized ? 'text-status-success' : systemAudio.errorCode === 'permission_denied' ? 'text-status-warning' : systemAudio.status === 'failed' ? 'text-status-error' : 'text-status-info'}`}>
+        {systemAudioAuthorized ? '系统音频验证已通过：本次会议已成功采集系统音频。'
+          : systemAudio.messageKey === 'onboarding.system_audio_failed' ? '系统音频验证未通过：本次会议系统音频采集失败，请检查输出设备与系统授权。'
           : systemAudio.errorCode === 'permission_denied' ? '系统音频采集权限不可用，请检查当前采集方式所需的系统授权，再重试。'
           : systemAudio.errorCode === 'device_missing' ? '输出设备不可用，请重新选择设备并刷新。'
-          : '尚未确认系统音频授权，开始会议时将检查实际采集，并可能显示系统授权提示。'}
+          : snapshot.meeting.isActive ? '系统音频尚未验证通过：本次会议尚未收到系统音频，请播放会议声音后刷新。'
+          : '系统音频尚未验证：开始会议后将按实际采集结果确认，刷新设备不代表验证通过。'}
       </p>
       {systemAudio.errorCode === 'permission_denied' && <button disabled={busy} className={button} onClick={async () => {
         const result = await api.updateOnboardingProgress({ type: 'acknowledge-system-audio-limitation' });

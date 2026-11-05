@@ -1,6 +1,12 @@
 /** Shared onboarding contracts: no Electron, filesystem or UI dependencies. */
 export type OnboardingStep = 'overview' | 'permissions' | 'speech' | 'ai' | 'ready';
 export type ValidationTarget = 'stt' | 'ai';
+/** Only fixed-input, independent cloud probes may run alongside a meeting. */
+export function supportsInMeetingValidation(target: ValidationTarget, provider?: string): boolean {
+    return target === 'stt'
+        ? ['doubao-auc', 'qcloud-stt', 'openai', 'groq', 'azure', 'ibmwatson'].includes(provider ?? '')
+        : target === 'ai' && ['doubao', 'natively'].includes(provider ?? '');
+}
 export type CheckStatus = 'missing' | 'checking' | 'verified' | 'previously_verified'
     | 'pending_runtime' | 'limited' | 'failed' | 'unsupported';
 export type OnboardingErrorCode = 'permission_denied' | 'device_missing' | 'model_missing'

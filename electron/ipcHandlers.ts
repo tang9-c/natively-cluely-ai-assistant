@@ -5692,6 +5692,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const sources = { credentials: CredentialsManager.getInstance(), settings: SettingsManager.getInstance(), database: DatabaseManager.getInstance() };
     appState.onboardingService.setCheckReader(appState.onboardingFixture?.readChecks ?? createOnboardingReadinessReader({
       readPermissions: readPermissionSnapshot,
+      systemAudioCheck: selection => appState.getOnboardingSystemAudioCheck(selection),
       isPackaged: () => app.isPackaged,
       inputDevices: () => AudioDevices.getInputDevices(), outputDevices: () => AudioDevices.getOutputDevices(),
       speechCheck: () => {

@@ -117,7 +117,7 @@ export default function OnboardingFlow({ snapshot, pending, error, confirmLeave,
             </div>}
           </>}
           {(error || localError) && <p role="alert" className="mt-4 rounded-lg border border-status-error-border bg-status-error-bg p-3 text-xs text-status-error">{error || localError}</p>}
-          {snapshot.meeting.isActive && <p className="mt-4 flex items-center gap-2 text-xs text-text-secondary"><LockKeyhole size={13} />会议进行中，可查看设置情况。</p>}
+          {snapshot.meeting.isActive && <p className="mt-4 flex items-center gap-2 text-xs text-text-secondary"><LockKeyhole size={13} />会议进行中，配置修改已锁定；可验证已保存的云端服务。</p>}
           </div>
         </main>
         <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-border-subtle bg-bg-primary px-5 py-3">

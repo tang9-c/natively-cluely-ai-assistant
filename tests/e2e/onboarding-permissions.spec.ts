@@ -63,14 +63,14 @@ test('microphone request settlement restores saved devices and leaves IPC and na
   })).toBe(0);
 });
 
-test('manual refresh clears obsolete system audio denial and shows authorized-but-not-captured status', async ({ page, electronApp }, testInfo) => {
+test('manual refresh clears obsolete system audio denial and displays runtime capture evidence', async ({ page, electronApp }, testInfo) => {
   await enterOnboardingStep(page, '权限与设备');
   await expect(page.getByTestId('onboarding-system-audio-permission')).toContainText('系统音频采集权限不可用');
   await page.screenshot({ path: testInfo.outputPath('permissions-app-denied.png') });
   await page.getByRole('button', { name: '了解限制，继续设置', exact: true }).click();
   await onboardingScript(electronApp, 'restore-permissions');
   await page.getByRole('button', { name: '刷新设备与权限', exact: true }).click();
-  await expect(page.getByTestId('onboarding-system-audio-permission')).toContainText('系统授权已开启');
+  await expect(page.getByTestId('onboarding-system-audio-permission')).toContainText('系统音频验证已通过');
   await expect(page.getByRole('button', { name: '已了解系统音频限制', exact: true })).toHaveCount(0);
   await expect(page.getByText(/设备与权限已刷新/)).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('permissions-restored.png') });
@@ -92,7 +92,7 @@ for (const theme of ['light', 'dark'] as const) test(`screen-only denial remains
   await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
   await enterOnboardingStep(page, '权限与设备');
   const audio = page.getByTestId('onboarding-system-audio-permission');
-  await expect(audio).toContainText('尚未确认系统音频授权');
+  await expect(audio).toContainText('系统音频尚未验证');
   await expect(audio).toHaveClass(/text-status-info/);
   await expect(page.getByRole('button', { name: /了解.*系统音频限制|了解限制，继续设置/ })).toHaveCount(0);
   let state = await page.evaluate(() => window.electronAPI.getOnboardingState());
@@ -101,8 +101,8 @@ for (const theme of ['light', 'dark'] as const) test(`screen-only denial remains
   expect(permissions.screen).toBe('denied');
   await onboardingScript(electronApp, 'restore-permissions');
   await page.getByRole('button', { name: '刷新设备与权限', exact: true }).click();
-  await expect(audio).toContainText('尚未确认系统音频授权');
-  await expect(audio).not.toContainText('系统授权已开启');
+  await expect(audio).toContainText('系统音频尚未验证');
+  await expect(audio).not.toContainText('系统音频验证已通过');
   state = await page.evaluate(() => window.electronAPI.getOnboardingState());
   expect(state.success && state.snapshot.progress.acceptedSystemAudioLimitation).toBe(false);
   await page.getByRole('button', { name: '继续', exact: true }).click();

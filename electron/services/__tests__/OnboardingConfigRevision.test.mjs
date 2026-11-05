@@ -255,6 +255,32 @@ test('QCLOUD AI validation prepares the legacy saved key revision without replac
   assert.equal(f.readOnboardingConfiguration(h, 'ai').errorCode, undefined);
 });
 
+test('legacy QCLOUD remains verifiable during a meeting without replacing its saved key', async () => {
+  const h = setup();
+  h.credentials.credentials = { defaultModel: 'natively', sttProvider: 'qcloud-stt', nativelyApiKey: 'legacy-qcloud-key' };
+  h.service.initialize(legacy);
+  const before = h.service.getSnapshot();
+  assert.equal(before.checks.ai.errorCode, 'credentials_missing');
+  const { mainInitializer, mainMethods } = await import('./helpers/onboardingRuntime.mjs');
+  const { supportsInMeetingValidation } = require(dist('shared/onboarding.js'));
+  const State = mainMethods(['isOnboardingBusy'], { supportsInMeetingValidation });
+  const state = new State();
+  state.isMeetingActive = true;
+  state.getIsMeetingActive = () => true;
+  state.onboardingService = h.service;
+  const { OnboardingValidation } = reload('electron/services/onboarding/OnboardingValidation.js');
+  const validator = mainInitializer('appState.onboardingValidation', { appState: state, OnboardingValidation,
+    prepareOnboardingCredentials: factory().prepareOnboardingCredentials,
+    credentialsManagerSingleton: h.credentials, SettingsManager: { getInstance: () => h.settings },
+    aiExecutor: async check => ({ provider: check.provider, modelId: check.modelId, depth: 'model_response' }),
+  });
+  assert.equal((await validator.validate('ai', before.progress.configRevision.ai)).success, true);
+  assert.equal(h.service.getSnapshot().checks.ai.status, 'verified');
+  assert.equal(h.service.getSnapshot().checks.ai.errorCode, undefined);
+  assert.equal(h.credentials.getNativelyApiKey(), 'legacy-qcloud-key');
+  assert.equal(h.credentials.getDefaultModel(), 'natively');
+});
+
 test('QCLOUD shared key availability follows the stored key independently of selected AI/STT providers without exposing it', () => {
   const h = setup(); const f = factory();
   h.credentials.setSttProvider('local-sensevoice');

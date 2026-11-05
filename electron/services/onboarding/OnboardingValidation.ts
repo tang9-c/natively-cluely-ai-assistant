@@ -6,7 +6,7 @@ import type { LocalSttWorkerLease } from '../../audio/LocalSttWorkerPool';
 export interface ValidationEvidence { provider: string; modelId?: string; depth: ValidationReceipt['depth'] }
 interface ValidationDependencies {
     service: OnboardingService;
-    isBusy(): boolean;
+    isBusy(target: ValidationTarget, check: OnboardingCheck): boolean;
     prepare?(target: ValidationTarget): void;
     execute(target: ValidationTarget, check: OnboardingCheck, signal: AbortSignal): Promise<ValidationEvidence>;
     now?: () => number;
@@ -34,8 +34,8 @@ export class OnboardingValidation {
     validate(target: ValidationTarget, expectedRevision: number): Promise<ValidationOutcome> {
         if (!['stt', 'ai'].includes(target) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) return Promise.resolve(failure('invalid_request'));
         try {
-            if (this.deps.isBusy()) return Promise.resolve(failure('busy'));
             let snapshot = this.deps.service.getSnapshot();
+            if (this.deps.isBusy(target, snapshot.checks[target])) return Promise.resolve(failure('busy'));
             const previous = this.tasks.get(target);
             if (previous) {
                 if (!previous.expired && previous.revision === expectedRevision
@@ -62,7 +62,7 @@ export class OnboardingValidation {
             };
             const settle = (code?: OnboardingErrorCode, evidence?: ValidationEvidence): ValidationOutcome => {
                 if (!current()) return failure('stale_config');
-                if (this.deps.isBusy()) code = 'busy';
+                if (this.deps.isBusy(target, check)) code = 'busy';
                 const receipt: ValidationReceipt = { target, provider: check.provider!, modelId: check.modelId,
                     configRevision: revision, configIdentity: identity, checkedAt: (this.deps.now ?? Date.now)(),
                     depth: evidence?.depth ?? (target === 'ai' ? 'model_response' : check.provider!.startsWith('local-') ? 'model_load' : 'credential_access'),
