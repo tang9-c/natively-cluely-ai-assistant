@@ -61,6 +61,7 @@ import {
     parseCloudSemanticGateResponse,
     type CloudSemanticGateInput,
     type CloudSemanticGateResult,
+    type MeetingTopicContext,
     type ModeEventContextTurn,
     type SemanticGateArbitrationStatus,
     type SemanticGateTrace,
@@ -494,6 +495,17 @@ export class IntelligenceEngine extends EventEmitter {
                 text: turn.text,
                 timestamp: turn.timestamp,
             }));
+    }
+
+    private buildDynamicActionMeetingContext(): MeetingTopicContext | undefined {
+        const meetingTitle = this.session.getMeetingMetadata()?.title?.trim() || undefined;
+        let modeInstructions: string | undefined;
+        try {
+            modeInstructions = ModesManager.getInstance().getActiveMode()?.customContext?.trim().slice(0, 300) || undefined;
+        } catch {
+            modeInstructions = undefined;
+        }
+        return meetingTitle || modeInstructions ? { meetingTitle, modeInstructions } : undefined;
     }
 
     private async classifyDynamicActionWithCloud(
@@ -1269,6 +1281,7 @@ export class IntelligenceEngine extends EventEmitter {
             intentResult,
             detectedTriggers,
             recentContextTurns: this.buildDynamicActionContextTurns(transcriptTurns),
+            meetingContext: this.buildDynamicActionMeetingContext(),
             providerDataScopes: intentOptions.providerDataScopes,
             selectedModelRunsLocally: this.llmHelper.getCurrentModelExecutionKind() === 'local',
             cloudClassifier: (input) =>

@@ -239,3 +239,15 @@ test('context need action type set is derived from trigger registry', async () =
     'context need decisions must stay aligned with registered dynamic action trigger types',
   );
 });
+
+test('evidence summary shows the latest repeated turn', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+  const contract = buildDynamicActionProductContract(baseInput({
+    evidenceRefs: [
+      { source: 'transcript', text: 'older turn' },
+      { source: 'transcript', text: 'latest turn' },
+    ],
+  }));
+
+  assert.equal(contract.evidenceSummary, 'latest turn');
+});

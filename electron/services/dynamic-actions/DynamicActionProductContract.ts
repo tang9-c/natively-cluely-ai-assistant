@@ -226,7 +226,7 @@ function outputPromiseFor(actionType: string, outputType: DynamicActionOutputTyp
 }
 
 function summarizeEvidence(evidenceRefs: EvidenceRef[] | undefined): string | undefined {
-    const raw = evidenceRefs?.[0]?.text?.replace(/\s+/g, ' ').trim();
+    const raw = evidenceRefs?.at(-1)?.text?.replace(/\s+/g, ' ').trim();
     if (!raw) return undefined;
     if (raw.length <= EVIDENCE_SUMMARY_MAX_CHARS) return raw;
     return `${raw.slice(0, EVIDENCE_SUMMARY_MAX_CHARS).trimEnd()}…`;

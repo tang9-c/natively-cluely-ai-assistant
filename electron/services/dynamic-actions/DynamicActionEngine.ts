@@ -10,6 +10,7 @@ import {
     ModeEventClassifier,
     ModeEventClassifierOptions,
     ModeEventContextTurn,
+    MeetingTopicContext,
     SemanticGateTrace,
     selectPassedGateDecisions,
 } from './ModeEventClassifier';
@@ -176,6 +177,7 @@ export class DynamicActionEngine {
         language?: string;
         intentResult?: IntentResult;
         recentContextTurns?: ModeEventContextTurn[];
+        meetingContext?: MeetingTopicContext;
         providerDataScopes?: ProviderDataScopePolicy;
         selectedModelRunsLocally?: boolean;
         cloudClassifier?: CloudSemanticGateClassifier;
@@ -274,6 +276,7 @@ export class DynamicActionEngine {
             candidates: gateCandidates,
             activeActionTypes: this.store.getActiveActions(sessionId).map(action => action.type),
             intentResult: params.intentResult,
+            meetingContext: params.meetingContext,
             providerDataScopes: params.providerDataScopes,
             selectedModelRunsLocally: params.selectedModelRunsLocally,
             cloudClassifier: params.cloudClassifier,
