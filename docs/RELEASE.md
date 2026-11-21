@@ -1,6 +1,6 @@
 # CueUp 发布流程与更新方式
 
-核对基线：2.7.26（2026-11-02）。本文描述仓库现有三平台远程构建与草稿发布流程。完整实例见 [2.7.26 发布记录](testing/2.7.26-build-release.md)和[附件清单](testing/2.7.26-release-assets.json)。
+核对基线：2.7.27（2026-11-21）。本文描述仓库现有三平台远程构建与草稿发布流程。完整实例见 [2.7.27 发布记录](testing/2.7.27-build-release.md)和[附件清单](testing/2.7.27-release-assets.json)。
 
 ## 当前更新行为
 
@@ -27,7 +27,7 @@
 
    首次设置及状态主题改动还需执行 `npm run test:e2e:production`；按变更运行类型检查、正式主进程编译和其他相关套件。
 4. 核对 PR 的实际 head 与检查结果，再合并。保留候选与合并提交的文件树对应关系。
-5. 三平台使用同一已审查的 ref，逐一核对运行的 `head_sha`。需要固定来源时，可使用明确指向该提交的标签。当前 release 标签格式是 `v<版本>-sha-<提交前7位>`，例如 `v2.7.26-sha-960e952`。GitHub 的手动工作流使用分支或标签 ref，不把裸 SHA 直接当作可靠的 dispatch ref。
+5. 三平台使用同一已审查的 ref，逐一核对运行的 `head_sha`。需要固定来源时，可使用明确指向该提交的标签。当前 release 标签格式是 `v<版本>-sha-<提交前7位>`，例如 `v2.7.27-sha-a52e030`。GitHub 的手动工作流使用分支或标签 ref，不把裸 SHA 直接当作可靠的 dispatch ref。
 
 汇总工作流目前从默认分支检出版本和发布模板，而用触发构建的 SHA 组成标签。因此从候选构建到汇总完成期间，不要推进默认分支到下一版版本号或不匹配的发布模板；必须人工核对版本、模板与标签来源，不能只看到任务成功就公开。
 
@@ -49,15 +49,15 @@
 
 任一构建完成会触发 `release-publish.yml`，它按 SHA 串行汇总为 **draft**，不会正式公开。当前脚本允许汇总部分已成功平台，缺少某个平台也可能有草稿，所以维护者必须额外确认三平台齐全。
 
-多个平台会触发多个同 SHA 汇总任务。正式公开前等待所有相关汇总终止；可确认一个完整汇总成功后停止冗余任务，但必须确认取消已到终态，避免稍后覆盖附件或写回草稿。
+多个平台会触发多个同 SHA 汇总任务。正式公开前等待所有相关汇总终止。确认一个完整汇总成功后，仅在冗余任务尚未进入附件覆盖上传时取消；已开始上传则等待完成。任何取消后都须重新核对草稿的全部附件，不复用取消前的完整性结果；覆盖上传可能先删除旧附件，中途取消会留下缺项。确认全部任务到终态并重新核对完整后再公开，避免后台覆盖附件或写回草稿。2.7.27 的一次中断与恢复见对应发布记录。
 
-2.7.26 的预期公开附件共 14 项；后续版本替换版本号：
+2.7.27 的预期公开附件共 14 项；后续版本替换版本号：
 
 | 平台 | 附件名称 |
 | --- | --- |
-| Apple Silicon | `CueUp-2.7.26-arm64.dmg`、对应 `.blockmap`、`CueUp-2.7.26-arm64-mac.zip`、对应 `.blockmap` |
-| Intel Mac | `CueUp-2.7.26.dmg`、对应 `.blockmap`、`CueUp-2.7.26-mac.zip`、对应 `.blockmap` |
-| Windows x64 | `CueUp-Setup-2.7.26.exe`、对应 `.blockmap`、`CueUp.2.7.26.exe`、`latest.yml` |
+| Apple Silicon | `CueUp-2.7.27-arm64.dmg`、对应 `.blockmap`、`CueUp-2.7.27-arm64-mac.zip`、对应 `.blockmap` |
+| Intel Mac | `CueUp-2.7.27.dmg`、对应 `.blockmap`、`CueUp-2.7.27-mac.zip`、对应 `.blockmap` |
+| Windows x64 | `CueUp-Setup-2.7.27.exe`、对应 `.blockmap`、`CueUp.2.7.27.exe`、`latest.yml` |
 | Mac 安装辅助 | `INSTALL-UNSIGNED-MACOS.txt`、`OPEN-UNSIGNED-CUEUP-MAC.sh` |
 
 核对清单：

@@ -130,3 +130,7 @@ LLM User-Agent 统一已随 [2.7.26](https://github.com/tang9-c/natively-cluely-
 真实系统声音、实际授权切换和发行包安装未执行；本条不代表现有安装包已修复，也不声称已读取 macOS 的全部系统音频授权设置。
 
 验证结果：相关单元 **225/225 通过，0 跳过**（首次设置全套、输入设备授权、启动安全、会议系统音频权限、CoreAudio 抑制和采集健康监控）；`npx tsc --noEmit`、`npm run typecheck:electron` 通过。`npm run test:e2e:production` 完成生产构建并运行 42 项，其中 40 项首轮通过；新增亮/暗主题用例结束阶段因合成测试只修改运行标志而未发送真实产品的 `ended` 事件失败。补齐该事件后使用 `ELECTRON_E2E=1 npx playwright test --config playwright.production.config.ts --last-failed --reporter=list` 复跑 **2/2 通过**，42 项均已验过。产品代码没有为测试失败放宽成功条件。`git diff --check` 通过；原始红/绿单元、构建、类型及两轮生产界面日志存于本机 `~/.codex/diagnostics/2026-11-05-in-meeting-validation/`。
+
+## 2.7.27 发布跟进（2026-11-21）
+
+会中云端验证与当前系统音频状态同步已随 [2.7.27](https://github.com/tang9-c/natively-cluely-ai-assistant/releases/tag/v2.7.27-sha-a52e030) 正式发布，固定来源 `a52e030951b99371c4d8faaa99d13ebf89a42da6`。上文“工作区/未发布”为修复阶段的历史状态。候选离线单元 585/585、权限界面 18/18、production 42 项均完成验证（41 项首轮通过，1 项初始化超时后单独复跑通过）；三平台包内检查、14 项附件摘要及公开下载核对见[发布记录](../testing/2.7.27-build-release.md)。真实账号、新包安装、TCC 连续性、有声采集和设备切换未验收，不能以本次隔离测试代替。
