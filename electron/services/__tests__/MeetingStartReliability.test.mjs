@@ -71,7 +71,7 @@ test('mic permission failure broadcasts failed status without active state in fa
   assert.ok(failBranchStart >= 0, 'mic failure branch must exist');
   const failBranch = body.slice(
     failBranchStart,
-    body.indexOf('// Check Screen Recording permission', failBranchStart),
+    body.indexOf('throw new Error(message);', failBranchStart),
   );
   assert.match(failBranch, /meeting-start-status', \{ phase: 'failed'/);
   assert.match(failBranch, /meeting-audio-error/);

@@ -61,7 +61,7 @@ test('QCLOUD API speech channel is registered with the QCLOUD API key and speake
 test('settings exposes only implemented Doubao AUC provider for speaker separation', () => {
     const settings = read('src/components/SettingsOverlay.tsx');
 
-    assert.match(settings, /Doubao AUC（说话人分离）/);
+    assert.match(settings, /label: getSpeechProviderLabel\('doubao-auc'\)/);
     assert.match(settings, /复用 Doubao API Key；AUC 大模型，支持说话人分离/);
     assert.doesNotMatch(settings, /Doubao Streaming ASR/);
     assert.doesNotMatch(settings, /id: 'doubao', label:/);

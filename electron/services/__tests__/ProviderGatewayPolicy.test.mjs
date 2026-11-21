@@ -198,7 +198,7 @@ test('AIProvidersSettings hides legacy cloud API key provider cards', () => {
     assert.doesNotMatch(src, new RegExp(`providerName="${provider}"`));
   }
 
-  assert.match(src, /providerName="Doubao \(Volcengine\)"/);
+  assert.match(src, /providerName=\{getAiProviderLabel\('doubao'\)\}/);
 });
 
 test('main and ProcessingHelper hydrate ragManager.initializeEmbeddings with policy', () => {
