@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.7.27] - 2026-11-21
+
+### Fixed
+
+- Allow saved, supported cloud speech and AI services to be validated during a meeting without changing configuration or restarting audio capture. Keep local-model and Codex CLI validation locked and retain scope, credential-version, timeout and stale-result checks.
+- Show current-session system-audio capture evidence in initial setup: successful capture, capture failure or not yet verified. Refresh success, microphone data and screen permission cannot certify system-audio capture. Preserve actual backend and screenshot permission checks.
+- Include the meeting title and bounded active-mode instructions in the existing dynamic-action semantic gate to reject incidental topic-unrelated keyword matches, and show the latest repeated turn as card evidence.
+- Update stale regression assertions for audio failure boundaries and shared settings label helpers.
+
+### Testing and known limitations
+
+- Add saved-cloud meeting validation, legacy credential, runtime system-audio state and light/dark production renderer regressions, plus semantic topic-context and repeated-evidence tests. Release candidate and remote three-platform evidence are recorded in `docs/testing/2.7.27-build-release.md`.
+- Real account requests, new-package installation, TCC continuity, voiced capture, hardware device changes and semantic-gate quality on real meetings require separate acceptance. Signing and plaintext credential storage are unchanged; SEC-01 remains accepted and non-blocking.
+
 ## [2.7.26] - 2026-11-02
 
 ### Fixed
