@@ -1702,7 +1702,8 @@ export class DatabaseManager {
         this.migrateMeetingEdits();
 
         // Version 38 -> 39: Upgrade unchanged shipped FDE / Team / Sales keyword
-        // defaults to the tightened lists; rows the user edited are left alone.
+        // defaults to the tightened lists and the unchanged FDE default context
+        // to the industrial-software wording; user-edited rows are left alone.
         if (Number(this.db.pragma('user_version', { simple: true })) < 39) {
             console.log('[DatabaseManager] Applying migration v38 -> v39: Tighten intent keyword defaults');
             this.db.transaction(() => {
@@ -1722,6 +1723,18 @@ export class DatabaseManager {
                         if (currentKeywords && currentKeywords !== legacyKeywords) {
                             update.run(currentKeywords, intent, legacyKeywords, templateType);
                         }
+                    }
+                }
+                const hasModesTable = Boolean(
+                    this.db!.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'modes'").get(),
+                );
+                if (hasModesTable) {
+                    const fdeModes = this.db!.prepare("SELECT id, custom_context FROM modes WHERE template_type = 'fde'")
+                        .all() as Array<{ id: string; custom_context: string | null }>;
+                    const updateContext = this.db!.prepare('UPDATE modes SET custom_context = ? WHERE id = ?');
+                    for (const mode of fdeModes) {
+                        if (!isLegacyDefaultModeCustomContext('fde', mode.custom_context)) continue;
+                        updateContext.run(getDefaultModeCustomContext('fde'), mode.id);
                     }
                 }
                 this.db!.pragma('user_version = 39');

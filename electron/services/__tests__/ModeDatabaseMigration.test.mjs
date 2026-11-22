@@ -15,7 +15,7 @@ const legacyKeywordModule = await import(pathToFileURL(path.join(distRoot, 'db/l
 const keywordDefaultsModule = await import(pathToFileURL(path.join(distRoot, 'llm/IntentKeywordDefaults.js')).href);
 
 const { DatabaseManager } = databaseModule;
-const { getDefaultModeCustomContext } = modeContextModule;
+const { getDefaultModeCustomContext, LEGACY_DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE } = modeContextModule;
 const LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT = '你是 FDE 现场交付副驾驶。优先澄清客户工作流、系统边界、数据流、权限、安全合规、上线约束和成功标准。回答时先讲技术可行性与验证路径，再给出最小下一步；不要跳过未知项或替客户假设环境。';
 
 function runFromV26(customContext) {
@@ -54,6 +54,7 @@ function runFromVersion(version, customContext) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(mode_id, intent)
     );
+    CREATE TABLE speaker_profile_stats (profile_id TEXT PRIMARY KEY);
   `);
   db.pragma(`user_version = ${version}`);
   db.prepare('INSERT INTO modes (id, name, template_type, custom_context, is_active) VALUES (?, ?, ?, ?, 1)')
@@ -127,7 +128,7 @@ describe('Mode database migrations', () => {
   test('v27 migration upgrades legacy default FDE custom_context to the canonical manufacturing profile', () => {
     const migrated = runFromV26(LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT);
     assert.equal(migrated, getDefaultModeCustomContext('fde'));
-    assert.match(migrated, /制造业研发流程/);
+    assert.match(migrated, /工业软件售前/);
     assert.match(migrated, /QMS/);
     assert.match(migrated, /AI Agent/);
   });
@@ -151,7 +152,7 @@ describe('Mode database migrations', () => {
 
     const migrated = runFromV29(LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT);
     assert.equal(migrated, getDefaultModeCustomContext('fde'));
-    assert.match(migrated, /制造业 PLM \/ QMS \/ 企业 AI Agent/);
+    assert.match(migrated, /工业软件售前、技术服务与咨询 FDE/);
     assert.doesNotMatch(migrated, /FDE 现场交付副驾驶/);
   });
 
@@ -188,6 +189,15 @@ describe('Mode database migrations', () => {
     assert.match(value('sales-default', 'sales_technical_requirements'), /上线和数据迁移有什么风险/);
     assert.equal(value('sales-custom', 'sales_pricing_objection'), '客户自定义价格词');
     assert.equal(db.pragma('user_version', { simple: true }), 39);
+  });
+
+  test('v38 -> v39 upgrades the unchanged manufacturing FDE default context and keeps custom text', () => {
+    const manufacturingDefault = LEGACY_DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE.fde
+      .find((context) => context.includes('制造业 PLM / QMS / 企业 AI Agent 部署 FDE'));
+    assert.ok(manufacturingDefault, 'previous FDE default must be registered as legacy');
+    assert.equal(runFromVersion(38, manufacturingDefault), getDefaultModeCustomContext('fde'));
+    const custom = '本场只聊 Abaqus 非线性接触。';
+    assert.equal(runFromVersion(38, custom), custom);
   });
 
   test('v38 -> v39 tightens only unchanged shipped intent keyword defaults', () => {

@@ -16,7 +16,7 @@ export function evaluateFdeAcceptedOutput(input: FdeAcceptedOutputEvaluationInpu
   if (input.actionType === 'fde_discovery_probe') {
     const questionCount = (text.match(/[?？]/g) ?? []).length;
     if (questionCount < 3) failures.push('missing_three_questions');
-    if (!/(ECO|ECN|BOM|CAPA|NCR|8D|PLM|QMS|权限|流程|质量|变更)/i.test(text)) failures.push('missing_manufacturing_context');
+    if (!/(ECO|ECN|BOM|CAPA|NCR|8D|PLM|QMS|CAD|CAE|EMC|S 参数|装配|工程图|参数化|网格|接触|收敛|仿真|权限|流程|质量|变更)/i.test(text)) failures.push('missing_manufacturing_context');
   }
 
   if (/fde_(next_step|success_criteria|integration_check)/.test(input.actionType)) {
@@ -26,7 +26,7 @@ export function evaluateFdeAcceptedOutput(input: FdeAcceptedOutputEvaluationInpu
   }
 
   if (/fde_(next_step|success_criteria)/.test(input.actionType)) {
-    if (!/(test data|测试数据|真实 ECO|真实 CAPA|样本数据)/i.test(text) && !input.missingFields.includes('test_data')) failures.push('missing_test_data');
+    if (!/(test data|benchmark model|测试数据|真实 ECO|真实 CAPA|样本数据|基准模型|测试模型)/i.test(text) && !input.missingFields.includes('test_data')) failures.push('missing_test_data');
     if (!/(acceptance criteria|验收标准|准确率|权限边界|审计可追溯)/i.test(text) && !input.missingFields.includes('acceptance_criteria')) failures.push('missing_acceptance_criteria');
   }
 

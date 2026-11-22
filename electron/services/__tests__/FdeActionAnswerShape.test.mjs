@@ -21,12 +21,14 @@ test('fde agent feasibility prompt requires human confirmation and no-write boun
   assert.match(block, /must not write|不能.*写入|read-only/i);
 });
 
-test('fde dynamic action prompt instructions use manufacturing delivery output contracts', () => {
+test('fde dynamic action prompt instructions use industrial-software delivery output contracts', () => {
   const detector = fs.readFileSync(path.join(root, 'electron/services/dynamic-actions/DynamicActionDetector.ts'), 'utf8');
   const fdeBlock = detector.match(/const FDE_TRIGGERS:[\s\S]*?export const MODE_TRIGGERS/)?.[0] ?? '';
 
-  assert.match(fdeBlock, /manufacturing PLM \/ QMS|制造业/);
+  assert.match(fdeBlock, /industrial engineering software \(CAD \/ CAE \/ EM simulation \/ PLM \/ QMS\)/);
+  assert.doesNotMatch(fdeBlock, /manufacturing PLM \/ QMS \/ enterprise AI Agent deployment/);
   assert.match(fdeBlock, /ECO|ECN|BOM|CAPA|NCR|8D/);
+  assert.match(fdeBlock, /mesh, contact, convergence/);
   assert.match(fdeBlock, /owner|负责人/);
   assert.match(fdeBlock, /date|日期/);
   assert.match(fdeBlock, /artifact|验证产物/);
@@ -48,7 +50,7 @@ test('fde synthesized intent actions use specialized prompt instructions', () =>
   );
 });
 
-test('fde main and tiny prompts are specialized for manufacturing PLM QMS AI Agent delivery', () => {
+test('fde main and tiny prompts cover CAD CAE PLM QMS presales with AI Agent guardrails', () => {
   const prompts = fs.readFileSync(path.join(root, 'electron/llm/prompts.ts'), 'utf8');
   const tinyPrompts = fs.readFileSync(path.join(root, 'electron/llm/tinyPrompts.ts'), 'utf8');
   const mainBlock = prompts.match(/export const MODE_FDE_PROMPT = `[\s\S]*?`\.trim\(\);/)?.[0] ?? '';
@@ -57,6 +59,8 @@ test('fde main and tiny prompts are specialized for manufacturing PLM QMS AI Age
   for (const block of [mainBlock, tinyBlock]) {
     assert.match(block, /manufacturing|制造业/i);
     assert.match(block, /PLM|QMS/);
+    assert.match(block, /CAD/);
+    assert.match(block, /CAE/);
     assert.match(block, /AI Agent|企业 AI Agent|智能体/i);
     assert.match(block, /BOM|ECO|ECN|CAPA|NCR|8D/);
     assert.match(block, /read[- ]?only|只读/i);
