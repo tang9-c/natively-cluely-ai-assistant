@@ -20,7 +20,7 @@ describe('ModeActionPolicy', () => {
     const fixtures = [
       ['sales', ['pricing_objection', 'pricing_request', 'case_study_request', 'capability_fit_answer', 'discovery_question', 'technical_requirements', 'buying_signal'], 'sales_live_assist'],
       ['fde', ['fde_discovery_probe', 'fde_integration_check', 'fde_security_review', 'fde_risk_blocker', 'fde_agent_feasibility', 'fde_success_criteria', 'fde_next_step'], 'fde_live_assist'],
-      ['recruiting', ['candidate_concern', 'strong_fit_signal'], 'recruiting_live_assist'],
+      ['recruiting', ['candidate_concern', 'candidate_experience_probe', 'strong_fit_signal'], 'recruiting_live_assist'],
       ['team-meet', ['action_item', 'decision_point', 'blocker_check', 'owner_deadline_check'], 'team_meet_live_assist'],
     ];
     for (const [mode, actionTypes, exclusiveGroup] of fixtures) {
@@ -93,4 +93,17 @@ test('recruiting live-assist policies require cloud evidence and share exclusive
   assert.equal(concern.selectionPriority, 100);
   assert.equal(interest.exclusiveGroup, 'recruiting_live_assist');
   assert.equal(interest.selectionPriority, 60);
+});
+
+test('recruiting experience probe is gated on missing facts in the candidate answer', async () => {
+  const { getActionGatePolicy } = await loadPolicy();
+  const probe = getActionGatePolicy('recruiting', 'candidate_experience_probe');
+
+  assert.equal(probe.riskLevel, 'high');
+  assert.equal(probe.gateStrategy, 'required');
+  assert.equal(probe.allowLocalFallbackOnCloudFailure, false);
+  assert.equal(probe.exclusiveGroup, 'recruiting_live_assist');
+  assert.equal(probe.selectionPriority, 80);
+  assert.ok(probe.requiredEvidence.some(item => /personal action, decision basis, or communication outcome/.test(item)));
+  assert.ok(probe.requiredEvidence.some(item => /unfinished -> do not emit/.test(item)));
 });

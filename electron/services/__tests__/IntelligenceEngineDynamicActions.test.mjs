@@ -1807,6 +1807,46 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.deepEqual(emitted, []);
   });
 
+  test('recruiting retracts a pending experience probe when the candidate keeps answering', async () => {
+    const helper = new StubLLMHelper();
+    const { engine } = await makeEngine(helper);
+    const emitted = [];
+    engine.on('dynamic_action_emitted', action => emitted.push(action));
+    engine.setDynamicActionContext({
+      sessionId: 's-recruiting-probe-retract',
+      modeId: 'm-recruiting',
+      modeTemplateType: 'recruiting',
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '最后我们协调好了，按时上线了。',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+    const probe = emitted.find(action => action.type === 'candidate_experience_probe' && action.status !== 'dismissed');
+    assert.ok(probe, 'expected an experience probe for the vague answer');
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '嗯，对。',
+      timestamp: Date.now() + 1,
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+    assert.equal(emitted.some(action => action.id === probe.id && action.status === 'dismissed'), false);
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '具体是我先复现了问题，然后给产品经理发了两个排期选项。',
+      timestamp: Date.now() + 2,
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+    assert.ok(emitted.some(action => action.id === probe.id && action.status === 'dismissed'));
+  });
+
   test('recruiting speaker isolation does not change sales local-user handling', async () => {
     const helper = new StubLLMHelper();
     const { engine } = await makeEngine(helper);

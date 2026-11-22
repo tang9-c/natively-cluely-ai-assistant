@@ -26,7 +26,7 @@ test('product fixtures include sales, FDE, team-meet, and recruiting schema fiel
   assert.equal(counts.sales, 52);
   assert.equal(counts.fde, 40);
   assert.equal(counts['team-meet'], 30);
-  assert.equal(counts.recruiting, 46);
+  assert.equal(counts.recruiting, 48);
 });
 
 test('product runner writes JSON and Markdown reports', async () => {
@@ -38,7 +38,7 @@ test('product runner writes JSON and Markdown reports', async () => {
     outputDir: outDir,
     semanticGateMode: 'fixture_oracle',
   });
-  assert.equal(report.totalFixtures, 168);
+  assert.equal(report.totalFixtures, 170);
   assert.equal(report.results.find((entry) => entry.fixtureId === 'sales-pricing-objection-zh-001')?.actionType, 'pricing_objection');
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.json')));
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.md')));

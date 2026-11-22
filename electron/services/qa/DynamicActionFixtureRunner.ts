@@ -314,6 +314,7 @@ function evaluateAcceptedOutputForMode(
     groundedSources: artifact?.groundedSources ?? [],
     sourceUtterance: action?.latestTurn ?? fixture.transcriptTurns.map((turn) => turn.text).join('\n'),
     sourceIntent: action?.sourceIntent,
+    transcriptEvidence: [action?.latestTurn, action?.retrievalQuery].filter((value): value is string => Boolean(value?.trim())),
   });
   return [
     ...patternResult.missingRequired.map((pattern) => `missing_answer:${pattern}`),

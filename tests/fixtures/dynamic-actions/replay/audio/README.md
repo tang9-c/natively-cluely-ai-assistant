@@ -31,5 +31,5 @@ same audio assets through the live QCLOUD API speech path.
 | `fde-asr-eco-capa-001.wav` | fde | ASR-prone ECO/ECN/8D terms, missing acceptance criteria |
 | `team-action-item-multi-speaker-001.wav` | team-meet | multi-speaker action item, blocker, owner/date/artifact gap |
 | `recruiting-candidate-concern-zh-001.wav` | recruiting | candidate visa/start-date concern, speaker identity |
-| `recruiting-experience-probe-en-001.wav` | recruiting | disabled experience-probe regression, backend ownership |
+| `recruiting-experience-probe-en-001.wav` | recruiting | experience probe stays silent on the recruiter's own question, backend ownership |
 | `recruiting-identity-mismatch-mixed-001.wav` | recruiting | internal/candidate identity mismatch, false-positive guard |

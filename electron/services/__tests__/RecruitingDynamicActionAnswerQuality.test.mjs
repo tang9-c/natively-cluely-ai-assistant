@@ -62,6 +62,38 @@ test('recruiting accepted-output evaluator blocks concrete unsafe answer matrix'
   }
 });
 
+test('experience probe accepts one neutral question with a verbatim candidate quote', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(evaluatorUrl);
+  const transcriptEvidence = ['最后我们协调好了，按时上线了。'];
+  const evaluate = (answerText) => evaluateDynamicActionAcceptedOutput({
+    actionType: 'candidate_experience_probe',
+    outputType: 'spoken_response',
+    answerText,
+    transcriptEvidence,
+  });
+
+  assert.equal(evaluate('你发现可能延期后，先做了什么？「最后我们协调好了，按时上线了。」').passed, true);
+  const twoQuestions = evaluate('你先做了什么？结果如何？「最后我们协调好了」');
+  assert.ok(twoQuestions.requiredPatternFailures.includes('candidate_experience_probe_single_question'));
+  const invented = evaluate('你先做了什么？「我们提前两周就发现了风险」');
+  assert.ok(invented.groundingFailures.includes('candidate_experience_probe_requires_verbatim_quote'));
+  const unquoted = evaluate('你发现可能延期后，先做了什么？');
+  assert.ok(unquoted.groundingFailures.includes('candidate_experience_probe_requires_verbatim_quote'));
+  assert.equal(evaluate('建议直接录用。你先做了什么？「最后我们协调好了」').passed, false);
+  assert.equal(evaluate('年龄太大所以不适合。你先做了什么？「最后我们协调好了」').passed, false);
+});
+
+test('experience probe falls back to a neutral question', async () => {
+  const policyUrl = pathToFileURL(
+    path.join(process.cwd(), 'dist-electron/electron/services/dynamic-actions/DynamicActionRuntimeValidationPolicy.js'),
+  ).href;
+  const { buildDynamicActionRuntimeSafeFallback, getDynamicActionRuntimeValidationPolicy } = await import(policyUrl);
+
+  assert.equal(getDynamicActionRuntimeValidationPolicy('candidate_experience_probe')?.evidenceKind, 'transcript_evidence');
+  assert.equal(buildDynamicActionRuntimeSafeFallback('candidate_experience_probe', 'zh'), '能具体说说当时你本人做了什么吗？');
+  assert.match(buildDynamicActionRuntimeSafeFallback('candidate_experience_probe', 'en'), /personally did/);
+});
+
 test('recruiting accepted-output evaluator permits job-related summaries without protected-class basis', async () => {
   const { evaluateDynamicActionAcceptedOutput } = await import(evaluatorUrl);
   const result = evaluateDynamicActionAcceptedOutput({
