@@ -132,7 +132,7 @@ test('DatabaseManager backfills missing timeout stats for the branch v33 interme
     ]) {
       assert.ok(columns.includes(column), `speaker_profile_stats must include ${column}`);
     }
-    assert.equal(db.pragma('user_version', { simple: true }), 38);
+    assert.equal(db.pragma('user_version', { simple: true }), 39);
   } finally {
     db.close();
     fs.rmSync(dir, { recursive: true, force: true });

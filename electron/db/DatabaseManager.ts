@@ -9,6 +9,7 @@ import fs from 'fs';
 import * as crypto from 'crypto';
 import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
 import { resolveSqliteVecExtensionPath } from './sqliteVecExtensionPath';
+import { LEGACY_INTENT_KEYWORD_DEFAULTS_V39 } from './legacyIntentKeywordDefaults';
 import {
     DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
     type IntentKeywordConfig,
@@ -1699,6 +1700,33 @@ export class DatabaseManager {
         }
 
         this.migrateMeetingEdits();
+
+        // Version 38 -> 39: Upgrade unchanged shipped FDE / Team / Sales keyword
+        // defaults to the tightened lists; rows the user edited are left alone.
+        if (Number(this.db.pragma('user_version', { simple: true })) < 39) {
+            console.log('[DatabaseManager] Applying migration v38 -> v39: Tighten intent keyword defaults');
+            this.db.transaction(() => {
+                const hasIntentTables = ['modes', 'mode_intent_keywords'].every((tableName) => Boolean(
+                    this.db!.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName),
+                ));
+                if (hasIntentTables) {
+                    const update = this.db!.prepare(`
+                        UPDATE mode_intent_keywords
+                        SET keywords_csv = ?, updated_at = datetime('now')
+                        WHERE intent = ? AND keywords_csv = ?
+                          AND mode_id IN (SELECT id FROM modes WHERE template_type = ?)
+                    `);
+                    for (const [templateType, intent, legacyKeywords] of LEGACY_INTENT_KEYWORD_DEFAULTS_V39) {
+                        const currentKeywords = DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[templateType]
+                            ?.find((row) => row.intent === intent)?.keywordsCsv;
+                        if (currentKeywords && currentKeywords !== legacyKeywords) {
+                            update.run(currentKeywords, intent, legacyKeywords, templateType);
+                        }
+                    }
+                }
+                this.db!.pragma('user_version = 39');
+            })();
+        }
         console.log('[DatabaseManager] Migrations completed.');
     }
 

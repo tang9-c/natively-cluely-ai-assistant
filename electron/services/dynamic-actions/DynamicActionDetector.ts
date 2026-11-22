@@ -108,11 +108,11 @@ const SALES_TRIGGERS: ActionTrigger[] = [
     {
         type: 'buying_signal',
         patterns: [
-            /\b(ready to move|ready to sign|send contract|legal review|next steps|schedule|finalize|pilot|trial|procurement|sign the deal)\b/i,
+            /\b(ready to move|ready to sign|send contract|legal review|next steps|schedule (?:a|the) (?:call|demo|meeting|kickoff|pilot|trial)|finalize|pilot|trial|procurement|sign the deal)\b/i,
             // Debug session 2026-06-23: bare `准备签` (e.g. "我们准备签合同了")
             // wasn't in the alternation; only `准备推进` matched. Common close-to-
             // closing phrasing like 准备签 / 准备签合同 / 准备签一下 slipped past.
-            zh('准备签', '准备推进', '想推进到', '推进到.{0,6}法务.{0,4}审核', '推进到.{0,6}放假.{0,4}审核', '发合同', '法务审核', '放假审核', '下一步', '安排时间', '敲定'),
+            zh('准备签', '准备推进', '想推进到', '推进到.{0,6}法务.{0,4}审核', '推进到.{0,6}放假.{0,4}审核', '发合同', '法务审核', '放假审核', '下一步(?:我们|怎么|是|就|推进|签)', '下一步.{0,4}安排', '进入下一步', '安排时间', '敲定'),
         ],
         priority: 0.95,
         label: 'Seize buying signal',
@@ -135,7 +135,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
     {
         type: 'discovery_question',
         patterns: [
-            /\b(PLM|Windchill|QMS|ERP|SAP|Oracle|MES|ALM|Creo|CAD|BOM|ECO|ECN|CAPA|NCR|AI Agent|Agent)\b.{0,100}\b(pain|workflow|capability|fit|integrat|sync|cycle time|quality cost|case study|customer example|ROI)\b/i,
+            /\b(PLM|Windchill|QMS|ERP|SAP|Oracle|MES|ALM|Creo|CAD|BOM|ECO|ECN|CAPA|NCR|AI Agent|Agent)\b.{0,100}\b(pain|workflow|capability|fit|integrat\w*|sync|cycle time|quality cost|case study|customer example|ROI)\b/i,
             /\b(?:what(?:'s| is) (?:the )?(?:ROI|return on investment|payback(?: period)?)|how (?:do|can|should) (?:we |you )?(?:calculate|measure) (?:the )?(?:ROI|return on investment)|how is (?:the )?(?:ROI|return on investment) calculated)\b/i,
             /(?:ROI|投资回报|回报率).{0,12}(?:怎么|如何)(?:计算|测算|算)|(?:怎么|如何)(?:计算|测算).{0,12}(?:ROI|投资回报|回报率)/i,
             zh(
@@ -274,7 +274,7 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
         type: 'action_item',
         patterns: [
             /\b(I'll do|I'll send|need to follow up|action item|assigned to|deadline|by Friday|by Monday)\b/i,
-            zh('我来做', '我会发', '需要跟进', '行动项', '分配给', '截止', '周五前', '周一前'),
+            zh('我来做', '我会发', '需要跟进', '行动项', '分配给', '截止(?:日期|时间|到)', '周五前', '周一前'),
         ],
         priority: 0.9,
         label: 'Capture action item',
@@ -285,8 +285,8 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
     {
         type: 'decision_point',
         patterns: [
-            /\b(decided|going with|let's go|final decision|approved|confirmed)\b/i,
-            zh('决定了', '就选', '我们定', '最终决定', '批准', '确认'),
+            /\b(decided|going with|let's go|final decision|(?:is|was|been|got) (?:approved|confirmed)|approved by)\b/i,
+            zh('决定了', '就选', '我们定(?!期)', '最终决定', '批准', '(?:已经|最终|正式|今天)确认', '确认(?:用|采用|走|这个方案)'),
         ],
         priority: 0.85,
         label: 'Confirm decision',
@@ -296,8 +296,8 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
     {
         type: 'blocker_check',
         patterns: [
-            /\b(any blockers|blocked by|stuck on|risk to timeline|what'?s blocking|what is blocking|dependency|waiting on|depends on|cannot proceed|blocked until|stalled because|needs approval from)\b/i,
-            zh('有什么阻塞', '被卡住', '卡在哪', '风险', '依赖', '影响进度', '等.*确认', '等.*审批', '没有.*就推进不了', '需要.*支持', '依赖.*完成'),
+            /\b(any blockers|blocked by|stuck on|risk to timeline|what'?s blocking|what is blocking|(?:blocked by|waiting on) (?:the )?\w+ dependency|dependency (?:is|on|blocking)|waiting on|depends on|cannot proceed|blocked until|stalled because|needs approval from)\b/i,
+            zh('有什么阻塞', '被卡住', '卡在哪', '卡在.{0,12}依赖', '(?:有|存在|进度|交付|上线|延期|本周|这周|当前|最大的?)风险', '风险(?:是|在于|很大|较大)', '(?:解|等)(?:这个)?依赖', '依赖(?:于|.{0,12}(?:完成|解决|处理))', '影响进度', '等.{0,12}确认', '等.{0,12}审批', '没有.{0,20}就推进不了', '需要.{0,12}(?:支持|配合)才能'),
         ],
         priority: 0.84,
         label: 'Clarify blocker',
@@ -308,8 +308,9 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
     {
         type: 'owner_deadline_check',
         patterns: [
-            /\b(who owns this|owner for this|by when|timeline|ETA|due date|due by|due on|deadline is|target date|ship date|commit by|before EOD|before end of week)\b/i,
-            zh('谁负责', '负责人是谁', '什么时候', '时间线', '预计什么时候', '截止日期', '本周内', '这周内', '下周前', '月底前', '今天下班前', '明天中午前', '截止到', '交付时间'),
+            /\bETA\b/,
+            /\b(who owns this|owner for this|by when|(?:the|project|delivery) timeline|timeline (?:for|is)|due date|due by|due on|deadline is|target date|ship date|commit by|before EOD|before end of week)\b/i,
+            zh('谁负责', '负责人是谁', '什么时候(?:能|可以)?(?:交|完成|上线|给|好|做完|出来)', '时间线(?:是|怎么)', '预计什么时候', '截止日期', '本周内', '这周内', '下周前', '月底前', '今天下班前', '明天中午前', '截止到', '交付时间'),
         ],
         priority: 0.83,
         label: 'Lock owner and deadline',
@@ -459,8 +460,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_security_review',
         patterns: [
-            /\b(PII|SOC2|compliance|audit logs?|permissions?|access control|data residency|encryption|security review|privacy)\b/i,
-            zh('合规', '审计日志', '权限', '访问控制', '数据驻留', '加密', '安全评审', '隐私', '敏感数据', '脱敏'),
+            /\b(PII|SOC2|compliance|audit logs?|permission (?:model|matrix|boundary|control)s?|access control|data residency|data encryption|encryption at rest|security review|privacy)\b/i,
+            zh('合规', '审计日志', '权限(?:怎么|如何|控制|管理|模型|矩阵|边界|分配|设计|审批)', '(?:发布|审批|访问|编辑|读写|系统|角色|操作|数据)权限', '访问控制', '数据驻留', '(?:数据|传输|存储|文件)加密', '安全评审', '隐私', '敏感数据', '脱敏'),
             /(?:没(?:有)?办法|无法).{0,12}(?:证明|追溯|确认).{0,20}(?:哪份|哪个|来源|从哪).{0,12}(?:数据|记录|结果)/i,
         ],
         priority: 0.92,
@@ -472,8 +473,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_risk_blocker',
         patterns: [
-            /\b(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|non-conformance|traceability|quality risk|audit risk)\b/i,
-            zh('阻塞', '卡住', '依赖', '风险', '延期', '迁移', '切换', '回滚', '边界情况', '上线风险', '不确定', '质量风险', '追溯风险', '审计风险', '偏差'),
+            /\b(blocker|blocked (?:by|on)|depends on|(?:main|biggest|key|major|delivery|project|technical|any) risks?|risks? (?:is|are|of)|may delay|will delay|delay(?:ed|s)? (?:the )?(?:go live|launch|delivery|rollout)|migration (?:risk|plan|issue)s?|cutover|rollback (?:plan|strategy)|edge case|launch risk|non-conformance|traceability|quality risk|audit risk)\b/i,
+            zh('阻塞', '依赖(?:于|.{0,12}(?:完成|解决|就绪))', '(?:有什么|有哪些|主要|最大的?|关键|交付|项目|技术|实施|上线|迁移|延期)风险', '风险(?:是|在于|点|评估)', '延期', '迁移(?:方案|计划|失败|延期)', '(?:系统|上线)切换', '回滚(?:方案|计划|策略)', '边界情况', '质量风险', '追溯风险', '审计风险'),
             /(?:流程|审批|项目|交付).{0,20}卡在.{0,20}(?:部门|环节|阶段|系统|审批|验收|联调|数据|权限)/i,
             /审批.{0,30}(?:平均|通常|需要|要).{0,8}(?:\d+|[一二两三四五六七八九十几]+).{0,3}(?:天|周|月)/i,
             /(?:历史)?(?:客户)?数据.{0,12}(?:格式)?(?:不统一|不一致).{0,20}(?:清洗|工作量).{0,16}(?:没|未|没有).{0,8}(?:评估|确定)/i,
@@ -487,8 +488,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_agent_feasibility',
         patterns: [
-            /\b(agent|AI agent|automation|human in the loop|approval flow|tool call|read[- ]?only|write back|auto[- ]?write|write to PLM|write to QMS)\b/i,
-            zh('智能体', 'AI Agent', '自动化', '人审', '人工确认', '审批流', '工具调用', '只读', '写回', '自动写入', '写入 PLM', '写入 QMS'),
+            /\b(AI agents?|human in the loop|approval flow|tool call|read[- ]?only|write back|auto[- ]?write|write to PLM|write to QMS)\b/i,
+            zh('智能体', 'AI Agent', '人审', '人工确认', '审批流', '工具调用', '只读', '写回', '自动写入', '写入 PLM', '写入 QMS'),
         ],
         priority: 0.87,
         label: 'Assess AI Agent feasibility',
@@ -499,8 +500,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_next_step',
         patterns: [
-            /\b(next step|owner|follow up|action item|rollout plan|launch plan|go live|by Friday|by next week)\b/i,
-            zh('下一步', '负责人', '跟进', '行动项', '上线计划', '推进计划', '灰度', '正式上线', '周五前', '下周'),
+            /\b(next steps?|owner (?:is|will|for)|who(?:'s| is) the owner|follow up|action item|rollout plan|launch plan|go live|by Friday|by next week)\b/i,
+            zh('下一步(?:是|怎么|我们|就|安排|计划|需要|请|由|先)', '下一步.{0,12}负责', '负责人(?:是|定|确认)', '跟进', '行动项', '上线计划', '推进计划', '灰度', '正式上线', '周五前', '下周(?:前|给|提交|交付|完成|上线|之前|确认)'),
             /(?:上线|投产)(?:之后|以后|后).{0,24}(?:谁.{0,8}(?:维护|负责)|出了问题.{0,8}找谁)/i,
             /谁来(?:拍板|决定|确认).{0,24}(?:确定|确认)(?:之后|以后|后).{0,16}(?:开工|推进|开始)/i,
         ],
@@ -513,21 +514,22 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_integration_check',
         patterns: [
-            /\b(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database|warehouse|environment|sandbox|production|staging|integration)\b/i,
+            /\b(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database (?:access|connection|schema|sync)|data warehouse|(?:test|prod(?:uction)?|staging|sandbox|dev) environment|production (?:environment|system|instance|deployment)|sandbox|staging|integration (?:with|details?|plans?|points?|approach)|integrat(?:e|ed|ing) with)\b/i,
             zh(
                 'API 接口',
-                '接口',
+                '接口(?:怎么|如何|文档|方向|对接|规范|开发|调用|是否|能不能|权限)',
+                '(?:ERP|MES|PLM|QMS|CRM|系统).{0,6}接口',
                 '端点',
                 '回调',
                 '单点登录',
                 '数据源',
                 '数据库',
                 '数仓',
-                '环境',
+                '(?:测试|生产|开发|部署|沙盒|服务器)环境',
                 '沙盒',
-                '生产环境',
-                '测试环境',
-                '集成',
+                '(?:系统)?集成(?:方案|方式|到|进)',
+                '(?:和|与|跟).{0,12}集成',
+                '集成.{0,8}(?:ERP|MES|PLM|QMS|CRM|系统)',
                 '打通',
                 '(PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|Windchill).{0,80}(只读|写回).{0,80}(PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|流程)',
                 '(PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|Windchill).{0,80}(PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|流程).{0,80}(只读|写回)'
@@ -545,8 +547,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_success_criteria',
         patterns: [
-            /\b(success criteria|acceptance criteria|acceptance test|pilot|POC|measurement|metric|KPI|validation|sign off)\b/i,
-            zh('验收标准', '成功标准', '试点', '验证', '指标', '度量', 'KPI', '验收测试', '通过标准', '效果衡量'),
+            /\b(success criteria|acceptance criteria|acceptance test|pilot|POC|success metrics?|validation (?:criteria|plan|tests?|artifacts?)|KPI|sign off)\b/i,
+            zh('验收标准', '成功标准', '试点', '(?:验证|验收)(?:标准|方案|计划|指标|数据)', '(?:怎么|如何)验证', '(?:成功|验收|考核|效果|关键)指标', '指标(?:是|怎么|如何)', 'KPI', '验收测试', '通过标准', '效果衡量'),
             /(?:先拿|先在|先选).{0,20}(?:团队|区域|部门).{0,16}(?:试一轮|试用|验证).{0,24}(?:看效果|评估效果|复盘)/i,
         ],
         priority: 0.86,
@@ -558,8 +560,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_discovery_probe',
         patterns: [
-            /\b(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|revision|version|release|part number|drawing|material master|routing|manufacturing|quality object)\b/i,
-            zh('现有流程', '当前流程', '业务流程', '用户流程', '需求是什么', '想解决什么', '谁会使用', '谁负责', '干系人', '业务场景', '客户现场', 'PLM', 'QMS', 'BOM', 'ECO', 'ECN', 'CAPA', 'NCR', '8D', '版本', '变更单', '发布', '图纸', '物料', '工艺', '质量对象'),
+            /\b(current workflow|current process|business process|user workflow|stakeholder|business requirements|what are you trying to solve|what does success look like|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|drawing revision|version control|release process|part number|material master|manufacturing routing|quality object)\b/i,
+            zh('现有流程', '当前流程', '业务流程', '用户流程', '需求是什么', '想解决什么', '谁会使用', '干系人', '业务场景', '客户现场', 'PLM', 'QMS', 'BOM', 'ECO', 'ECN', 'CAPA', 'NCR', '8D', '版本(?:管理|控制|不一致|追溯|规则)', '(?:图纸|物料|BOM|设计)版本', '变更单', '(?:图纸|BOM|版本|设计)发布', '发布流程', '图纸', '物料', '工艺', '质量对象'),
             /(?:邮件|Excel).{0,20}(?:跟踪|维护|流转)|(?:跟踪|维护|流转).{0,20}(?:邮件|Excel)/i,
             /(?:组织|业务).{0,8}流程.{0,16}(?:没|未|没有).{0,8}(?:定|明确|确定)/i,
             /(?:每个|各个|各).{0,10}(?:区域|团队|部门).{0,20}(?:维护|使用).{0,16}(?:自己|各自).{0,8}(?:一套|一份).{0,12}(?:编码|主数据)/i,

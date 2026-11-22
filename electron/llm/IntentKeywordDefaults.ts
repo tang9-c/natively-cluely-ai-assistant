@@ -25,13 +25,13 @@ const INTERVIEW_KEYWORDS: IntentKeywordConfig[] = [
 ];
 
 const FDE_KEYWORDS: IntentKeywordConfig[] = [
-    { intent: 'fde_discovery', keywordsCsv: 'current workflow,current process,business process,user workflow,stakeholder,requirements,what are you trying to solve,what does success look like,现有流程,当前流程,业务流程,用户流程,需求是什么,想解决什么,谁会使用,谁负责,干系人,业务场景,客户现场' },
-    { intent: 'fde_integration', keywordsCsv: 'API,endpoint,webhook,SSO,SAML,OAuth,SCIM,data source,database,warehouse,environment,sandbox,production,staging,integration,PLM,QMS,ERP,MES,document system,data direction,read-write boundary,role,permission,API 接口,接口,端点,回调,单点登录,数据源,数据库,数仓,环境,沙盒,生产环境,测试环境,集成,打通,文档系统,数据方向,读写边界,角色,权限' },
-    { intent: 'fde_security', keywordsCsv: 'PII,SOC2,compliance,audit log,permission,permissions,access control,data residency,encryption,security review,privacy,PII,合规,审计日志,权限,访问控制,数据驻留,加密,安全评审,隐私,敏感数据,脱敏' },
-    { intent: 'fde_risk', keywordsCsv: 'blocker,blocked,dependency,risk,timeline,delay,migration,cutover,rollback,edge case,launch risk,阻塞,卡住,流程卡在,审批卡在,项目卡在,交付卡在,卡在质量部门,卡在法务环节,卡在审批环节,卡在验收环节,依赖,风险,延期,迁移,切换,回滚,边界情况,上线风险,不确定' },
-    { intent: 'fde_agent_feasibility', keywordsCsv: 'AI Agent,agent,automation,human in the loop,human confirmation,approval flow,tool call,read-only,write-back,auto-write,write to PLM,write to QMS,智能体,自动化,人工确认,人审,审批流,工具调用,只读,写回,自动写入,写入 PLM,写入 QMS' },
-    { intent: 'fde_success', keywordsCsv: 'success criteria,acceptance criteria,acceptance test,pilot,POC,measurement,metric,KPI,validation,sign off,验收标准,成功标准,试点,验证,指标,度量,KPI,验收测试,通过标准,效果衡量' },
-    { intent: 'fde_next_step', keywordsCsv: 'next step,owner,follow up,action item,rollout plan,launch plan,go live,by Friday,by next week,下一步,负责人,跟进,行动项,上线计划,推进计划,灰度,正式上线,周五前,下周,排期' },
+    { intent: 'fde_discovery', keywordsCsv: 'current workflow,current process,business process,user workflow,stakeholder,business requirements,what are you trying to solve,what does success look like,现有流程,当前流程,业务流程,用户流程,需求是什么,想解决什么,谁会使用,干系人,业务场景,客户现场' },
+    { intent: 'fde_integration', keywordsCsv: 'API,endpoint,webhook,SSO,SAML,OAuth,SCIM,data source,data warehouse,sandbox,staging,test environment,production environment,integration with,document system,data direction,read-write boundary,permission model,API 接口,接口文档,接口对接,ERP 接口,PLM 接口,MES 接口,端点,回调,单点登录,数据源,数仓,沙盒,生产环境,测试环境,系统集成,集成方案,打通,文档系统,数据方向,读写边界,角色权限' },
+    { intent: 'fde_security', keywordsCsv: 'PII,SOC2,compliance,audit log,permission model,access control,data residency,encryption,security review,privacy,合规,审计日志,权限控制,权限管理,权限边界,访问控制,数据驻留,数据加密,安全评审,隐私,敏感数据,脱敏' },
+    { intent: 'fde_risk', keywordsCsv: 'blocker,blocked by,blocked on,depends on,main risk,biggest risk,launch risk,migration risk,rollback plan,cutover,edge case,阻塞,流程卡在,审批卡在,项目卡在,交付卡在,卡在质量部门,卡在法务环节,卡在审批环节,卡在验收环节,依赖于,有什么风险,主要风险,最大的风险,项目风险,交付风险,上线风险,迁移风险,延期,回滚方案,边界情况' },
+    { intent: 'fde_agent_feasibility', keywordsCsv: 'AI Agent,human in the loop,human confirmation,approval flow,tool call,read-only,write-back,auto-write,write to PLM,write to QMS,智能体,人工确认,人审,审批流,工具调用,只读,写回,自动写入,写入 PLM,写入 QMS' },
+    { intent: 'fde_success', keywordsCsv: 'success criteria,acceptance criteria,acceptance test,pilot,POC,success metric,KPI,sign off,验收标准,成功标准,试点,验证标准,验证方案,怎么验证,考核指标,验收指标,验收测试,通过标准,效果衡量' },
+    { intent: 'fde_next_step', keywordsCsv: 'next step,follow up,action item,rollout plan,launch plan,go live,by Friday,by next week,下一步是,下一步怎么,下一步我们,下一步安排,负责人是,跟进,行动项,上线计划,推进计划,灰度,正式上线,周五前,下周前,下周给,下周提交,排期' },
 ];
 
 export const DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE: Record<string, IntentKeywordConfig[]> = {
@@ -52,7 +52,7 @@ export const DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE: Record<string, IntentKeywordCo
         { intent: 'sales_pricing_objection', keywordsCsv: 'too expensive,too pricey,too high,out of budget,not in budget,can.t afford,discount,do better on price,lower the price,reduce the price,太贵,价格高,价格太高,报价太高,超出预算,预算不够,预算不足,能不能便宜,便宜点,打个折,有折扣吗,折扣最低能到什么程度' },
         { intent: 'sales_quote_request', keywordsCsv: 'quote,pricing,proposal,commercial terms,send pricing,send proposal,send quote,what does it cost,报价单,方案报价,商务条款,发报价,给报价,发方案,发 proposal,产品多少钱,模块多少钱,系统多少钱,维护费多少钱,怎么收费,如何收费' },
         { intent: 'sales_proof_request', keywordsCsv: 'case study,customer story,customer example,reference customer,proof point,success story,similar customer,ROI,return on investment,客户案例,成功案例,类似客户,参考客户,证明材料,ROI,投资回报,回报率,成功证明' },
-        { intent: 'sales_technical_requirements', keywordsCsv: 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式,实施周期通常多久,实施周期多久,交付周期多久,部署周期多久,上线和数据迁移有什么风险,数据迁移有什么风险,上线有什么风险' },
+        { intent: 'sales_technical_requirements', keywordsCsv: 'API,SSO,SAML,OAuth,SCIM,sandbox,technical requirements,security requirements,deployment requirements,deployment options,integration requirements,API 接口,SSO,单点登录,生产环境,沙盒,安全要求,部署方式,部署要求,私有化部署,集成方式,集成需求,技术需求,技术要求,架构要求,对接方式,实施周期通常多久,实施周期多久,交付周期多久,部署周期多久,上线和数据迁移有什么风险,数据迁移有什么风险,上线有什么风险' },
         { intent: 'sales_buying_signal', keywordsCsv: 'ready to move,ready to sign,next steps,legal review,procurement,contract,finalize,when can we start,准备签,准备推进,下一步怎么走,下一步是,法务审核,采购流程,合同,敲定' },
         { intent: 'sales_pain_discovery', keywordsCsv: 'broken workflow,manual workaround,duplicated entry,out of sync,version mismatch,workflow pain,流程不同步,靠邮件通知,靠 Excel 跟踪,重复录入,版本不一致,流程断点,返工停线,审计痛苦' },
         { intent: 'sales_capability_fit', keywordsCsv: 'does it support,can it handle,fit our scenario,capability fit,module capability,能不能支持,是否适合,功能是否匹配,模块功能,能不能追溯,能不能校验' },
@@ -61,10 +61,10 @@ export const DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE: Record<string, IntentKeywordCo
         { intent: 'sales_contextual_proof_discovery', keywordsCsv: 'similar industrial customer,industrial case study,proof in this workflow,ROI for this process,工业客户案例,类似制造客户,场景案例,闭环案例,落地证明,这个流程的 ROI' },
     ],
     'team-meet': [
-        { intent: 'capture_action', keywordsCsv: 'i.ll do,i.ll send,i.ll handle,i.ll own,i.ll take,i.ll follow up,i.ll write,i.ll ship,i.ll PR,i.ll merge,i.m gonna,let me by,action item,to-do,assigned to,owner is,i can have by,by monday,by tuesday,by wednesday,by thursday,by friday,by EOD,by EOW,by next week,我来做,我来发,我来负责,我来处理,我跟进,我写,我来 PR,我提,我合,交给我,我包了,分配给,行动项,待办,跟进项,周五前,周一前,下周三前,今天内,尽快,交付' },
-        { intent: 'capture_decision', keywordsCsv: 'we decided,let.s go with,going with,final decision,approved,signed off,greenlit,consensus is,the team agreed,we.re going to use,ship it,merged,locked in,confirmed we,决定了,决定用,决定走,决定采用,就选,就用,就上,定了,通过了,批准了,确认用,最终决定,定下来了,达成一致,大家同意,采用' },
-        { intent: 'capture_risk', keywordsCsv: 'blocker,blocked by,blocked on,stuck on,stuck at,risk,at risk,slipping,will miss,behind schedule,dependency on,dependency blocking,waiting on,depends on,not gonna make,impacting timeline,regression,阻塞,被卡,卡住,卡在,风险,延期,推迟,完不成,赶不上,影响进度,依赖,被阻塞,短板,出了点问题' },
-        { intent: 'status_update', keywordsCsv: 'where are we,where do we stand,status update,what.s the status,how.s going,any progress on,update on,progress on,current status,where are we on,进度,状态,现在怎样,现在如何,进展,到哪了,卡在哪,进展如何,进度怎么样,谁负责,负责人是谁,预计什么时候,截止日期,时间线,预计交付,ETA' },
+        { intent: 'capture_action', keywordsCsv: 'i.ll do,i.ll send,i.ll handle,i.ll own,i.ll take,i.ll follow up,i.ll write,i.ll ship,i.ll PR,i.ll merge,i.m gonna,action item,to-do,assigned to,owner is,by monday,by tuesday,by wednesday,by thursday,by friday,by EOD,by EOW,by next week,我来做,我来发,我来负责,我来处理,我跟进,我来 PR,交给我,我包了,分配给,行动项,待办,跟进项,周五前,周一前,下周三前,今天内' },
+        { intent: 'capture_decision', keywordsCsv: 'we decided,let.s go with,going with,final decision,approved by,was approved,got approved,signed off,greenlit,consensus is,the team agreed,we.re going to use,ship it,locked in,confirmed we,决定了,决定用,决定走,决定采用,就选,就这么定了,评审通过了,批准了,确认用,最终决定,定下来了,达成一致,大家同意' },
+        { intent: 'capture_risk', keywordsCsv: 'blocker,blocked by,blocked on,stuck on,stuck at,at risk,slipping,will miss,behind schedule,dependency on,dependency blocking,waiting on,depends on,not gonna make,impacting timeline,regression,阻塞,被卡,卡住,卡在,有风险,风险很大,延期,推迟,完不成,赶不上,影响进度,依赖于,被阻塞' },
+        { intent: 'status_update', keywordsCsv: 'where are we,where do we stand,status update,what.s the status,how.s going,any progress on,update on,progress on,current status,where are we on,进度怎么样,进度如何,进展如何,有什么进展,现在怎样,现在如何,到哪了,卡在哪,什么状态,谁负责,负责人是谁,预计什么时候,截止日期,时间线是,预计交付,ETA' },
     ],
     lecture: [
         { intent: 'explain_concept', keywordsCsv: 'this is called,this is known as,the concept of,the principle of,the idea of,by definition,definition of,introducing,let.s define,we define,theorem of,principle of,the term means,the word means,recall that,这个叫,叫做,所谓的,定义为,引入,概念是,这个概念,术语,意思是,含义,定义,定理,原理,原则' },
@@ -135,10 +135,19 @@ export function matchIntentKeywords(
         if (modeTemplateType === 'recruiting' && intent === 'coding') continue;
         const keywords = keywordMap[intent] ?? [];
         for (const keyword of keywords) {
-            if (normalizedText.includes(keyword.toLocaleLowerCase())) {
+            if (keywordMatches(normalizedText, keyword.toLocaleLowerCase())) {
                 return { intent, matchedKeyword: keyword };
             }
         }
     }
     return null;
+}
+
+// ASCII keywords must match whole words so "API" does not fire on "rapid"
+// or "role" on "control"; CJK keywords keep substring matching. In ASCII
+// keywords "." stands for one character, e.g. "i.ll do" matches "i'll do".
+function keywordMatches(normalizedText: string, normalizedKeyword: string): boolean {
+    if (!/^[\x20-\x7e]+$/.test(normalizedKeyword)) return normalizedText.includes(normalizedKeyword);
+    const escaped = normalizedKeyword.replace(/[*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`).test(normalizedText);
 }
