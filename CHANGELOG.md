@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.7.29] - 2026-11-22
+
+### Changed
+
+- Update the bundled general recruiting interview review skill to generate structured review notes from interview transcripts, cite candidate evidence, and leave scoring and hiring decisions to the interviewer.
+
 ## [2.7.28] - 2026-11-22
 
 ### Added
