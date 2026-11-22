@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.28] - 2026-11-22
+
+### Added
+
+- Add interview review skills for five roles and restore experience follow-ups when candidates discuss past work.
+- Expand FDE presales coverage to industrial software, including CAD, CAE and EM alongside PLM and QMS.
+
+### Fixed
+
+- Hide scoring and practice materials in recruiter mode and apply the same document-type rules when uploading or reclassifying materials.
+- Reduce generic-word triggers in FDE, Sales and Team modes, and align FDE discovery and Team card labels.
+
 ## [2.7.27] - 2026-11-21
 
 ### Fixed
