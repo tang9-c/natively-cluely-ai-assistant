@@ -10,6 +10,7 @@
 //      enabled by the user.
 //   4. Context heuristic fallback.
 
+import { mentionsProductTopic } from './IndustrialProductTopics';
 import { getIntentClassifierProcessHost } from './IntentClassifierProcessHost';
 import {
     matchIntentKeywords,
@@ -693,6 +694,12 @@ function detectSalesIntentByPattern(text: string): RawIntentResult | null {
             || /(发我报价|发.{0,6}报价|给.{0,6}报价|报(?:个|一下|下)价(?:格)?|给(?:我)?(?:个|一下|下)价(?:格)?|报价单|价格页|方案报价|商务条款|(产品|模块|维护费|全部|整体|搞下来|系统|方案|服务).{0,8}(多少钱|怎么收费|如何收费|什么价格))/.test(text))) {
         return { intent: 'sales_quote_request', confidence: 0.86, answerShape: getAnswerShapeForMode('sales', 'sales_quote_request') };
     }
+    // 6. Product-line pain or comparison (CAD / CAE / EM / PLM / QMS).
+    // Integration wording is left to the cloud classifier (sales_process_integration).
+    if (mentionsProductTopic(text) && !INDUSTRIAL_INTEGRATION_PATTERN.test(text)) {
+        const intent = /(对比|区别|相比|\bvs\b|compare|difference)/i.test(text) ? 'sales_capability_fit' : 'sales_pain_discovery';
+        return { intent, confidence: 0.86, answerShape: getAnswerShapeForMode('sales', intent) };
+    }
     return null;
 }
 
@@ -820,7 +827,8 @@ function detectFdeIntentByPattern(text: string): RawIntentResult | null {
         return { intent: 'fde_success', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_success') };
     }
     if (/\b(current (?:customer )?workflow|current process|business process|user workflow|stakeholder|business requirements|what are you trying to solve|what does success look like|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|drawing revision|version control|release process|part number|material master|manufacturing routing|quality object)\b/i.test(text)
-        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|干系人|业务场景|客户现场|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|版本(?:管理|控制|不一致|追溯|规则)|(?:图纸|物料|BOM|设计)版本|变更单|(?:图纸|BOM|版本|设计)发布|发布流程|图纸|物料|工艺|质量对象)/.test(text)) {
+        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|干系人|业务场景|客户现场|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|版本(?:管理|控制|不一致|追溯|规则)|(?:图纸|物料|BOM|设计)版本|变更单|(?:图纸|BOM|版本|设计)发布|发布流程|图纸|物料|工艺|质量对象)/.test(text)
+        || mentionsProductTopic(text)) {
         return { intent: 'fde_discovery', confidence: 0.85, answerShape: getAnswerShapeForMode('fde', 'fde_discovery') };
     }
     return null;

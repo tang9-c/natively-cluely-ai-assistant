@@ -1,3 +1,5 @@
+import { PRODUCT_TOPIC_PATTERNS, mentionsProductTopic } from '../../llm/IndustrialProductTopics';
+
 export interface ActionTrigger {
     type: string;
     patterns: RegExp[];
@@ -159,6 +161,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
                 '(工单|工艺路线|设备参数|需求|测试|缺陷|发布版本).{0,60}(支持|追踪|追踪矩阵)',
                 '(汽车软件|制造|医疗器械)客户.{0,80}(需求|测试|缺陷|追踪矩阵).{0,30}案例'
             ),
+            ...PRODUCT_TOPIC_PATTERNS,
         ],
         priority: 0.89,
         label: 'Ask discovery question',
@@ -565,6 +568,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
             /(?:邮件|Excel).{0,20}(?:跟踪|维护|流转)|(?:跟踪|维护|流转).{0,20}(?:邮件|Excel)/i,
             /(?:组织|业务).{0,8}流程.{0,16}(?:没|未|没有).{0,8}(?:定|明确|确定)/i,
             /(?:每个|各个|各).{0,10}(?:区域|团队|部门).{0,20}(?:维护|使用).{0,16}(?:自己|各自).{0,8}(?:一套|一份).{0,12}(?:编码|主数据)/i,
+            ...PRODUCT_TOPIC_PATTERNS,
         ],
         priority: 0.84,
         label: 'Probe deployment context',
@@ -642,6 +646,7 @@ export function shouldSuppressFdeTrigger(trigger: ActionTrigger, transcript: str
     if (trigger.type === 'fde_agent_feasibility' && !FDE_AGENT_FEASIBILITY_BOUNDARY_PATTERN.test(text)) return true;
     if (
         trigger.type === 'fde_discovery_probe' &&
+        !mentionsProductTopic(text) &&
         !/(客户|customer|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|part number|drawing revision|material master|workflow|process|流程|权限|验收|集成|AI Agent|智能体|物料|图纸|变更|质量|质量对象|编码|数据)/i.test(text)
     ) {
         return true;

@@ -13,6 +13,7 @@ export const LEGACY_INTENT_KEYWORD_DEFAULTS_V39: ReadonlyArray<readonly [templat
     ['fde', 'fde_risk', 'blocker,blocked,dependency,risk,timeline,delay,migration,cutover,rollback,edge case,launch risk,阻塞,卡住,依赖,风险,延期,迁移,切换,回滚,边界情况,上线风险,不确定'],
     ['fde', 'fde_security', 'PII,SOC2,compliance,audit log,permission,permissions,access control,data residency,encryption,security review,privacy,PII,合规,审计日志,权限,访问控制,数据驻留,加密,安全评审,隐私,敏感数据,脱敏'],
     ['fde', 'fde_success', 'success criteria,acceptance criteria,acceptance test,pilot,POC,measurement,metric,KPI,validation,sign off,验收标准,成功标准,试点,验证,指标,度量,KPI,验收测试,通过标准,效果衡量'],
+    ['sales', 'sales_pain_discovery', 'broken workflow,manual workaround,duplicated entry,out of sync,version mismatch,workflow pain,流程不同步,靠邮件通知,靠 Excel 跟踪,重复录入,版本不一致,流程断点,返工停线,审计痛苦'],
     ['sales', 'sales_technical_requirements', 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式,实施周期通常多久,实施周期多久,交付周期多久,部署周期多久,上线和数据迁移有什么风险,数据迁移有什么风险,上线有什么风险'],
     ['sales', 'sales_technical_requirements', 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式'],
     ['team-meet', 'status_update', 'where are we,where do we stand,status update,what.s the status,how.s going,any progress on,update on,progress on,current status,where are we on,进度,状态,现在怎样,现在如何,进展,到哪了,卡在哪,进展如何,进度怎么样,谁负责,负责人是谁,预计什么时候,截止日期,时间线,预计交付,ETA'],

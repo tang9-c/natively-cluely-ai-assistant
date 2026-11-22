@@ -25,7 +25,7 @@ const INTERVIEW_KEYWORDS: IntentKeywordConfig[] = [
 ];
 
 const FDE_KEYWORDS: IntentKeywordConfig[] = [
-    { intent: 'fde_discovery', keywordsCsv: 'current workflow,current process,business process,user workflow,stakeholder,business requirements,what are you trying to solve,what does success look like,现有流程,当前流程,业务流程,用户流程,需求是什么,想解决什么,谁会使用,干系人,业务场景,客户现场' },
+    { intent: 'fde_discovery', keywordsCsv: 'current workflow,current process,business process,user workflow,stakeholder,business requirements,what are you trying to solve,what does success look like,现有流程,当前流程,业务流程,用户流程,需求是什么,想解决什么,谁会使用,干系人,业务场景,客户现场,不收敛,收敛困难,网格划分,大装配很慢,大装配卡顿,出图慢,仿真精度,仿真和试验对不上,EMC 整改,信号完整性问题' },
     { intent: 'fde_integration', keywordsCsv: 'API,endpoint,webhook,SSO,SAML,OAuth,SCIM,data source,data warehouse,sandbox,staging,test environment,production environment,integration with,document system,data direction,read-write boundary,permission model,API 接口,接口文档,接口对接,ERP 接口,PLM 接口,MES 接口,端点,回调,单点登录,数据源,数仓,沙盒,生产环境,测试环境,系统集成,集成方案,打通,文档系统,数据方向,读写边界,角色权限' },
     { intent: 'fde_security', keywordsCsv: 'PII,SOC2,compliance,audit log,permission model,access control,data residency,encryption,security review,privacy,合规,审计日志,权限控制,权限管理,权限边界,访问控制,数据驻留,数据加密,安全评审,隐私,敏感数据,脱敏' },
     { intent: 'fde_risk', keywordsCsv: 'blocker,blocked by,blocked on,depends on,main risk,biggest risk,launch risk,migration risk,rollback plan,cutover,edge case,阻塞,流程卡在,审批卡在,项目卡在,交付卡在,卡在质量部门,卡在法务环节,卡在审批环节,卡在验收环节,依赖于,有什么风险,主要风险,最大的风险,项目风险,交付风险,上线风险,迁移风险,延期,回滚方案,边界情况' },
@@ -54,7 +54,7 @@ export const DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE: Record<string, IntentKeywordCo
         { intent: 'sales_proof_request', keywordsCsv: 'case study,customer story,customer example,reference customer,proof point,success story,similar customer,ROI,return on investment,客户案例,成功案例,类似客户,参考客户,证明材料,ROI,投资回报,回报率,成功证明' },
         { intent: 'sales_technical_requirements', keywordsCsv: 'API,SSO,SAML,OAuth,SCIM,sandbox,technical requirements,security requirements,deployment requirements,deployment options,integration requirements,API 接口,SSO,单点登录,生产环境,沙盒,安全要求,部署方式,部署要求,私有化部署,集成方式,集成需求,技术需求,技术要求,架构要求,对接方式,实施周期通常多久,实施周期多久,交付周期多久,部署周期多久,上线和数据迁移有什么风险,数据迁移有什么风险,上线有什么风险' },
         { intent: 'sales_buying_signal', keywordsCsv: 'ready to move,ready to sign,next steps,legal review,procurement,contract,finalize,when can we start,准备签,准备推进,下一步怎么走,下一步是,法务审核,采购流程,合同,敲定' },
-        { intent: 'sales_pain_discovery', keywordsCsv: 'broken workflow,manual workaround,duplicated entry,out of sync,version mismatch,workflow pain,流程不同步,靠邮件通知,靠 Excel 跟踪,重复录入,版本不一致,流程断点,返工停线,审计痛苦' },
+        { intent: 'sales_pain_discovery', keywordsCsv: 'broken workflow,manual workaround,duplicated entry,out of sync,version mismatch,workflow pain,流程不同步,靠邮件通知,靠 Excel 跟踪,重复录入,版本不一致,流程断点,返工停线,审计痛苦,不收敛,收敛困难,网格划分,大装配很慢,大装配卡顿,出图慢,仿真精度,仿真和试验对不上,EMC 整改,信号完整性问题' },
         { intent: 'sales_capability_fit', keywordsCsv: 'does it support,can it handle,fit our scenario,capability fit,module capability,能不能支持,是否适合,功能是否匹配,模块功能,能不能追溯,能不能校验' },
         { intent: 'sales_process_integration', keywordsCsv: 'process integration,closed loop,data synchronization,system handoff,read write boundary,流程打通,形成闭环,系统同步,数据流转,读写边界,权限边界,源系统目标系统' },
         { intent: 'sales_value_discovery', keywordsCsv: 'cycle time,quality cost,audit pressure,review efficiency,rework rate,效率提升,周期缩短,质量成本,审计压力,评审效率,返工率,良率,成功指标' },
