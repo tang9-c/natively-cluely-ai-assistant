@@ -5248,7 +5248,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         ?? modesManager.getModes().find((candidate: any) => candidate.templateType === 'general');
       const registry = ScenarioRegistry.createDefault();
       const resolution = registry.resolveByTemplateType(mode?.templateType);
-      const adapter = registry.get(resolution.scenarioType);
+      const adapter = registry.getForResolution(resolution);
       return {
         success: true,
         scenario: {
@@ -5325,7 +5325,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!mode) return { success: false, error: 'No active mode selected' };
       const registry = ScenarioRegistry.createDefault();
       const resolution = registry.resolveByTemplateType(mode.templateType);
-      const adapter = registry.get(resolution.scenarioType);
+      const adapter = registry.getForResolution(resolution);
       if (!adapter.supportedDocSubtypes.includes(params.docSubtype)) {
         return { success: false, error: 'invalid_document_subtype' };
       }
@@ -5378,7 +5378,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const mode = modesManager.getActiveMode()
         ?? modesManager.getModes().find((candidate: any) => candidate.templateType === 'general');
       if (!mode) return { success: false, error: 'No active mode selected' };
-      const resolution = ScenarioRegistry.createDefault().resolveByTemplateType(mode.templateType);
+      const registry = ScenarioRegistry.createDefault();
+      const resolution = registry.resolveByTemplateType(mode.templateType);
+      if (!registry.getForResolution(resolution).supportedDocSubtypes.includes(params.docSubtype)) {
+        return { success: false, error: 'invalid_document_subtype' };
+      }
       DatabaseManager.getInstance().upsertModeReferenceFileMetadata({
         referenceFileId: params.referenceFileId,
         scenarioType: resolution.scenarioType,

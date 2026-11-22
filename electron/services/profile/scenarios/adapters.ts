@@ -153,7 +153,7 @@ export const interviewScenarioAdapter = createAdapter({
   ],
   systemPromptSuffix: (resolution) => {
     if (resolution.subScenario === 'recruiter') {
-      return 'You are helping the user in an interview scenario from the recruiter perspective. Use candidate, role, scorecard, and follow-up materials as grounding context.';
+      return 'You are helping the user in an interview scenario from the recruiter perspective. Use candidate, role, company, and follow-up materials as grounding context.';
     }
     if (resolution.subScenario === 'technical') {
       return 'You are helping the user in a technical interview scenario. Use candidate, technical specification, rubric, and practice problem materials as grounding context.';
