@@ -43,6 +43,19 @@ describe('ScenarioRegistry', () => {
     });
   });
 
+  test('recruiter cards and upload types exclude scoring and practice materials', () => {
+    const registry = ScenarioRegistry.createDefault();
+    const resolve = template => registry.getForResolution(registry.resolveByTemplateType(template));
+    const expected = ['candidate-profile', 'candidate-resume', 'job-description', 'company-research',
+      'negotiation-script', 'followup-script', 'technical-spec'];
+    const recruiter = resolve('recruiting');
+    assert.deepEqual(recruiter.cards.map(card => card.docSubtype), expected);
+    assert.deepEqual(recruiter.supportedDocSubtypes, expected);
+    for (const template of ['looking-for-work', 'technical-interview']) {
+      assert.equal(resolve(template), registry.get('interview'));
+    }
+  });
+
   test('sales adapter exposes required document subtypes from product goal', () => {
     const adapter = ScenarioRegistry.createDefault().get('sales');
     assert.deepEqual(adapter.supportedDocSubtypes, [

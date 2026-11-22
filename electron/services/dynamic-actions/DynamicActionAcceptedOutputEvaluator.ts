@@ -122,6 +122,16 @@ export function evaluateDynamicActionAcceptedOutput(
     appendRecruitingSafetyFailures(answer, forbiddenPatternFailures);
   }
 
+  if (input.actionType === 'candidate_experience_probe') {
+    if (countQuestionLikeSentences(stripCandidateQuotes(answer)) !== 1) {
+      requiredPatternFailures.push('candidate_experience_probe_single_question');
+    }
+    if (!hasVerbatimCandidateQuotes(answer, input.transcriptEvidence)) {
+      groundingFailures.push('candidate_experience_probe_requires_verbatim_quote');
+    }
+    appendRecruitingSafetyFailures(answer, forbiddenPatternFailures);
+  }
+
   if (input.actionType === 'discovery_question') {
     const questionCount = countQuestionLikeSentences(answer);
     if (questionCount < 1 || questionCount > 3) {
@@ -216,6 +226,12 @@ export function buildRecruitingPolicySafeFallback(language?: string): string {
   return language === 'en'
     ? 'The current recruiting materials are not enough to confirm this policy. Please verify it with the recruiter or hiring team before sharing a commitment.'
     : '当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。';
+}
+
+export function buildRecruitingExperienceProbeSafeFallback(language?: string): string {
+  return language === 'en'
+    ? 'Could you walk me through what you personally did at that point?'
+    : '能具体说说当时你本人做了什么吗？';
 }
 
 export function buildRecruitingEvidenceSafeFallback(language?: string): string {
@@ -419,6 +435,19 @@ function enforceCapabilityFitLength(answer: string, failures: string[]): void {
   if ((cjkChars > 0 && cjkChars > 180) || (cjkChars === 0 && words > 120)) {
     failures.push('capability_fit_answer_too_long');
   }
+}
+
+const CANDIDATE_QUOTE_PATTERN = /「([^」]+)」/g;
+
+function stripCandidateQuotes(answer: string): string {
+  return answer.replace(CANDIDATE_QUOTE_PATTERN, '');
+}
+
+function hasVerbatimCandidateQuotes(answer: string, transcriptEvidence: string[] | undefined): boolean {
+  const normalize = (value: string) => value.normalize('NFKC').replace(/\s+/g, '');
+  const transcriptText = normalize((transcriptEvidence ?? []).join('\n'));
+  const quotes = Array.from(answer.matchAll(CANDIDATE_QUOTE_PATTERN), (match) => normalize(match[1]));
+  return transcriptText.length > 0 && quotes.length > 0 && quotes.every((quote) => quote.length > 0 && transcriptText.includes(quote));
 }
 
 function countQuestionLikeSentences(answer: string): number {

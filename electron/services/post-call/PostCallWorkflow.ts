@@ -122,7 +122,6 @@ const SALES_ACTION_LABELS: Record<string, string> = {
 };
 const RECRUITING_ARTIFACT_ACTION_TYPES = new Set([
   'candidate_evidence_summary',
-  'candidate_experience_probe',
   'candidate_concern',
   'strong_fit_signal',
 ]);

@@ -21,16 +21,17 @@ const deterministicRecruitingClassifier = async (input) => {
   const policyTypes = new Set(input.policySummary.actions.map((action) => action.actionType));
   const canDecide = (actionType) => candidateTypes.has(actionType) && policyTypes.has(actionType);
   const isCandidate = input.speaker === 'interviewer';
-  const isInterviewer = input.speaker === 'user';
   const policyConcern = /签证|薪资|offer|入职时间|远程|混合办公|搬迁|安全审查|visa|compensation|salary|offer|start date|remote|hybrid|relocation|security/.test(transcript);
   const policyRequest = /确认|说明|担心|支持|可以吗|吗|\?|？|confirm|concern|can you|support|timeline/.test(transcript);
-  const experienceRequest = /tell me about.*experience|walk me through.*background|specific example|concrete example|give me an example|why this role|讲讲你的经验|介绍一下你的背景|具体的例子|举个具体例子|举一个具体例子|举一个例子/.test(transcript);
+  const candidateAnswer = input.transcript.split('\n').at(-1).toLocaleLowerCase();
+  const narrativeAnswer = /当时|后来|最后|结果|我们|我负责|协调|处理|决定|上线|推进|发了|发给|同步|整理|沟通|跟进|we (?:decided|handled|launched)|i (?:handled|sent)|in the end/.test(candidateAnswer);
+  const completeAnswer = /(复现|核对|因为|数据显示|reproduced|confirmed).*(发了|给|sent|gave).*(选了|同意|决定|chose|agreed|decided)/.test(candidateAnswer);
   const explicitInterest = /i(?:'m| am) (?:very )?interested in (?:this )?(?:role|position)|i(?:'d| would) love to join|i(?:'m| am) excited (?:about|to join) (?:this )?(?:role|team)|this (?:role|position) really interests me|我对这个岗位很感兴趣|我对这个职位很感兴趣|我很想加入|我很期待加入|这个岗位很吸引我/.test(transcript);
 
   return input.candidates.map((candidate) => {
     const pass =
       (candidate.actionType === 'candidate_concern' && isCandidate && policyConcern && policyRequest) ||
-      (candidate.actionType === 'candidate_experience_probe' && isInterviewer && experienceRequest) ||
+      (candidate.actionType === 'candidate_experience_probe' && isCandidate && narrativeAnswer && !completeAnswer) ||
       (candidate.actionType === 'strong_fit_signal' && isCandidate && explicitInterest);
     return {
       actionType: candidate.actionType,
@@ -50,8 +51,8 @@ test('recruiting product fixtures cover the release matrix', () => {
 
   assert.ok(fixtures.length >= 40);
   assert.ok(byAction('candidate_concern').length >= 8);
-  assert.equal(byAction('candidate_experience_probe').length, 0);
-  assert.ok(negatives.filter((fixture) => fixture.negativeReason === 'evaluation_paused').length >= 18);
+  assert.ok(byAction('candidate_experience_probe').length >= 12);
+  assert.ok(negatives.filter((fixture) => (fixture.tags ?? []).includes('candidate_experience_probe')).length >= 6);
   assert.ok(byAction('strong_fit_signal').length >= 4);
   assert.ok(negatives.length >= 10);
   assert.ok(['zh', 'en', 'mixed'].every((language) => fixtures.some((fixture) => fixture.language === language)));

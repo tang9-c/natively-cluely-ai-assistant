@@ -448,10 +448,9 @@ test('recruiting follow-up never exposes English or Chinese internal evaluation 
     ],
   });
 
-  assert.equal(result.acceptedRecruitingRecords.length, 2);
+  assert.deepEqual(result.acceptedRecruitingRecords.map((record) => record.actionType), ['strong_fit_signal']);
   assert.deepEqual(result.coachingInsights, []);
   assert.equal(result.followUpDraft, '');
-  assert.match(result.acceptedRecruitingRecords[0].summary, /Scorecard gap/i);
 });
 
 test('fde post-call does not expose rule insights for customer goal without success metric', () => {

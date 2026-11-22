@@ -243,6 +243,18 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
         answerStyle: { maxWords: 100, format: 'bullets', tone: 'empathetic' },
     },
     {
+        type: 'candidate_experience_probe',
+        patterns: [
+            /\b(we (?:decided|handled|launched|shipped|coordinated|agreed)|i (?:handled|decided|owned|led|coordinated|sent|synced|reached out|followed up|was responsible)|in the end|eventually|it turned out|at that time)\b/i,
+            zh('当时', '后来', '最后', '结果', '我们', '我负责', '协调', '处理', '决定', '上线', '推进', '发了', '发给', '同步', '整理', '沟通', '跟进'),
+        ],
+        priority: 0.84,
+        label: '补问一个事实',
+        promptInstruction:
+            'You are in Recruiting mode. Using the interviewer\'s latest question and the candidate\'s own words, pick the single most missing fact among: the candidate\'s personal action, the basis for their decision, or the outcome of their communication. Output exactly one neutral follow-up question, then quote one short sentence from the candidate\'s latest answer inside 「」, copied verbatim. Do not judge personality, integrity, motivation, fluency, or hiring fit, and do not name an interview method. Reply in the language of the transcript.',
+        answerStyle: { maxWords: 40, format: 'bullets', tone: 'structured' },
+    },
+    {
         type: 'strong_fit_signal',
         patterns: [
             /\b(i(?:'m| am) (?:very )?interested in (?:this )?(?:role|position)|i(?:'d| would) love to join|i(?:'m| am) excited (?:about|to join) (?:this )?(?:role|team)|this (?:role|position) really interests me)\b/i,
@@ -647,6 +659,13 @@ function shouldSuppressTeamTrigger(trigger: ActionTrigger, transcript: string): 
     return false;
 }
 
+export const RECRUITING_PROBE_MIN_CHARS = 15;
+
+function shouldSuppressRecruitingTrigger(trigger: ActionTrigger, transcript: string): boolean {
+    if (trigger.type !== 'candidate_experience_probe') return false;
+    return transcript.replace(/\s+/g, '').length < RECRUITING_PROBE_MIN_CHARS;
+}
+
 export class DynamicActionDetector {
     private triggers: Record<string, ActionTrigger[]>;
 
@@ -675,6 +694,9 @@ export class DynamicActionDetector {
             if ((modeTemplateType === 'team-meet' || modeTemplateType === 'team_meeting') && shouldSuppressTeamTrigger(trigger, transcript)) {
                 continue;
             }
+            if (modeTemplateType === 'recruiting' && shouldSuppressRecruitingTrigger(trigger, transcript)) {
+                continue;
+            }
             for (const pattern of trigger.patterns) {
                 const match = pattern.exec(transcript);
                 if (match) {
@@ -693,6 +715,13 @@ export class DynamicActionDetector {
             matchedTriggers.some(({ trigger }) => trigger.type !== 'fde_discovery_probe')
         ) {
             return matchedTriggers.filter(({ trigger }) => trigger.type !== 'fde_discovery_probe');
+        }
+
+        if (
+            modeTemplateType === 'recruiting' &&
+            matchedTriggers.some(({ trigger }) => trigger.type === 'candidate_concern')
+        ) {
+            return matchedTriggers.filter(({ trigger }) => trigger.type !== 'candidate_experience_probe');
         }
 
         return matchedTriggers;

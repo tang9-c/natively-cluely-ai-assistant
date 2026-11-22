@@ -36,6 +36,7 @@ import {
     type DynamicActionSpeakerConfirmation,
 } from '../shared/speakerConfirmation';
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
+import { RECRUITING_PROBE_MIN_CHARS } from './services/dynamic-actions/DynamicActionDetector';
 import {
     buildFdeContinuationDerivedActionContext,
     buildRecruitingContinuationDerivedActionContext,
@@ -807,6 +808,17 @@ export class IntelligenceEngine extends EventEmitter {
         }
     }
 
+    // The candidate kept talking, so an earlier probe may already be answered; re-gate on the latest segment.
+    private retractPendingExperienceProbes(): void {
+        if (!this.dynamicActionEngine || !this.currentSessionId) return;
+        for (const activeAction of this.dynamicActionEngine.getStore().getActiveActions(this.currentSessionId)) {
+            if (activeAction.type !== 'candidate_experience_probe') continue;
+            if (activeAction.status !== 'candidate' && activeAction.status !== 'shown') continue;
+            this.dynamicActionEngine.discardAction(activeAction.id);
+            this.emit('dynamic_action_emitted', { ...activeAction, status: 'dismissed' });
+        }
+    }
+
     // Phase 3 dynamic actions — public API ===========================================================
 
     /**
@@ -1168,6 +1180,10 @@ export class IntelligenceEngine extends EventEmitter {
         }
         const text = (segment.text || '').trim();
         if (!text) return;
+        if (this.currentDynamicActionTemplateType === 'recruiting'
+            && text.replace(/\s+/g, '').length >= RECRUITING_PROBE_MIN_CHARS) {
+            this.retractPendingExperienceProbes();
+        }
 
         const detectorOnlyMode = isDetectorOnlyDynamicActionMode(this.currentDynamicActionTemplateType);
         const detectedTriggers = detectorOnlyMode

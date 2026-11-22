@@ -67,6 +67,16 @@ export class ScenarioRegistry {
     return adapter;
   }
 
+  getForResolution(resolution: ScenarioResolution): ScenarioAdapter {
+    const adapter = this.get(resolution.scenarioType);
+    if (resolution.subScenario !== 'recruiter') return adapter;
+
+    const cards = adapter.cards.filter(({ docSubtype }) =>
+      docSubtype !== 'scorecard' && docSubtype !== 'rubric' && docSubtype !== 'practice-problem'
+    );
+    return { ...adapter, cards, supportedDocSubtypes: cards.map(card => card.docSubtype) };
+  }
+
   list(): ScenarioAdapter[] {
     return Array.from(this.adaptersByType.values());
   }

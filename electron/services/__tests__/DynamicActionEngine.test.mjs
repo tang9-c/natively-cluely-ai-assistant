@@ -2812,6 +2812,34 @@ describe('ActionTrigger fixtures — recruiting mode', () => {
     });
     assert.equal(actions.some(action => action.type === 'candidate_experience_probe'), false);
   });
+
+  test('candidate_experience_probe triggers on a substantive candidate narrative', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '最后我们协调好了，按时上线了。',
+      modeTemplateType: 'recruiting', modeId: 'm_r', sessionId: 's_r_cep_narrative',
+    });
+    const a = findAction(actions, 'candidate_experience_probe');
+    assert.ok(a);
+    assert.equal(a.label, '补问一个事实');
+    assert.equal(a.productContract.userAction, '补问一个事实');
+  });
+
+  test('candidate_experience_probe ignores short fragments and yields to policy concerns', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const shortActions = engine.detectActions({
+      transcript: '最后上线了。',
+      modeTemplateType: 'recruiting', modeId: 'm_r', sessionId: 's_r_cep_short',
+    });
+    const concernActions = engine.detectActions({
+      transcript: '我们公司最近在调整方向，薪资范围可以说明一下吗？',
+      modeTemplateType: 'recruiting', modeId: 'm_r', sessionId: 's_r_cep_concern',
+    });
+    assert.equal(shortActions.some(action => action.type === 'candidate_experience_probe'), false);
+    assert.deepEqual(concernActions.map(action => action.type), ['candidate_concern']);
+  });
 });
 
 describe('ActionTrigger fixtures — team-meet mode', () => {

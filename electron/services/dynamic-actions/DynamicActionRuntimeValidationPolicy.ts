@@ -2,6 +2,7 @@ import {
   buildCapabilityFitSafeFallback,
   buildFdeGroundedAnswerSafeFallback,
   buildRecruitingEvidenceSafeFallback,
+  buildRecruitingExperienceProbeSafeFallback,
   buildRecruitingPolicySafeFallback,
 } from './DynamicActionAcceptedOutputEvaluator';
 
@@ -22,6 +23,7 @@ const POLICIES: Record<string, DynamicActionRuntimeValidationPolicy> = {
   fde_grounded_answer: { actionType: 'fde_grounded_answer', evidenceKind: 'external_capability', claimDomain: 'capability' },
   candidate_concern: { actionType: 'candidate_concern', evidenceKind: 'external_policy', claimDomain: 'recruiting_policy' },
   candidate_evidence_summary: { actionType: 'candidate_evidence_summary', evidenceKind: 'transcript_evidence' },
+  candidate_experience_probe: { actionType: 'candidate_experience_probe', evidenceKind: 'transcript_evidence' },
 };
 
 export function getDynamicActionRuntimeValidationPolicy(
@@ -45,6 +47,9 @@ export function buildDynamicActionRuntimeSafeFallback(
   }
   if (policy?.actionType === 'fde_grounded_answer') {
     return buildFdeGroundedAnswerSafeFallback(language);
+  }
+  if (policy?.actionType === 'candidate_experience_probe') {
+    return buildRecruitingExperienceProbeSafeFallback(language);
   }
   if (policy?.evidenceKind === 'external_policy') {
     return buildRecruitingPolicySafeFallback(language);

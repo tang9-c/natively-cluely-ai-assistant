@@ -124,7 +124,7 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
         return { whyNow: '对方提出了招聘政策或相关顾虑，只能依据可信材料回应；缺少材料时必须明确由招聘方确认。', severity: 'info' };
     }
     if (input.type === 'candidate_experience_probe') {
-        return { whyNow: '候选人的回答缺少可观察的岗位相关证据，适合补问一个中立问题。', severity: 'info' };
+        return { whyNow: '候选人的回答还缺少一项可核实的事实，可以补问一句。', severity: 'info' };
     }
     if (input.type === 'strong_fit_signal') {
         return { whyNow: '候选人表达了岗位兴趣，适合回应其兴趣而不对匹配度作判断。', severity: 'ok' };
@@ -185,7 +185,7 @@ function buildUserAction(input: ContractInput, outputType: DynamicActionOutputTy
     if (input.type === 'technical_requirements') return '澄清技术需求';
     if (input.type === 'buying_signal') return '锁定推进下一步';
     if (input.type === 'candidate_concern') return '回应招聘政策或顾虑';
-    if (input.type === 'candidate_experience_probe') return '追问一项岗位证据';
+    if (input.type === 'candidate_experience_probe') return '补问一个事实';
     if (input.type === 'strong_fit_signal') return '回应候选人的岗位兴趣';
     if (/pricing|objection|pushback|budget/.test(input.type)) return '回应价格异议';
     if (input.type === 'fde_discovery_probe') return '澄清制造业流程和系统对象';
@@ -207,7 +207,7 @@ function outputPromiseFor(actionType: string, outputType: DynamicActionOutputTyp
     if (actionType === 'capability_fit_answer') return '生成一段可直接说出口、带证据边界的能力匹配回答';
     if (actionType === 'fde_grounded_answer') return '生成一段可直接说出口、带证据边界的流程或 AI 支持回应';
     if (actionType === 'candidate_concern') return '生成一段基于可信招聘政策材料的回应，或明确需要招聘方确认';
-    if (actionType === 'candidate_experience_probe') return '生成一个中立的岗位相关证据追问';
+    if (actionType === 'candidate_experience_probe') return '生成一句中立追问';
     if (actionType === 'strong_fit_signal') return '生成一段回应候选人岗位兴趣的简短表达';
     if (actionType === 'discovery_question') return '生成 1-3 个可直接问客户的发现问题';
     switch (outputType) {
