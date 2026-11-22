@@ -571,7 +571,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
             ...PRODUCT_TOPIC_PATTERNS,
         ],
         priority: 0.84,
-        label: 'Probe deployment context',
+        label: 'Probe customer workflow',
         promptInstruction:
             'You are in FDE mode for industrial engineering software (CAD / CAE / EM simulation / PLM / QMS) presales, technical service and consulting. Ask 3 clarification questions about the customer workflow and the engineering object for the product line in discussion: assemblies, drawings or parametric models for CAD; mesh, contact, convergence or material models for CAE; S-parameters, EMC or antenna models for EM simulation; BOM/ECO/ECN for PLM; CAPA/NCR/8D for QMS. Also cover stakeholder, permission boundary, and validation artifact.',
         answerStyle: { maxWords: 100, format: 'bullets', tone: 'curious' },

@@ -193,8 +193,12 @@ function buildUserAction(input: ContractInput, outputType: DynamicActionOutputTy
     if (input.type === 'fde_security_review') return '确认权限、审计和数据记录边界';
     if (input.type === 'fde_agent_feasibility') return '判断 AI Agent 可行性边界';
     if (input.type === 'fde_next_step') return '锁定 owner/date/artifact 下一步';
+    if (input.type === 'fde_success_criteria') return '定义验收标准';
+    if (input.type === 'fde_risk_blocker') return '澄清交付风险和下一步';
     if (input.type === 'buying_signal') return '锁定下一步';
-    if (/fde_|blocker|risk/.test(input.type)) return '澄清部署风险和下一步';
+    if (input.type === 'blocker_check') return '明确阻塞影响和解法';
+    if (input.type === 'owner_deadline_check') return '确认负责人和截止时间';
+    if (/fde_|blocker|risk/.test(input.type)) return '澄清风险和下一步';
     if (outputType === 'action_item') return '确认负责人和截止时间';
     if (outputType === 'decision_record') return '记录当前决策';
     if (outputType === 'email_draft') return '生成后续邮件草稿';
