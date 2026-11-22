@@ -100,7 +100,7 @@ test('fde manufacturing contracts explain process, permission, risk, and next-st
 
   const discovery = buildDynamicActionProductContract(baseInput({
     type: 'fde_discovery_probe',
-    label: 'Probe deployment context',
+    label: 'Probe customer workflow',
     modeTemplateType: 'fde',
     answerStyle: { maxWords: 100, format: 'bullets', tone: 'curious' },
   }));
@@ -250,4 +250,21 @@ test('evidence summary shows the latest repeated turn', async () => {
   }));
 
   assert.equal(contract.evidenceSummary, 'latest turn');
+});
+
+test('team meeting and FDE cards use titles that match their action', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+  const titleFor = (type, modeTemplateType) => buildDynamicActionProductContract(baseInput({
+    type,
+    modeTemplateType,
+    answerStyle: { maxWords: 90, format: 'checklist', tone: 'direct' },
+  })).userAction;
+
+  assert.equal(titleFor('blocker_check', 'team-meet'), '明确阻塞影响和解法');
+  assert.equal(titleFor('owner_deadline_check', 'team-meet'), '确认负责人和截止时间');
+  assert.equal(titleFor('fde_success_criteria', 'fde'), '定义验收标准');
+  assert.equal(titleFor('fde_risk_blocker', 'fde'), '澄清交付风险和下一步');
+  for (const type of ['blocker_check', 'owner_deadline_check']) {
+    assert.doesNotMatch(titleFor(type, 'team-meet'), /部署|验证检查清单/);
+  }
 });

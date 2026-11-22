@@ -10,6 +10,7 @@
 //      enabled by the user.
 //   4. Context heuristic fallback.
 
+import { mentionsProductTopic } from './IndustrialProductTopics';
 import { getIntentClassifierProcessHost } from './IntentClassifierProcessHost';
 import {
     matchIntentKeywords,
@@ -693,6 +694,12 @@ function detectSalesIntentByPattern(text: string): RawIntentResult | null {
             || /(发我报价|发.{0,6}报价|给.{0,6}报价|报(?:个|一下|下)价(?:格)?|给(?:我)?(?:个|一下|下)价(?:格)?|报价单|价格页|方案报价|商务条款|(产品|模块|维护费|全部|整体|搞下来|系统|方案|服务).{0,8}(多少钱|怎么收费|如何收费|什么价格))/.test(text))) {
         return { intent: 'sales_quote_request', confidence: 0.86, answerShape: getAnswerShapeForMode('sales', 'sales_quote_request') };
     }
+    // 6. Product-line pain or comparison (CAD / CAE / EM / PLM / QMS).
+    // Integration wording is left to the cloud classifier (sales_process_integration).
+    if (mentionsProductTopic(text) && !INDUSTRIAL_INTEGRATION_PATTERN.test(text)) {
+        const intent = /(对比|区别|相比|\bvs\b|compare|difference)/i.test(text) ? 'sales_capability_fit' : 'sales_pain_discovery';
+        return { intent, confidence: 0.86, answerShape: getAnswerShapeForMode('sales', intent) };
+    }
     return null;
 }
 
@@ -746,22 +753,22 @@ function detectTeamMeetIntentByPattern(text: string): RawIntentResult | null {
     // paired with a verb (周五前完成) or in compound phrases (截止日期),
     // which is where capture_risk / status_update own them.
     if (/(i'?ll (do|send|handle|own|take|follow up|write|ship|PR|merge)|I'?m gonna|let me .* by|action item|to-do|assigned to|owner is|@.* (please )?(do|own|handle)|I can have .* by|by (monday|tuesday|wednesday|thursday|friday|EOD|EOW|next week))/i.test(text)
-        || /(我来做|我来发|我来负责|我来处理|我跟进|我写|我来 PR|我提|我合|交给我|我包了|分配给|让.*来|让.*做|行动项|待办|跟进项|周五前|周一前|下周三前|今天内|尽快|尽快.*交|交付)/.test(text)) {
+        || /(我来做|我来发|我来负责|我来处理|我跟进|我来 PR|交给我|我包了|分配给|让.{0,12}来(?:做|负责|跟进)|让.{0,12}(?:去)?做|行动项|待办|跟进项|周五前|周一前|下周三前|今天内|尽快.{0,12}交)/.test(text)) {
         return { intent: 'capture_action', confidence: 0.92, answerShape: getAnswerShapeForMode('team-meet', 'capture_action') };
     }
     // 2. Decision — explicit "we decided"
-    if (/(we decided|let'?s go with|going with|final decision|approved|signed off|greenlit|consensus is|the team agreed|we'?re going to use|ship it|merged|locked in|confirmed we)/i.test(text)
-        || /(决定(了|用|走|采用)?|就选|就用|就上|定了|通过了|批准了|确认.*用|最终决定|定下来了|达成一致|大家同意|定了.*方案|采用)/.test(text)) {
+    if (/\b(we(?:'ve)? decided|let'?s go with|going with|final decision|approved by|(?:is|was|been|got) approved|signed off|greenlit|consensus is|the team agreed|we'?re going to use|ship it|locked in|confirmed we)\b/i.test(text)
+        || /(决定(了|用|走|采用)|就选|就这么定了|通过了|批准了|确认.{0,8}用|最终决定|定下来了|达成一致|大家同意|定了.{0,8}方案)/.test(text)) {
         return { intent: 'capture_decision', confidence: 0.9, answerShape: getAnswerShapeForMode('team-meet', 'capture_decision') };
     }
     // 3. Risk / blocker
-    if (/(blocker|blocked (by|on)|stuck (on|at)|risk|at risk|slipping|will miss|behind schedule|dependency (on|blocking)|waiting on|depends on|not gonna make|impacting timeline|regression)/i.test(text)
-        || /(阻塞|被卡|卡住|卡在|风险|延期|推迟|完不成|赶不上|影响进度|依赖|等.*完成|要看.*才能|被.*阻塞|短板|坑|出了点问题)/.test(text)) {
+    if (/\b(blockers?|blocked (by|on)|stuck (on|at)|at risk|slipping|will miss|behind schedule|dependency (on|blocking)|waiting on|depends on|not gonna make|impacting timeline|regression)\b/i.test(text)
+        || /(阻塞|被卡|卡住|卡在|(?:有|存在|进度|交付|上线|延期|本周|这周|当前|最大的?)风险|风险(?:是|在于|很大|较大)|延期|推迟|完不成|赶不上|影响进度|依赖(?:于|.{0,12}(?:完成|解决|处理))|等.{0,12}完成|要看.{0,12}才能|被.{0,12}阻塞)/.test(text)) {
         return { intent: 'capture_risk', confidence: 0.88, answerShape: getAnswerShapeForMode('team-meet', 'capture_risk') };
     }
     // 4. Status update — direct progress report
     if (/(where (are we|do we stand)|status update|what'?s the status|where'?s .* (at|on)|how'?s .* going|any progress on|update on|progress on|current status|where are we on)/i.test(text)
-        || /(进度|状态|现在.*怎样|现在.*如何|.*进展|到哪了|卡在哪|进展如何|进度怎么样|谁负责|负责人是谁|什么时候.*能|预计什么时候|截止日期|时间线|预计.*交付|ETA)/.test(text)) {
+        || /(进度(?:怎么样|如何|到哪)|什么状态|现在.{0,8}怎样|现在.{0,8}如何|有什么进展|进展如何|到哪了|卡在哪|谁负责|负责人是谁|什么时候.{0,6}能|预计什么时候|截止日期|时间线(?:是|怎么)|预计.{0,8}交付|ETA)/.test(text)) {
         return { intent: 'status_update', confidence: 0.85, answerShape: getAnswerShapeForMode('team-meet', 'status_update') };
     }
     return null;
@@ -791,36 +798,37 @@ function detectLectureIntentByPattern(text: string): RawIntentResult | null {
 }
 
 function detectFdeIntentByPattern(text: string): RawIntentResult | null {
-    if (/(PLM|QMS|ERP|MES|document system|Windchill).*(data direction|read[- ]?write|read[- ]?only|write[- ]?back|role|permission|environment|sandbox|production|integration)/i.test(text)
+    if (/\b(PLM|QMS|ERP|MES|document system|Windchill)\b.*\b(data direction|read[- ]?write|read[- ]?only|write[- ]?back|roles?|permissions?|environment|sandbox|production|integration)\b/i.test(text)
         || /(ERP|MES|PLM|QMS|文档系统|Windchill).*(数据方向|读写边界|只读|写回|角色|权限|环境|沙盒|生产环境|测试环境|集成|打通)/i.test(text)) {
         return { intent: 'fde_integration', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_integration') };
     }
-    if (/(PII|SOC2|compliance|audit logs?|permissions?|access control|data residency|encryption|security review|privacy)/i.test(text)
-        || /(合规|审计日志|权限|访问控制|数据驻留|加密|安全评审|隐私|敏感数据|脱敏)/.test(text)) {
+    if (/\b(PII|SOC2|compliance|audit logs?|permission (?:model|matrix|boundary|control)s?|access control|data residency|encryption|security review|privacy)\b/i.test(text)
+        || /(合规|审计日志|权限(?:怎么|如何|控制|管理|模型|矩阵|边界|分配|设计|审批)|(?:发布|审批|访问|编辑|读写|系统|角色|操作|数据)权限|访问控制|数据驻留|(?:数据|传输|存储|文件)加密|安全评审|隐私|敏感数据|脱敏)/.test(text)) {
         return { intent: 'fde_security', confidence: 0.92, answerShape: getAnswerShapeForMode('fde', 'fde_security') };
     }
-    if (/(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|non-conformance|quality risk|audit risk|impact|affect)/i.test(text)
-        || /(阻塞|卡住|依赖|风险|延期|迁移|切换|回滚|边界情况|上线风险|不确定|质量风险|审计风险|偏差|影响)/.test(text)) {
+    if (/\b(blocker|blocked (?:by|on)|depends on|(?:main|biggest|key|major|delivery|project|technical|rollback|migration|any) risks?|risks? (?:is|are|of)|may delay|will delay|cutover|rollback (?:plan|strategy)|edge case|launch risk|non-conformance|quality risk|audit risk)\b/i.test(text)
+        || /(阻塞|依赖(?:于|.{0,12}(?:完成|解决|就绪))|(?:有什么|有哪些|主要|最大的?|关键|交付|项目|技术|实施|上线|迁移|延期)风险|风险(?:是|在于|点|评估)|延期|迁移(?:方案|计划|失败|延期)|回滚(?:方案|计划|策略)|边界情况|质量风险|审计风险|(?:会|将)影响)/.test(text)) {
         return { intent: 'fde_risk', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_risk') };
     }
-    if (/(agent|AI agent|automation|human in the loop|approval flow|tool call|read[- ]?only|write back|auto[- ]?write|write to PLM|write to QMS)/i.test(text)
-        || /(智能体|AI Agent|自动化|人审|人工确认|审批流|工具调用|只读|写回|自动写入|写入 PLM|写入 QMS)/.test(text)) {
+    if (/\b(AI agents?|human in the loop|approval flow|tool call|read[- ]?only|write back|auto[- ]?write|write to PLM|write to QMS)\b/i.test(text)
+        || /(智能体|AI Agent|人审|人工确认|审批流|工具调用|只读|写回|自动写入|写入 PLM|写入 QMS)/.test(text)) {
         return { intent: 'fde_agent_feasibility', confidence: 0.87, answerShape: getAnswerShapeForMode('fde', 'fde_agent_feasibility') };
     }
-    if (/(next step|owner|follow up|action item|rollout plan|launch plan|go live|by friday|by next week)/i.test(text)
-        || /(下一步|负责人|跟进|行动项|上线计划|推进计划|灰度|正式上线|周五前|下周)/.test(text)) {
+    if (/\b(next steps?|owner (?:is|will|for)|follow up|action item|rollout plan|launch plan|go live|by friday|by next week)\b/i.test(text)
+        || /(下一步(?:是|怎么|我们|就|安排|计划|需要|请|由|先)|下一步.{0,12}负责|负责人(?:是|定|确认)|跟进|行动项|上线计划|推进计划|灰度|正式上线|周五前|下周(?:前|给|提交|交付|完成|上线|之前|确认))/.test(text)) {
         return { intent: 'fde_next_step', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_next_step') };
     }
-    if (/(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database|warehouse|environment|sandbox|production|staging|integration|data direction|read[- ]?write boundary)/i.test(text)
-        || /(API 接口|接口|端点|回调|单点登录|数据源|数据库|数仓|环境|沙盒|生产环境|测试环境|集成|打通|数据方向|读写边界)/.test(text)) {
+    if (/\b(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database (?:access|connection|schema|sync)|data warehouse|(?:test|prod(?:uction)?|staging|sandbox|dev) environment|production (?:environment|system|instance|deployment)|sandbox|staging|integration (?:with|details?|plans?|points?|approach)|integrat(?:e|ed|ing) with|data direction|read[- ]?write boundary)\b/i.test(text)
+        || /(API 接口|接口(?:怎么|如何|文档|方向|对接|规范|开发|调用|是否|能不能|权限)|(?:ERP|MES|PLM|QMS|CRM|系统).{0,6}接口|端点|回调|单点登录|数据源|数据库|数仓|(?:测试|生产|开发|部署|沙盒|服务器)环境|沙盒|(?:系统)?集成(?:方案|方式|到|进)|(?:和|与|跟).{0,12}集成|打通|数据方向|读写边界)/.test(text)) {
         return { intent: 'fde_integration', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_integration') };
     }
-    if (/(success criteria|acceptance criteria|acceptance test|pilot|POC|measurement|metric|KPI|validation|sign off)/i.test(text)
-        || /(验收标准|成功标准|试点|验证|指标|度量|KPI|验收测试|通过标准|效果衡量)/.test(text)) {
+    if (/\b(success criteria|acceptance criteria|acceptance test|pilot|POC|success metrics?|validation (?:criteria|plan|tests?|artifacts?)|KPI|sign off)\b/i.test(text)
+        || /(验收标准|成功标准|试点|(?:验证|验收)(?:标准|方案|计划|指标|数据)|(?:怎么|如何)验证|(?:成功|验收|考核|效果|关键)指标|指标(?:是|怎么|如何)|KPI|验收测试|通过标准|效果衡量)/.test(text)) {
         return { intent: 'fde_success', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_success') };
     }
-    if (/(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|revision|version|release|part number|drawing|material master|routing|manufacturing|quality object)/i.test(text)
-        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|谁负责|干系人|业务场景|客户现场|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|版本|变更单|发布|图纸|物料|工艺|质量对象)/.test(text)) {
+    if (/\b(current (?:customer )?workflow|current process|business process|user workflow|stakeholder|business requirements|what are you trying to solve|what does success look like|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|drawing revision|version control|release process|part number|material master|manufacturing routing|quality object)\b/i.test(text)
+        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|干系人|业务场景|客户现场|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|版本(?:管理|控制|不一致|追溯|规则)|(?:图纸|物料|BOM|设计)版本|变更单|(?:图纸|BOM|版本|设计)发布|发布流程|图纸|物料|工艺|质量对象)/.test(text)
+        || mentionsProductTopic(text)) {
         return { intent: 'fde_discovery', confidence: 0.85, answerShape: getAnswerShapeForMode('fde', 'fde_discovery') };
     }
     return null;

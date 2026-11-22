@@ -1,0 +1,20 @@
+// Keyword CSVs that earlier releases seeded as defaults. Migrations upgrade a
+// stored row only when it still equals one of these exactly, so user edits stay.
+export const LEGACY_INTENT_KEYWORD_DEFAULTS_V39: ReadonlyArray<readonly [templateType: string, intent: string, keywordsCsv: string]> = [
+    ['team-meet', 'capture_action', 'i.ll do,i.ll send,i.ll handle,i.ll own,i.ll take,i.ll follow up,i.ll write,i.ll ship,i.ll PR,i.ll merge,i.m gonna,let me by,action item,to-do,assigned to,owner is,i can have by,by monday,by tuesday,by wednesday,by thursday,by friday,by EOD,by EOW,by next week,我来做,我来发,我来负责,我来处理,我跟进,我写,我来 PR,我提,我合,交给我,我包了,分配给,行动项,待办,跟进项,周五前,周一前,下周三前,今天内,尽快,交付'],
+    ['team-meet', 'capture_decision', 'we decided,let.s go with,going with,final decision,approved,signed off,greenlit,consensus is,the team agreed,we.re going to use,ship it,merged,locked in,confirmed we,决定了,决定用,决定走,决定采用,就选,就用,就上,定了,通过了,批准了,确认用,最终决定,定下来了,达成一致,大家同意,采用'],
+    ['team-meet', 'capture_risk', 'blocker,blocked by,blocked on,stuck on,stuck at,risk,at risk,slipping,will miss,behind schedule,dependency on,dependency blocking,waiting on,depends on,not gonna make,impacting timeline,regression,阻塞,被卡,卡住,卡在,风险,延期,推迟,完不成,赶不上,影响进度,依赖,被阻塞,短板,出了点问题'],
+    ['fde', 'fde_agent_feasibility', 'AI Agent,agent,automation,human in the loop,human confirmation,approval flow,tool call,read-only,write-back,auto-write,write to PLM,write to QMS,智能体,自动化,人工确认,人审,审批流,工具调用,只读,写回,自动写入,写入 PLM,写入 QMS'],
+    ['fde', 'fde_discovery', 'current workflow,current process,business process,user workflow,stakeholder,requirements,what are you trying to solve,what does success look like,现有流程,当前流程,业务流程,用户流程,需求是什么,想解决什么,谁会使用,谁负责,干系人,业务场景,客户现场'],
+    ['fde', 'fde_integration', 'API,endpoint,webhook,SSO,SAML,OAuth,SCIM,data source,database,warehouse,environment,sandbox,production,staging,integration,API 接口,接口,端点,回调,单点登录,数据源,数据库,数仓,环境,沙盒,生产环境,测试环境,集成,打通'],
+    ['fde', 'fde_integration', 'API,endpoint,webhook,SSO,SAML,OAuth,SCIM,data source,database,warehouse,environment,sandbox,production,staging,integration,PLM,QMS,ERP,MES,document system,data direction,read-write boundary,role,permission,API 接口,接口,端点,回调,单点登录,数据源,数据库,数仓,环境,沙盒,生产环境,测试环境,集成,打通,文档系统,数据方向,读写边界,角色,权限'],
+    ['fde', 'fde_next_step', 'next step,owner,follow up,action item,rollout plan,launch plan,go live,by Friday,by next week,下一步,负责人,跟进,行动项,上线计划,推进计划,灰度,正式上线,周五前,下周,排期'],
+    ['fde', 'fde_risk', 'blocker,blocked,dependency,risk,timeline,delay,migration,cutover,rollback,edge case,launch risk,阻塞,卡住,流程卡在,审批卡在,项目卡在,交付卡在,卡在质量部门,卡在法务环节,卡在审批环节,卡在验收环节,依赖,风险,延期,迁移,切换,回滚,边界情况,上线风险,不确定'],
+    ['fde', 'fde_risk', 'blocker,blocked,dependency,risk,timeline,delay,migration,cutover,rollback,edge case,launch risk,阻塞,卡住,依赖,风险,延期,迁移,切换,回滚,边界情况,上线风险,不确定'],
+    ['fde', 'fde_security', 'PII,SOC2,compliance,audit log,permission,permissions,access control,data residency,encryption,security review,privacy,PII,合规,审计日志,权限,访问控制,数据驻留,加密,安全评审,隐私,敏感数据,脱敏'],
+    ['fde', 'fde_success', 'success criteria,acceptance criteria,acceptance test,pilot,POC,measurement,metric,KPI,validation,sign off,验收标准,成功标准,试点,验证,指标,度量,KPI,验收测试,通过标准,效果衡量'],
+    ['sales', 'sales_pain_discovery', 'broken workflow,manual workaround,duplicated entry,out of sync,version mismatch,workflow pain,流程不同步,靠邮件通知,靠 Excel 跟踪,重复录入,版本不一致,流程断点,返工停线,审计痛苦'],
+    ['sales', 'sales_technical_requirements', 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式,实施周期通常多久,实施周期多久,交付周期多久,部署周期多久,上线和数据迁移有什么风险,数据迁移有什么风险,上线有什么风险'],
+    ['sales', 'sales_technical_requirements', 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式'],
+    ['team-meet', 'status_update', 'where are we,where do we stand,status update,what.s the status,how.s going,any progress on,update on,progress on,current status,where are we on,进度,状态,现在怎样,现在如何,进展,到哪了,卡在哪,进展如何,进度怎么样,谁负责,负责人是谁,预计什么时候,截止日期,时间线,预计交付,ETA'],
+];

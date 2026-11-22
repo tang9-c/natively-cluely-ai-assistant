@@ -11,9 +11,11 @@ const dbSource = fs.readFileSync(dbPath, 'utf8');
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron');
 const databaseModule = await import(pathToFileURL(path.join(distRoot, 'db/DatabaseManager.js')).href);
 const modeContextModule = await import(pathToFileURL(path.join(distRoot, 'services/ModeDefaultContexts.js')).href);
+const legacyKeywordModule = await import(pathToFileURL(path.join(distRoot, 'db/legacyIntentKeywordDefaults.js')).href);
+const keywordDefaultsModule = await import(pathToFileURL(path.join(distRoot, 'llm/IntentKeywordDefaults.js')).href);
 
 const { DatabaseManager } = databaseModule;
-const { getDefaultModeCustomContext } = modeContextModule;
+const { getDefaultModeCustomContext, LEGACY_DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE } = modeContextModule;
 const LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT = '你是 FDE 现场交付副驾驶。优先澄清客户工作流、系统边界、数据流、权限、安全合规、上线约束和成功标准。回答时先讲技术可行性与验证路径，再给出最小下一步；不要跳过未知项或替客户假设环境。';
 
 function runFromV26(customContext) {
@@ -52,6 +54,7 @@ function runFromVersion(version, customContext) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(mode_id, intent)
     );
+    CREATE TABLE speaker_profile_stats (profile_id TEXT PRIMARY KEY);
   `);
   db.pragma(`user_version = ${version}`);
   db.prepare('INSERT INTO modes (id, name, template_type, custom_context, is_active) VALUES (?, ?, ?, ?, 1)')
@@ -125,7 +128,7 @@ describe('Mode database migrations', () => {
   test('v27 migration upgrades legacy default FDE custom_context to the canonical manufacturing profile', () => {
     const migrated = runFromV26(LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT);
     assert.equal(migrated, getDefaultModeCustomContext('fde'));
-    assert.match(migrated, /制造业研发流程/);
+    assert.match(migrated, /工业软件售前/);
     assert.match(migrated, /QMS/);
     assert.match(migrated, /AI Agent/);
   });
@@ -149,7 +152,7 @@ describe('Mode database migrations', () => {
 
     const migrated = runFromV29(LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT);
     assert.equal(migrated, getDefaultModeCustomContext('fde'));
-    assert.match(migrated, /制造业 PLM \/ QMS \/ 企业 AI Agent/);
+    assert.match(migrated, /工业软件售前、技术服务与咨询 FDE/);
     assert.doesNotMatch(migrated, /FDE 现场交付副驾驶/);
   });
 
@@ -185,7 +188,55 @@ describe('Mode database migrations', () => {
     assert.match(value('sales-default', 'sales_technical_requirements'), /实施周期通常多久/);
     assert.match(value('sales-default', 'sales_technical_requirements'), /上线和数据迁移有什么风险/);
     assert.equal(value('sales-custom', 'sales_pricing_objection'), '客户自定义价格词');
-    assert.equal(db.pragma('user_version', { simple: true }), 38);
+    assert.equal(db.pragma('user_version', { simple: true }), 39);
+  });
+
+  test('v38 -> v39 upgrades the unchanged manufacturing FDE default context and keeps custom text', () => {
+    const manufacturingDefault = LEGACY_DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE.fde
+      .find((context) => context.includes('制造业 PLM / QMS / 企业 AI Agent 部署 FDE'));
+    assert.ok(manufacturingDefault, 'previous FDE default must be registered as legacy');
+    assert.equal(runFromVersion(38, manufacturingDefault), getDefaultModeCustomContext('fde'));
+    const custom = '本场只聊 Abaqus 非线性接触。';
+    assert.equal(runFromVersion(38, custom), custom);
+  });
+
+  test('v38 -> v39 tightens only unchanged shipped intent keyword defaults', () => {
+    const { LEGACY_INTENT_KEYWORD_DEFAULTS_V39 } = legacyKeywordModule;
+    const { DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE } = keywordDefaultsModule;
+    const legacy = (templateType, intent) => LEGACY_INTENT_KEYWORD_DEFAULTS_V39
+      .find(([type, name]) => type === templateType && name === intent)[2];
+    const current = (templateType, intent) => DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[templateType]
+      .find((row) => row.intent === intent).keywordsCsv;
+
+    const db = new Database(':memory:');
+    db.exec(`
+      CREATE TABLE modes (id TEXT PRIMARY KEY, name TEXT NOT NULL, template_type TEXT NOT NULL DEFAULT 'general',
+        custom_context TEXT NOT NULL DEFAULT '', is_active INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE mode_intent_keywords (id TEXT PRIMARY KEY, mode_id TEXT NOT NULL, intent TEXT NOT NULL,
+        keywords_csv TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(mode_id, intent));
+      CREATE TABLE speaker_profile_stats (profile_id TEXT PRIMARY KEY);
+      CREATE TABLE meetings (id TEXT PRIMARY KEY);
+      CREATE TABLE transcripts (id INTEGER PRIMARY KEY, meeting_id TEXT);
+    `);
+    db.pragma('user_version = 38');
+    db.prepare('INSERT INTO modes (id, name, template_type) VALUES (?, ?, ?)').run('fde-default', 'FDE', 'fde');
+    db.prepare('INSERT INTO modes (id, name, template_type) VALUES (?, ?, ?)').run('team-default', 'Team', 'team-meet');
+    const insert = db.prepare('INSERT INTO mode_intent_keywords (id, mode_id, intent, keywords_csv) VALUES (?, ?, ?, ?)');
+    insert.run('fde-risk', 'fde-default', 'fde_risk', legacy('fde', 'fde_risk'));
+    insert.run('fde-next', 'fde-default', 'fde_next_step', '用户自定义下一步词');
+    insert.run('team-risk', 'team-default', 'capture_risk', legacy('team-meet', 'capture_risk'));
+
+    const manager = Object.create(DatabaseManager.prototype);
+    manager.db = db;
+    manager.runMigrations();
+
+    const value = (id) => db.prepare('SELECT keywords_csv FROM mode_intent_keywords WHERE id = ?').get(id).keywords_csv;
+    assert.equal(value('fde-risk'), current('fde', 'fde_risk'));
+    assert.equal(value('team-risk'), current('team-meet', 'capture_risk'));
+    assert.equal(value('fde-next'), '用户自定义下一步词');
+    assert.doesNotMatch(value('fde-risk'), /(?:^|,)(?:risk|风险|依赖)(?:,|$)/);
+    assert.equal(db.pragma('user_version', { simple: true }), 39);
   });
 
   test('v21 -> v22 migration is registered for FDE seed backfill', () => {

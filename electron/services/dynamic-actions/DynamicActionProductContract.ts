@@ -101,7 +101,7 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
     }
     if (input.type === 'fde_grounded_answer') {
         return {
-            whyNow: '客户已补充流程、角色、质量对象或 AI 边界信息，可以基于可信资料回应。',
+            whyNow: '客户已补充流程、角色、工程或质量对象、AI 边界信息，可以基于可信资料回应。',
             severity: 'info',
         };
     }
@@ -136,13 +136,13 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
         return { whyNow: 'AI Agent 的自动化边界已经出现，需要先明确人工确认、只读分析，以及不可自动写回的边界。', severity: 'warning' };
     }
     if (input.type === 'fde_discovery_probe') {
-        return { whyNow: '客户正在描述制造业流程或系统对象，适合马上澄清 PLM/QMS 对象、角色、权限和验证产物。', severity: 'info' };
+        return { whyNow: '客户正在描述业务流程或工程对象，适合马上澄清对象、角色、权限和验证产物。', severity: 'info' };
     }
     if (input.type === 'fde_integration_check') {
-        return { whyNow: '讨论已经进入 PLM/QMS/ERP/MES 集成与权限边界，需要确认数据方向、读写边界和验证产物。', severity: 'info' };
+        return { whyNow: '讨论已经进入系统集成与权限边界，需要确认数据方向、读写边界和验证产物。', severity: 'info' };
     }
     if (input.type === 'fde_risk_blocker') {
-        return { whyNow: '会议出现客户流程风险、系统权限风险、交付风险、AI Agent 误判风险或信息缺失，需要先分类再推进。', severity: 'warning' };
+        return { whyNow: '会议出现客户流程风险、系统权限风险、交付风险或信息缺失，需要先分类再推进。', severity: 'warning' };
     }
     if (input.type === 'fde_next_step') {
         return { whyNow: '下一步必须锁定 owner、date、artifact、测试数据和验收标准，缺字段时要直接追问。', severity: 'ok' };
@@ -188,13 +188,17 @@ function buildUserAction(input: ContractInput, outputType: DynamicActionOutputTy
     if (input.type === 'candidate_experience_probe') return '补问一个事实';
     if (input.type === 'strong_fit_signal') return '回应候选人的岗位兴趣';
     if (/pricing|objection|pushback|budget/.test(input.type)) return '回应价格异议';
-    if (input.type === 'fde_discovery_probe') return '澄清制造业流程和系统对象';
+    if (input.type === 'fde_discovery_probe') return '澄清业务流程和系统对象';
     if (input.type === 'fde_integration_check') return '锁定集成、权限和读写边界';
-    if (input.type === 'fde_security_review') return '确认权限、审计和质量记录边界';
+    if (input.type === 'fde_security_review') return '确认权限、审计和数据记录边界';
     if (input.type === 'fde_agent_feasibility') return '判断 AI Agent 可行性边界';
     if (input.type === 'fde_next_step') return '锁定 owner/date/artifact 下一步';
+    if (input.type === 'fde_success_criteria') return '定义验收标准';
+    if (input.type === 'fde_risk_blocker') return '澄清交付风险和下一步';
     if (input.type === 'buying_signal') return '锁定下一步';
-    if (/fde_|blocker|risk/.test(input.type)) return '澄清部署风险和下一步';
+    if (input.type === 'blocker_check') return '明确阻塞影响和解法';
+    if (input.type === 'owner_deadline_check') return '确认负责人和截止时间';
+    if (/fde_|blocker|risk/.test(input.type)) return '澄清风险和下一步';
     if (outputType === 'action_item') return '确认负责人和截止时间';
     if (outputType === 'decision_record') return '记录当前决策';
     if (outputType === 'email_draft') return '生成后续邮件草稿';

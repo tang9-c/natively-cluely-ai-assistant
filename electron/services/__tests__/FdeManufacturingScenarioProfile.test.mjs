@@ -19,7 +19,11 @@ test('fde canonical default context ships editable manufacturing deployment temp
   const modeDefaults = fs.readFileSync(path.join(root, 'electron/services/ModeDefaultContexts.ts'), 'utf8');
   const fdeBlock = modeDefaults.match(/fde:\s*\[[\s\S]*?\]\.join\('\\n'\)/)?.[0] ?? '';
 
-  assert.match(fdeBlock, /制造业 PLM \/ QMS \/ 企业 AI Agent 部署 FDE/);
+  assert.match(fdeBlock, /工业软件售前、技术服务与咨询 FDE/);
+  for (const product of ['Creo', 'Windchill', 'QMS', 'CATIA', 'Abaqus', 'CST', 'SolidWorks']) {
+    assert.match(fdeBlock, new RegExp(product));
+  }
+  assert.match(fdeBlock, /本场重点产品和客户场景/);
   assert.match(fdeBlock, /不可承诺事项|不替客户做流程承诺|不承诺未经验证/);
   assert.match(fdeBlock, /交付边界|只读查询|不自动创建|不自动.*写入/);
   assert.match(fdeBlock, /已知风险|待验证假设|假设.*验证/);

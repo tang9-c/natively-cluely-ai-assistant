@@ -26,7 +26,7 @@ const MODE_CONTRACT_TERMS = {
   'looking-for-work': ['候选人', '面试', '简历', '薪资'],
   'technical-interview': ['技术面试', '编程', '系统设计', '复杂度', 'Edge cases'],
   lecture: ['学生', '讲座', '学习伙伴', '概念', '作业', '学科'],
-  fde: ['制造业 PLM / QMS / 企业 AI Agent 部署 FDE', '客户现场', '捕捉模式', '现场发言模式', '风险', '验证步骤'],
+  fde: ['工业软件（CAD / CAE / 电磁仿真 / PLM / QMS）售前、技术服务与咨询 FDE', '客户现场', '捕捉模式', '现场发言模式', '风险', '验证步骤'],
 };
 
 const UNIQUE_MODE_TERMS = {
@@ -37,7 +37,7 @@ const UNIQUE_MODE_TERMS = {
   'looking-for-work': ['面试', '简历'],
   'technical-interview': ['编程', '系统设计'],
   lecture: ['讲座', '学习伙伴'],
-  fde: ['制造业 PLM / QMS / 企业 AI Agent 部署 FDE', '现场发言模式'],
+  fde: ['工业软件（CAD / CAE / 电磁仿真 / PLM / QMS）售前、技术服务与咨询 FDE', '现场发言模式'],
 };
 
 function assertIncludesAll(text, terms, label) {
