@@ -60,6 +60,21 @@ test('three consecutive attempts survive immediate errors and reset only after f
   for(let i=0;i<=5;i++) { g.m.observeHeartbeat(token,g.c.now()); g.m.recordData(token,640); await g.c.tick(1000); }
   assert.equal(g.m.attempts,0); g.m.stop();
 });
+test('silence-gated system audio resets the retry budget after five seconds of advancing raw callbacks', async () => {
+  // In-room meetings play nothing on the speakers, so speech-gated 'data' never arrives;
+  // isolated stalls hours apart must not add up to a terminal failure.
+  const f = monitorFixture(); let token = f.token;
+  for (let stall = 1; stall <= 5; stall++) {
+    assert.equal(f.m.beginRecovery(token), true, `stall ${stall} should still be retried`);
+    token = f.m.bind(); f.m.start(token, true);
+    let samples = 0;
+    for (let i = 0; i < 24; i++) { samples += 4800; f.m.observeHeartbeat(token, samples); await f.c.tick(250); }
+  }
+  assert.notEqual(f.m.state, 'failed'); assert.equal(f.m.attempts, 0); f.m.stop();
+  const g = monitorFixture(); token = g.token;
+  for (let i = 1; i <= 3; i++) { assert.equal(g.m.beginRecovery(token), true); token = g.m.bind(); g.m.start(token, true); g.m.observeHeartbeat(token, 4800); await g.c.tick(100); }
+  assert.equal(g.m.beginRecovery(token), false); assert.equal(g.m.state, 'failed'); g.m.stop();
+});
 test('permission failure is terminal without consuming retries or accepting late audio', () => {
   const f=monitorFixture(); assert.equal(f.m.beginRecovery(f.token,true),false);
   f.m.recordData(f.token,640); assert.equal(f.m.state,'failed'); assert.equal(f.m.attempts,0); f.m.stop();

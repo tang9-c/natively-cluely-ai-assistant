@@ -18,6 +18,7 @@ export class AudioCaptureHealthMonitor {
     private receivedSamples: number | null = null;
     private firstDataAt: number | null = null;
     private lastDataAt: number | null = null;
+    private firstHeartbeatAt: number | null = null;
     private timer: ReturnType<typeof setTimeout> | null = null;
     private readonly clock: HealthClock;
 
@@ -49,7 +50,11 @@ export class AudioCaptureHealthMonitor {
         if (!this.accepts(token) || !Number.isSafeInteger(receivedSamples) || receivedSamples < 0) return;
         this.continuous = true;
         if (this.receivedSamples === null ? receivedSamples > 0 : receivedSamples !== this.receivedSamples) {
-            this.lastHeartbeatAt = this.clock.now();
+            // Speech-gated system audio may never emit data; sustained raw callbacks also prove recovery.
+            const now = this.clock.now();
+            if (this.firstHeartbeatAt === null || now - this.lastHeartbeatAt > 1000) this.firstHeartbeatAt = now;
+            else if (now - this.firstHeartbeatAt >= 5000) this.attempts = 0;
+            this.lastHeartbeatAt = now;
         }
         this.receivedSamples = receivedSamples;
         this.armWatchdog(token);
@@ -68,7 +73,7 @@ export class AudioCaptureHealthMonitor {
         if (token !== this.token || this.state === 'failed' || this.recovering) return false;
         this.clearTimer();
         this.active = false;
-        this.firstDataAt = this.lastDataAt = null;
+        this.firstDataAt = this.lastDataAt = this.firstHeartbeatAt = null;
         if (permanent || this.attempts >= 3) {
             this.setState('failed');
             return false;
@@ -93,7 +98,7 @@ export class AudioCaptureHealthMonitor {
     public stop(): void {
         this.clearTimer();
         this.active = false;
-        this.firstDataAt = this.lastDataAt = null;
+        this.firstDataAt = this.lastDataAt = this.firstHeartbeatAt = null;
         this.token++;
     }
 
