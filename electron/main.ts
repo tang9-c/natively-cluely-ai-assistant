@@ -2736,20 +2736,49 @@ export class AppState {
     let epoch = this._audioCaptureEpoch;
     const isCurrent = () => this.isMeetingActive && epoch === this._audioCaptureEpoch &&
       (channel === 'system' ? this.systemAudioCapture : this.microphoneCapture) === capture && health.isCurrent(token);
+    // Diagnostics only: enumerated reasons and timings, never raw error text or audio.
+    let startedAt = 0, firstSampleMs: number | null = null, firstDataMs: number | null = null, lastSamples: number | null = null;
     capture.on('start', () => {
       if (!this.isMeetingActive || (channel === 'system' ? this.systemAudioCapture : this.microphoneCapture) !== capture) return;
       epoch = this._audioCaptureEpoch;
       token = health.bind();
+      startedAt = Date.now(); firstSampleMs = firstDataMs = lastSamples = null;
       health.start(token, capture.supportsContinuousHeartbeat());
     });
-    capture.on('heartbeat', (samples: number) => { if (isCurrent()) health.observeHeartbeat(token, samples); });
-    capture.on('data', (chunk: Buffer) => { if (isCurrent()) health.recordData(token, chunk.length); });
+    capture.on('heartbeat', (samples: number) => {
+      if (!isCurrent()) return;
+      lastSamples = samples;
+      if (firstSampleMs === null && samples > 0) {
+        firstSampleMs = Date.now() - startedAt;
+        if (health.attempts > 0) console.log(`[Main] Capture health ${channel}: first raw samples ${firstSampleMs}ms after recovery start (attempt ${health.attempts})`);
+      }
+      health.observeHeartbeat(token, samples);
+    });
+    capture.on('data', (chunk: Buffer) => {
+      if (!isCurrent()) return;
+      if (firstDataMs === null) {
+        firstDataMs = Date.now() - startedAt;
+        if (health.attempts > 0) console.log(`[Main] Capture health ${channel}: first chunk ${firstDataMs}ms after recovery start (attempt ${health.attempts})`);
+      }
+      health.recordData(token, chunk.length);
+    });
     capture.on('stop', () => { if (health.isCurrent(token)) health.stop(); });
     capture.on('error', (err: Error) => {
       if (!isCurrent()) return;
       const permanent = isNativeAudioModuleUnavailable(err) || /(?:permission|access).*denied|not authorized|not permitted|EACCES|EPERM/i.test(err.message);
+      const message = err?.message ?? '';
+      const reason = message === 'Capture raw callbacks stopped' ? 'watchdog-stall'
+        : message.startsWith('System resumed') ? 'system-resume'
+        : message === 'Default output route changed' ? 'output-route-changed'
+        : permanent ? 'permission-or-native-unavailable' : 'native-callback-error';
+      let backend = 'n/a';
+      try { if (channel === 'system') backend = (capture as SystemAudioCapture).getBackendName(); } catch { /* diagnostics only */ }
+      console.warn(`[Main] Capture health ${channel}: recovery trigger=${reason} attemptsBefore=${health.attempts} state=${health.state} backend=${backend} sinceStartMs=${startedAt ? Date.now() - startedAt : -1} firstSampleMs=${firstSampleMs ?? 'none'} firstDataMs=${firstDataMs ?? 'none'} receivedSamples=${lastSamples ?? 'none'}`);
       if (!health.beginRecovery(token, permanent)) {
         if (health.state === 'failed') {
+          let provider = 'unknown';
+          try { provider = require('./services/CredentialsManager').CredentialsManager.getInstance().getSttProvider(); } catch { /* diagnostics only */ }
+          console.error(`[Main] Capture health ${channel}: FAILED after trigger=${reason} attempts=${health.attempts} permanent=${permanent} sttProvider=${provider}`);
           if (channel === 'system') this.systemAudioCapture = null;
           else this.microphoneCapture = null;
           void this.releaseAudioCapture(capture);
@@ -2824,6 +2853,7 @@ export class AppState {
           if (!isCurrent()) return;
           // A constructor failure uses the same budget; no second retry scheduler.
           const health = this._captureHealth[channel]!;
+          console.warn(`[Main] Capture health ${channel}: recovery trigger=constructor-failure attemptsBefore=${health.attempts}`);
           const permanent = isNativeAudioModuleUnavailable(err) ||
             (err instanceof Error && /(?:permission|access).*denied|not authorized|not permitted|EACCES|EPERM/i.test(err.message));
           if (!health.beginRecovery(health.bind(), permanent)) return;
