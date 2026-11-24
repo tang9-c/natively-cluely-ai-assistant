@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.7.30] - 2026-11-24
+
+### Fixed
+
+- Replenish the system audio capture retry budget after five seconds of advancing raw callbacks, including during silence.
+
+### Changed
+
+- Log capture recovery reasons, retry counts, and timing to the first raw samples and first audio chunk.
+
 ## [2.7.29] - 2026-11-22
 
 ### Changed
