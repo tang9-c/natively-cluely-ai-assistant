@@ -13,12 +13,29 @@ const SYSTEM_HINTS: Array<{ pattern: RegExp; sourceHint: BusinessSystemSourceKin
     { pattern: /\bCRM\b/i, sourceHint: 'crm' },
 ];
 
-const OBJECT_ANCHOR_PATTERN = /\b(?:BOM|ECO|ECN|CAPA|NCR|8D|IQC|OQC|IPQC|工单|合同|客户档案|客户|物料|项目|图纸|需求|问题|质量事件|质量记录|偏差|审批|负责人|进度|状态|库存|版本)\b|[A-Za-z]{1,8}[-_ ]?\d{2,}|[A-Za-z]\d{2,}|\b\d{4,}\b|[\u4e00-\u9fa5A-Za-z0-9]+(?:项目|物料|图纸|需求|问题|变更|版本|进度|负责人|状态|包装问题|质量问题|合同|客户档案)/i;
+// JS `\b` only recognizes ASCII word boundaries, so Chinese object words must not be wrapped in `\b`.
+const OBJECT_ANCHOR_PATTERN = /\b(?:BOM|ECO|ECN|CAPA|NCR|8D|IQC|OQC|IPQC)\b|(?:工单|合同|客户档案|客户|物料|项目|图纸|需求|问题|质量事件|质量记录|偏差|审批|负责人|进度|状态|库存|版本)|[A-Za-z]{1,8}[-_ ]?\d{2,}|[A-Za-z]\d{2,}|\b\d{4,}\b|[\u4e00-\u9fa5A-Za-z0-9]+(?:项目|物料|图纸|需求|问题|变更|版本|进度|负责人|状态|包装问题|质量问题|合同|客户档案)/i;
 
 const VAGUE_ONLY_PATTERN = /(这个|这个怎么样|刚才那个|上次那个|它|该项|这个问题)$/;
 
+// ASR sometimes spells acronyms letter by letter ("P L M"); only merge known system/object acronyms.
+const SPACED_ACRONYM_PATTERN = /\b([A-Za-z])\s([A-Za-z])\s([A-Za-z])\b/g;
+const MERGEABLE_ACRONYMS = new Set(['PLM', 'QMS', 'ERP', 'MES', 'CRM', 'BOM', 'ECO', 'ECN', 'NCR']);
+// Full-width letters/digits/-/_ only; Chinese punctuation such as ，？ is kept as spoken.
+const FULL_WIDTH_ALNUM_PATTERN = /[Ａ-Ｚａ-ｚ０-９－＿]/g;
+
 function compact(value?: string): string {
-    return String(value || '').replace(/\s+/g, ' ').trim();
+    return String(value || '')
+        .replace(FULL_WIDTH_ALNUM_PATTERN, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeQuestion(value?: string): string {
+    return compact(value).replace(SPACED_ACRONYM_PATTERN, (match, a: string, b: string, c: string) => {
+        const merged = `${a}${b}${c}`;
+        return MERGEABLE_ACRONYMS.has(merged.toUpperCase()) ? merged : match;
+    });
 }
 
 function summarizeRecentContext(value?: string): string {
@@ -45,7 +62,7 @@ function hasQueryAnchor(question: string, recentContext?: string): boolean {
 }
 
 export function detectBusinessSystemTrigger(question: string | undefined, recentContext?: string): BusinessSystemTriggerResult {
-    const cleanedQuestion = compact(question);
+    const cleanedQuestion = normalizeQuestion(question);
     const cleanedRecentContext = summarizeRecentContext(recentContext);
     const sourceHint = findSourceHint(cleanedQuestion);
 

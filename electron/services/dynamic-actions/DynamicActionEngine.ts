@@ -20,6 +20,9 @@ import type { IntentResult } from '../../llm/IntentClassifier';
 import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
 import type { TranscriptEmotionDegree, TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
 import { detectBusinessSystemTrigger } from '../business-system/BusinessSystemTriggerDetector';
+import type { BusinessSystemTriggerResult } from '../business-system/BusinessSystemTypes';
+import { redactForLog } from '../../utils/redactForLog';
+import { isVerboseLogging } from '../../verboseLog';
 
 const SALES_PROMPT_INSTRUCTIONS: Record<string, string> = {
     pricing_objection:
@@ -193,6 +196,7 @@ export class DynamicActionEngine {
         const matchedTriggers = params.detectedTriggers
             ?? this.detectSignalCandidates({ transcript, modeTemplateType, speaker });
         const businessTriggerResult = detectBusinessSystemTrigger(transcript);
+        this.logBusinessTrigger(businessTriggerResult, modeTemplateType);
         const businessTrigger = businessTriggerResult.shouldQuery
             ? this.syntheticTriggerFor('business_system_query', modeTemplateType)
             : null;
@@ -740,6 +744,17 @@ export class DynamicActionEngine {
         if (negative && objectionLike) return Math.min(0.98, confidence + boost);
         if (positive && positiveLike) return Math.min(0.98, confidence + boost);
         return confidence;
+    }
+
+    // Only logs turns that carried an explicit lookup request; never logs transcript text.
+    private logBusinessTrigger(result: BusinessSystemTriggerResult, modeTemplateType: string): void {
+        if (!isVerboseLogging()) return;
+        if (!result.shouldQuery && result.failureReason !== 'missing_query_anchor') return;
+        console.log(redactForLog(['[BusinessTrigger]', {
+            outcome: result.shouldQuery ? 'query' : result.failureReason,
+            sourceHint: result.sourceHint,
+            modeTemplateType,
+        }]));
     }
 
     private isStrongAutoSignal(type: string, confidence: number): boolean {

@@ -139,6 +139,43 @@ test('uses recent context summary to resolve a vague this request', async () => 
   assert.equal(result.query, '根据 PLM 回答一下这个怎么样');
 });
 
+test('recognizes Chinese business object anchors adjacent to Chinese text', async () => {
+  const { detectBusinessSystemTrigger } = await loadDetector();
+
+  for (const question of [
+    '查一下工单',
+    '帮我查一下库存',
+    '查一下合同的审批',
+  ]) {
+    const result = detectBusinessSystemTrigger(question);
+    assert.equal(result.shouldQuery, true, question);
+    assert.equal(result.sourceHint, 'business_system', question);
+  }
+});
+
+test('normalizes spaced-out and full-width system names from ASR', async () => {
+  const { detectBusinessSystemTrigger } = await loadDetector();
+
+  const spaced = detectBusinessSystemTrigger('查一下 P L M 里的 ECN-123');
+  assert.equal(spaced.shouldQuery, true);
+  assert.equal(spaced.sourceHint, 'plm');
+  assert.equal(spaced.query, '查一下 PLM 里的 ECN-123');
+
+  const fullWidth = detectBusinessSystemTrigger('查一下ＱＭＳ里的ＣＡＰＡ－１００１');
+  assert.equal(fullWidth.shouldQuery, true);
+  assert.equal(fullWidth.sourceHint, 'qms');
+  assert.equal(fullWidth.query, '查一下QMS里的CAPA-1001');
+});
+
+test('does not merge spaced letters that are not known system acronyms', async () => {
+  const { detectBusinessSystemTrigger } = await loadDetector();
+  const result = detectBusinessSystemTrigger('查一下 A B C 的 ECN-123');
+
+  assert.equal(result.shouldQuery, true);
+  assert.equal(result.query, '查一下 A B C 的 ECN-123');
+  assert.equal(result.sourceHint, 'business_system');
+});
+
 test('limits recent context to three compact sentences', async () => {
   const { detectBusinessSystemTrigger } = await loadDetector();
   const result = detectBusinessSystemTrigger(
