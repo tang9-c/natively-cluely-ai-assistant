@@ -39,3 +39,16 @@ test('sanitizeGenerateWhatToSayOptions accepts only bounded opaque request ids',
   assert.equal(sanitizeGenerateWhatToSayOptions({ requestId: 'bad\nrequest' }).requestId, undefined);
   assert.equal(sanitizeGenerateWhatToSayOptions({ requestId: 'x'.repeat(129) }).requestId, undefined);
 });
+
+test('explicit business source stays distinguishable from an omitted or invalid source', async () => {
+  const { sanitizeGenerateWhatToSayOptions } = await loadRequest();
+  assert.equal(sanitizeGenerateWhatToSayOptions({}).businessSystemSourceId, undefined);
+  const modeEvent = { latestTurn: '会议转写' };
+  assert.deepEqual(sanitizeGenerateWhatToSayOptions({ modeEvent }).modeEvent, modeEvent);
+  assert.deepEqual(sanitizeGenerateWhatToSayOptions({ businessSystemSourceId: ' crm-1 ', modeEvent }), {
+    businessSystemSourceId: 'crm-1',
+  });
+  for (const businessSystemSourceId of ['', 42, null]) {
+    assert.equal(sanitizeGenerateWhatToSayOptions({ businessSystemSourceId }).businessSystemSourceId, null);
+  }
+});

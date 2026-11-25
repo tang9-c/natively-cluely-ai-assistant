@@ -3758,15 +3758,24 @@ export function initializeIpcHandlers(appState: AppState): void {
       event,
       question?: string,
       imageTokens?: string[],
-      options?: { requestId?: string; promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
+      options?: { requestId?: string; promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext; businessSystemSourceId?: string },
       ) => {
         try {
         const requestOptions = sanitizeGenerateWhatToSayOptions(options);
+        const { businessSystemSourceId } = requestOptions;
+        const explicitBusinessQuery = businessSystemSourceId !== undefined;
+        if (explicitBusinessQuery && (
+          !businessSystemSourceId || requestOptions.source !== 'overlay'
+          || typeof question !== 'string' || !question.trim()
+          || (imageTokens != null && (!Array.isArray(imageTokens) || imageTokens.length > 0))
+        )) {
+          return { answer: null, error: '请选择有效的业务系统知识源，并输入文字问题。', statusCode: 'invalid-request' };
+        }
         const imagePaths = appState.processingHelper
           .getLLMHelper()
           .consumeChatImageGrants(event.sender.id, imageTokens);
         const intelligenceManager = appState.getIntelligenceManager();
-        intelligenceManager.reserveWhatShouldISayRequest(requestOptions.requestId);
+        if (!explicitBusinessQuery) intelligenceManager.reserveWhatShouldISayRequest(requestOptions.requestId);
         const providerScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
         const startedAt = Date.now();
         const answerId = `ans_${startedAt}_${crypto.randomBytes(6).toString('hex')}`;
@@ -3777,6 +3786,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           question,
           imagePaths,
           source: requestOptions.source,
+          businessSystemSourceId: businessSystemSourceId ?? undefined,
           modeEvent: sanitizedModeEvent,
           providerScopes,
           ragManager: appState.getRAGManager(),
@@ -3824,7 +3834,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           };
         }
 
-        if (sanitizedModeEvent?.actionType === 'business_system_query' && businessSystemResult.kind === 'context') {
+        if ((explicitBusinessQuery || sanitizedModeEvent?.actionType === 'business_system_query') && businessSystemResult.kind === 'context') {
           const sourceStatus: AnswerSourceStatus = {
             ragAttempted: false,
             ragReady,
@@ -3843,7 +3853,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             model: null,
             latencyMs: Date.now() - startedAt,
             contextUsed: {
-              currentTranscript: Boolean(question?.trim() || sanitizedModeEvent?.latestTurn?.trim()),
+              currentTranscript: !explicitBusinessQuery && Boolean(question?.trim() || sanitizedModeEvent?.latestTurn?.trim()),
               shortTermHistory: false,
               uploadedDocumentRag: false,
               historicalMeetings: false,
@@ -3884,7 +3894,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               answerId,
               surface: requestOptions.source,
               latencyMs: Date.now() - startedAt,
-              question,
+              question: explicitBusinessQuery ? undefined : question,
               ragReady,
               embeddingReady,
               screenContextStatus,
@@ -3906,6 +3916,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             imageCount: validatedImagePaths?.length || 0,
             usedImageInput: Boolean(validatedImagePaths?.length),
           };
+        }
+
+        if (explicitBusinessQuery) {
+          return { answer: '未能从所选业务系统取得查询结果。', statusCode: 'business-system-unavailable' };
         }
 
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript

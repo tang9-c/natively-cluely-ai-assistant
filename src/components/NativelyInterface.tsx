@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Code,
   Copy,
+  Database,
   HelpCircle,
   Image,
   LayoutGrid,
@@ -119,6 +120,8 @@ interface Message {
     currency: string;
   };
 }
+
+type BusinessSourceOption = { id: string; label: string };
 
 interface NativelyInterfaceProps {
   onEndMeeting?: () => void;
@@ -526,9 +529,40 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const shellRef = React.useRef<HTMLDivElement>(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [inputValue, setInputValue] = useState('');
+  const [businessSources, setBusinessSources] = useState<BusinessSourceOption[]>([]);
+  const [selectedBusinessSource, setSelectedBusinessSource] = useState<BusinessSourceOption | null>(null);
+  const businessQueryRequestRef = useRef<string | null>(null);
+  const resetBusinessQuery = useCallback(() => {
+    businessQueryRequestRef.current = null;
+    setSelectedBusinessSource(null);
+  }, []);
   const { shortcuts, isShortcutPressed } = useShortcuts();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const refreshBusinessSources = useCallback(async () => {
+    try {
+      const sources = (await window.electronAPI.getBusinessSystemKnowledgeSources?.() ?? [])
+        .filter((source) => source.enabled);
+      const labels = sources.map(({ id, name, url }) => {
+        if (name !== '会议对话' && sources.filter((source) => source.name === name).length === 1) {
+          return { id, label: name };
+        }
+        let host = '';
+        try { host = new URL(url).hostname; } catch { /* Saved source may be invalid. */ }
+        return { id, label: host ? `${name} · ${host}` : name };
+      });
+      setBusinessSources(labels.map(({ id, label }) => {
+        const matches = labels.filter((option) => option.label === label);
+        if (matches.length === 1 && label !== '会议对话') return { id, label };
+        const suffix = id.slice(-8);
+        const uniqueSuffix = matches.filter((option) => option.id.endsWith(suffix)).length === 1 ? suffix : id;
+        return { id, label: `${label} · ${uniqueSuffix}` };
+      }));
+    } catch {
+      setBusinessSources([]);
+    }
+  }, []);
+  useEffect(() => { void refreshBusinessSources(); }, [refreshBusinessSources]);
   const [sttUserStatus, setSttUserStatus] = useState<'connected' | 'reconnecting' | 'failed'>(
     'connected',
   );
@@ -1208,6 +1242,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     const unsub = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
       if (!isActive) {
+        resetBusinessQuery();
         setMeetingStartStatus(null);
         return;
       }
@@ -1225,7 +1260,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       mounted = false;
       unsub?.();
     };
-  }, []);
+  }, [resetBusinessQuery]);
 
   useEffect(() => {
     const cleanupStatus = window.electronAPI?.onMeetingStartStatus?.((status) => {
@@ -1724,11 +1759,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Session Reset Listener - Clears UI when a NEW meeting starts
   useEffect(() => {
-    if (!window.electronAPI?.onSessionReset) return;
-    const unsubscribe = window.electronAPI.onSessionReset(() => {
+    const unsubscribe = window.electronAPI?.onSessionReset?.(() => {
       console.log('[NativelyInterface] Resetting session state...');
       setMessages([]);
       setInputValue('');
+      resetBusinessQuery();
       setAttachedContext([]);
       setManualTranscript('');
       setVoiceInput('');
@@ -1743,8 +1778,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Maybe 'conversation_started' event?
       analytics.trackConversationStarted();
     });
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      businessQueryRequestRef.current = null;
+      unsubscribe?.();
+    };
+  }, [resetBusinessQuery]);
 
   const handleScreenshotAttach = (data: { path: string; preview: string; accessToken: string }) => {
     setIsExpanded(true);
@@ -3023,9 +3061,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const handleManualSubmit = async () => {
     if (!inputValue.trim() && attachedContext.length === 0) return;
+    if (businessQueryRequestRef.current) return;
 
     const userText = inputValue;
     const currentAttachments = attachedContext;
+    const businessSource = businessSources.find(({ id }) => id === selectedBusinessSource?.id)
+      ?? selectedBusinessSource;
+    if (businessSource && currentAttachments.length > 0) {
+      setMessages((prev) => [...prev, {
+        id: genMessageId(),
+        role: 'system',
+        text: '业务查询只支持文字，请移除附件或切回会议对话。',
+      }]);
+      return;
+    }
+    const responseId = genMessageId();
+    if (businessSource) businessQueryRequestRef.current = responseId;
 
     // Clear inputs immediately
     setInputValue('');
@@ -3071,22 +3122,42 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     setMessages((prev) => [
       ...prev,
       {
-        id: genMessageId(),
+        id: responseId,
         role: 'system',
-        text: '',
-        intent: 'chat',
+        text: businessSource ? '正在查询…' : '',
+        intent: businessSource ? 'business_system_query' : 'chat',
         isStreaming: true,
       },
     ]);
 
     setIsExpanded(true);
-    setIsProcessing(true);
+    if (!businessSource) setIsProcessing(true);
     setLatestAnswerTrace(null);
     setLatestAnswerCitations([]);
     setLatestCitationStatus('none');
     setCitationPreviewMessage(null);
     setLatestDegradedReason(undefined);
     setLatestChatSourceStatus(null);
+
+    if (businessSource) {
+      let answer = '未能从所选业务系统取得查询结果。';
+      try {
+        const result = await window.electronAPI.generateWhatToSay(userText.trim(), undefined, {
+          source: 'overlay',
+          requestId: responseId,
+          businessSystemSourceId: businessSource.id,
+        });
+        answer = result.answer || formatRealtimeAnswerStatusForDisplay(result.statusCode, result.error) || answer;
+      } catch {
+        answer = '业务系统查询失败，请稍后重试。';
+      }
+      if (businessQueryRequestRef.current !== responseId) return;
+      businessQueryRequestRef.current = null;
+      setMessages((prev) => prev.map((message) => message.id === responseId
+        ? { ...message, text: `${answer}\n\n来源：${businessSource.label}`, isStreaming: false }
+        : message));
+      return;
+    }
 
     try {
       // JIT RAG pre-flight: try to use indexed meeting context first
@@ -3626,6 +3697,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (isProcessing) {
         setIsProcessing(false);
       } else {
+        resetBusinessQuery();
         await window.electronAPI.resetIntelligence();
         setMessages([]);
         setAttachedContext([]);
@@ -3667,6 +3739,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (isProcessing) {
         setIsProcessing(false);
       } else {
+        resetBusinessQuery();
         await window.electronAPI.resetIntelligence();
         setMessages([]);
         setAttachedContext([]);
@@ -3705,7 +3778,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const handlers = generalHandlersRef.current;
       const target = e.target as HTMLElement;
       const isInput =
-        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT' || target.isContentEditable;
 
       if (isShortcutPressed(e, 'toggleVisibility')) {
         // Always allow toggling visibility
@@ -4798,7 +4872,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                 </div>
 
                 {/* Bottom Row */}
-                <div className="flex items-center justify-between mt-3 px-0.5">
+                <div className="relative flex items-center justify-between mt-3 px-0.5">
                   <div className="flex items-center gap-1.5">
                     <button
                       data-model-selector-toggle="true"
@@ -4909,6 +4983,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                     </div>
                   </div>
 
+                  <div className="absolute right-10 top-1/2 -translate-y-1/2 w-[124px] no-drag">
+                    <Database className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2" size={13} />
+                    <select
+                      aria-label="选择数据源"
+                      value={selectedBusinessSource?.id ?? ''}
+                      onFocus={() => void refreshBusinessSources()}
+                      onPointerDown={() => void refreshBusinessSources()}
+                      onChange={(event) => {
+                        const option = businessSources.find(({ id }) => id === event.target.value);
+                        setSelectedBusinessSource(option ?? null);
+                        textInputRef.current?.focus();
+                      }}
+                      className={`w-full h-[30px] appearance-none truncate rounded-lg border pl-8 pr-7 text-xs font-medium ${controlSurfaceClass}`}
+                      style={{ ...appearance.controlStyle, colorScheme: isLightTheme ? 'light' : 'dark' }}
+                    >
+                      <option value="">会议对话</option>
+                      {selectedBusinessSource && !businessSources.some(({ id }) => id === selectedBusinessSource.id) && (
+                        <option value={selectedBusinessSource.id} disabled>{selectedBusinessSource.label}</option>
+                      )}
+                      {businessSources.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" size={14} />
+                  </div>
                   <button
                     onClick={handleManualSubmit}
                     disabled={!inputValue.trim()}

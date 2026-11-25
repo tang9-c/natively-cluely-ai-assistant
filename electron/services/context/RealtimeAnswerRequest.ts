@@ -16,6 +16,7 @@ export interface SanitizedGenerateWhatToSayOptions {
     promptInstruction?: string;
     persist?: boolean;
     source?: 'overlay' | 'launcher' | 'dynamic_action';
+    businessSystemSourceId?: string | null;
     modeEvent?: ModeEventContext;
 }
 
@@ -40,7 +41,12 @@ export function sanitizeGenerateWhatToSayOptions(input: unknown): SanitizedGener
     if (typeof raw.source === 'string' && VALID_SOURCES.has(raw.source)) {
         sanitized.source = raw.source as SanitizedGenerateWhatToSayOptions['source'];
     }
-    if (raw.modeEvent && typeof raw.modeEvent === 'object') {
+    if (Object.hasOwn(raw, 'businessSystemSourceId')) {
+        sanitized.businessSystemSourceId = typeof raw.businessSystemSourceId === 'string'
+            ? raw.businessSystemSourceId.trim() || null
+            : null;
+    }
+    if (sanitized.businessSystemSourceId === undefined && raw.modeEvent && typeof raw.modeEvent === 'object') {
         sanitized.modeEvent = raw.modeEvent as ModeEventContext;
     }
 

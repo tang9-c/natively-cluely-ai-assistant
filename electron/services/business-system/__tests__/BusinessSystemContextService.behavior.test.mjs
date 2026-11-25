@@ -198,3 +198,49 @@ test('toBusinessSystemFixedReply: ambiguous uses provided source name', async ()
   assert.equal(reply.kind, 'fixed_reply');
   assert.match(reply.answer, /Windchill/);
 });
+
+test('explicit source wins over the default and uses the same agent as voice queries', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  const sources = [source(), source({ id: 'crm-1', kind: 'crm', isDefault: false })];
+  const calls = [];
+  const service = new BusinessSystemContextService({
+    credentialsManager: {
+      ...credentialsManagerStub(sources),
+      getBusinessSystemCredentials: (id) => ({ apiKey: id }),
+    },
+    agentLoop: {
+      run: async (input) => {
+        calls.push(input);
+        return { status: 'ok', answer: '处理中', traceId: 'trace', toolCalls: 1 };
+      },
+    },
+  });
+
+  const typed = await service.resolve({
+    sourceId: 'crm-1',
+    question: '海尔这单到哪一步了？',
+    recentContext: '这段转写不属于手动请求。',
+  });
+  const voice = await service.resolve({ question: '查一下 CRM 里的 DEAL-123' });
+
+  assert.equal(typed.kind, 'context');
+  assert.equal(voice.kind, 'context');
+  assert.deepEqual(calls.map((call) => call.source.id), ['crm-1', 'crm-1']);
+  assert.deepEqual(calls[0].credentials, calls[1].credentials);
+  assert.equal(calls[0].question, '海尔这单到哪一步了？');
+  assert.equal(calls[0].recentContext, undefined);
+});
+
+test('an unavailable selected source never falls back to the enabled default', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  const service = new BusinessSystemContextService({
+    credentialsManager: credentialsManagerStub([source(), source({ id: 'crm-1', enabled: false })]),
+    agentLoop: { run: async () => assert.fail('must not query any source') },
+  });
+
+  for (const sourceId of ['crm-1', 'deleted']) {
+    const result = await service.resolve({ sourceId, question: '查一下 PLM 里的 ECO-123' });
+    assert.equal(result.kind, 'fixed_reply');
+    assert.equal(result.status, 'not_configured');
+  }
+});

@@ -457,7 +457,7 @@ interface ElectronAPI extends OnboardingAPI {
   generateWhatToSay: (
     question?: string,
     imageTokens?: string[],
-    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: ModeEventContext },
+    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: ModeEventContext; businessSystemSourceId?: string },
   ) => Promise<{
     answerId?: string;
     answer: string | null;
@@ -1689,7 +1689,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imageTokens?: string[],
-    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: ModeEventContext },
+    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: ModeEventContext; businessSystemSourceId?: string },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imageTokens, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imageTokens?: string[], problemStatement?: string) =>
