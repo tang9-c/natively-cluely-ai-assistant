@@ -334,3 +334,27 @@ test('dynamic business action resolves every request fresh and uses latestTurn i
   assert.notEqual(calls[0].question, input.promptInstruction);
   assert.notEqual(calls[0].question, input.modeEvent.retrievalQuery);
 });
+
+test('explicit business source passes only the typed question to the shared service', async () => {
+  const { prepareWhatToSayContext } = await loadHelper();
+  let request;
+  const { input, calls } = baseInput({
+    source: 'overlay',
+    businessSystemSourceId: 'crm-1',
+    question: '海尔这单到哪一步了？',
+    modeEvent: { latestTurn: '不要把转写加入请求。', productContract: { contextNeedDecision: decision() } },
+    businessSystemServiceFactory: () => ({
+      async resolve(payload) {
+        request = payload;
+        return { kind: 'fixed_reply', status: 'not_configured', answer: '数据源不可用' };
+      },
+    }),
+  });
+
+  const result = await prepareWhatToSayContext(input);
+  assert.deepEqual(request, { sourceId: 'crm-1', question: input.question });
+  assert.equal(result.contextNeedDecision.business, 'required');
+  assert.equal(result.businessSystemResult.kind, 'fixed_reply');
+  assert.equal(calls.materialFactory, 0);
+  assert.equal(calls.screenFactory, 0);
+});

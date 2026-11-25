@@ -844,7 +844,7 @@ export interface ElectronAPI extends OnboardingAPI {
   // @ipc-channel generate-assist
   generateAssist: () => Promise<{ insight: string | null }>
   // @ipc-channel generate-what-to-say
-  generateWhatToSay: (question?: string, imageTokens?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: DynamicActionModeEvent }) => Promise<{
+  generateWhatToSay: (question?: string, imageTokens?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: DynamicActionModeEvent; businessSystemSourceId?: string }) => Promise<{
     answerId?: string;
     answer: string | null;
     question?: string;

@@ -18,6 +18,7 @@ export type BusinessSystemServiceResult =
 export interface BusinessSystemResolveInput {
     question?: string;
     recentContext?: string;
+    sourceId?: string;
 }
 
 interface BusinessSystemContextServiceDeps {
@@ -167,20 +168,28 @@ export class BusinessSystemContextService {
     }
 
     async resolve(input: BusinessSystemResolveInput): Promise<BusinessSystemServiceResult> {
-        const trigger = detectBusinessSystemTrigger(input.question, input.recentContext);
-        if (!trigger.shouldQuery) {
+        const trigger = input.sourceId === undefined
+            ? detectBusinessSystemTrigger(input.question, input.recentContext)
+            : undefined;
+        if (trigger && !trigger.shouldQuery) {
             if (trigger.failureReason === 'missing_query_anchor') {
                 return toBusinessSystemFixedReply({ status: trigger.failureReason });
             }
             return { kind: 'skipped' };
         }
 
-        const selectedSource = pickSource(this.credentialsManager.getBusinessSystemKnowledgeSources(), trigger.sourceHint);
+        const sources = this.credentialsManager.getBusinessSystemKnowledgeSources();
+        const selectedSource = trigger
+            ? pickSource(sources, trigger.sourceHint)
+            : sources.find((source) => source.enabled && source.id === input.sourceId);
         if (isAmbiguousSourceSelection(selectedSource)) {
             return toBusinessSystemFixedReply({ status: 'ambiguous' });
         }
         if (!selectedSource) {
-            return toBusinessSystemFixedReply({ status: 'not_configured' });
+            const reply = toBusinessSystemFixedReply({ status: 'not_configured' });
+            return trigger
+                ? reply
+                : { ...reply, answer: '所选业务系统知识源已停用或不存在，请重新选择。' };
         }
 
         const source = selectedSource;
@@ -194,8 +203,8 @@ export class BusinessSystemContextService {
                 source,
                 credentials,
                 credentialRevision: this.credentialsManager.getBusinessSystemCredentialRevision(source.id),
-                question: trigger.query || '',
-                recentContext: trigger.recentContext,
+                question: (trigger ? trigger.query : input.question?.trim()) || '',
+                recentContext: trigger?.recentContext,
             });
         } catch {
             return toBusinessSystemFixedReply({

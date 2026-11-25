@@ -35,6 +35,7 @@ import {
     type RealtimeContextSource,
 } from './RealtimeContextOrchestrator';
 import {
+    buildDynamicActionContextNeedDecision,
     sanitizeContextNeedDecision,
     UNKNOWN_CONTEXT_NEED_DECISION,
     type ContextNeedDecision,
@@ -78,6 +79,7 @@ export interface WhatToSayContextPreparationInput {
     question?: string;
     imagePaths?: string[];
     source?: WhatToSaySource;
+    businessSystemSourceId?: string;
     modeEvent?: WhatToSayModeEventContext;
     providerScopes?: ProviderDataScopePolicy;
     ragManager?: unknown;
@@ -579,8 +581,7 @@ async function prepareBusinessContext(input: {
     now: () => number;
 }): Promise<BusinessSystemServiceResult> {
     if (input.decision.business === 'not_needed') return { kind: 'skipped' };
-    const recentContext = buildBusinessSystemRecentContextSummary(input.request.modeEvent?.latestTurn);
-    const businessQuery = resolveBusinessQueryText(input.request);
+    const { businessSystemSourceId: sourceId } = input.request;
     if (shouldUseReadyContext(input.decision.business)) {
         addUniqueReason(input.degradedReasons, 'business_system_context_dropped');
         return { kind: 'skipped' };
@@ -592,10 +593,12 @@ async function prepareBusinessContext(input: {
         const service = input.request.businessSystemServiceFactory?.()
             || getDefaultBusinessSystemService(input.service, input.request.llmHelper);
         input.timings.serviceInitMs += measure(input.now, serviceInitStartedAt);
-        const result = await service.resolve({
-            question: businessQuery,
-            recentContext,
-        });
+        const result = await service.resolve(sourceId !== undefined
+            ? { sourceId, question: input.request.question }
+            : {
+                question: resolveBusinessQueryText(input.request),
+                recentContext: buildBusinessSystemRecentContextSummary(input.request.modeEvent?.latestTurn),
+            });
         input.timings.businessMs = measure(input.now, startedAt);
         input.retrievalTimingMs.business_system = input.timings.businessMs;
         if (result.kind === 'context') input.contextCandidates.push(result.candidate);
@@ -710,7 +713,9 @@ async function prepareWhatToSayContextWithService(
         totalPrepMs: 0,
     };
     const contextDecisionStartedAt = now();
-    const contextNeedDecision = resolveContextNeedDecision(input.modeEvent);
+    const contextNeedDecision = input.businessSystemSourceId !== undefined
+        ? buildDynamicActionContextNeedDecision({ type: 'business_system_query', label: '查询业务系统状态' })
+        : resolveContextNeedDecision(input.modeEvent);
     timings.contextNeedDecisionMs = measure(now, contextDecisionStartedAt);
     const degradedReasons: AnswerDegradedReason[] = [];
     const contextBudgetDegradedReasons: AnswerDegradedReason[] = [];
