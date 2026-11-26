@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.7.31] - 2026-11-25
+
+### Added
+
+- Retry a failed meeting summary from meeting details using the latest saved transcript. Keep the original meeting and preserve manual edits.
+- Select an enabled business-system knowledge source in the meeting composer and send typed questions through the existing MCP query path.
+
+### Fixed
+
+- Recognize Chinese business-object references and normalize spaced or full-width system acronyms in speech transcripts.
+
 ## [2.7.30] - 2026-11-24
 
 ### Fixed
