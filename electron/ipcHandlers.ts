@@ -3562,6 +3562,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     return DatabaseManager.getInstance().getMeetingDetails(id);
   });
 
+  safeHandle('retry-meeting-summary', async (_, meetingId: unknown) => {
+    if (typeof meetingId !== 'string' || !meetingId.trim()) return { ok: false, error: 'invalid_input' };
+    return appState.getIntelligenceManager().retryMeetingSummary(meetingId);
+  });
+
   safeHandle('copy-meeting-minutes', async (_event, meetingId: string, expectedRevision: number) => {
     if (typeof meetingId !== 'string' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
       return { success: false, error: 'invalid_input' };

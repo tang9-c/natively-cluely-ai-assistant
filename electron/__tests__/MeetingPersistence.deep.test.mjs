@@ -134,6 +134,156 @@ function setRetention(value) {
   return () => { sm.get = original; };
 }
 
+test('a failed summary can be retried from the saved transcript without overwriting manual edits', async t => {
+  const db = DatabaseManager.getInstance();
+  const session = buildMockSession({ metadata: { title: '原会议标题' }, usage: [{
+    type: 'assist', timestamp: 1, answer: '确认验证范围',
+    metadata: { source: 'dynamic_action', actionId: 'a1', modeTemplateType: 'fde', actionType: 'next_step',
+      outputType: 'text', generationStatus: 'completed' },
+  }] });
+  let online = false;
+  let summaryContext = '';
+  const persistence = new MeetingPersistence(session, {
+    async generateMeetingSummary(_prompt, context) {
+      if (!online) throw new Error('offline');
+      if (context.includes('Hello there')) summaryContext = context;
+      return JSON.stringify({ overview: '恢复后的摘要', keyPoints: ['恢复后的要点'], actionItems: [] });
+    },
+  });
+  const id = await persistence.stopMeeting();
+  t.after(() => db.deleteMeeting(id));
+  await waitFor(() => db.getMeetingDetails(id)?.detailedSummary?.generationStatus === 'failed');
+  const initial = db.getMeetingDetails(id);
+  assert.equal(initial.detailedSummary.generationStatus, 'failed');
+  assert.equal(initial.postCallInputs, undefined);
+  const { postCallInputs } = db.getMeetingDetails(id, { includePostCallInputs: true });
+  assert.ok(postCallInputs.mode?.id);
+  assert.equal(postCallInputs.dynamicActionArtifacts[0].structuredSummary, '确认验证范围');
+  assert.deepEqual(await persistence.retryMeetingSummary(id), { ok: false, error: 'generation_failed' });
+  assert.deepEqual(db.getMeetingDetails(id), initial);
+
+  assert.equal(db.updateMeetingSummary(id, { overview: '人工补充摘要' }), true);
+  online = true;
+  assert.deepEqual(await persistence.retryMeetingSummary(id), { ok: true });
+  const saved = db.getMeetingDetails(id);
+  assert.match(summaryContext, /Hello there/);
+  assert.equal(saved.detailedSummary.generationStatus, 'success');
+  assert.equal(saved.detailedSummary.overview, '人工补充摘要');
+  assert.deepEqual(saved.detailedSummary.keyPoints, ['恢复后的要点']);
+  assert.equal(saved.title, '原会议标题');
+  assert.deepEqual(saved.transcript, initial.transcript);
+  assert.deepEqual(await persistence.retryMeetingSummary(id), { ok: false, error: 'not_retryable' });
+});
+
+test('summary retry rejects concurrent work and discards a result for an outdated transcript', async t => {
+  const db = DatabaseManager.getInstance();
+  const id = 'retry-revision';
+  const transcript = buildMockSession().getFullTranscript();
+  db.saveMeeting({ id, title: '保留标题', summary: '', isProcessed: true, transcript,
+    detailedSummary: { generationStatus: 'failed', actionItems: [], keyPoints: [] } }, Date.now(), 5000);
+  t.after(() => db.deleteMeeting(id));
+  let finish;
+  let calls = 0;
+  const contexts = [];
+  const persistence = new MeetingPersistence(buildMockSession(), {
+    generateMeetingSummary: (_prompt, context) => {
+      contexts.push(context);
+      if (++calls === 1) return new Promise(resolve => { finish = resolve; });
+      return Promise.resolve(JSON.stringify({ overview: '最新摘要', actionItems: [], keyPoints: [] }));
+    },
+  });
+  const pending = persistence.retryMeetingSummary(id);
+  assert.deepEqual(await persistence.retryMeetingSummary(id), { ok: false, error: 'in_progress' });
+  assert.equal(calls, 1);
+  const { transcript: [segment], editState } = db.getMeetingDetails(id);
+  assert.equal(db.applyMeetingEdit({ meetingId: id, expectedRevision: editState.meetingRevision,
+    operation: { type: 'text', segmentId: segment.segmentId, text: '修改后的转录' } }).ok, true);
+  finish(JSON.stringify({ overview: '旧摘要', actionItems: [], keyPoints: [] }));
+  assert.deepEqual(await pending, { ok: false, error: 'transcript_changed' });
+  const saved = db.getMeetingDetails(id);
+  assert.equal(saved.detailedSummary.generationStatus, 'failed');
+  assert.equal(saved.transcript[0].text, '修改后的转录');
+  assert.notEqual(saved.editState.summarySourceRevision, saved.editState.transcriptRevision);
+  assert.deepEqual(await persistence.retryMeetingSummary(id), { ok: true });
+  const refreshed = db.getMeetingDetails(id);
+  assert.match(contexts[2], /修改后的转录/);
+  assert.equal(refreshed.editState.summarySourceRevision, refreshed.editState.transcriptRevision);
+});
+
+test('retry uses the saved mode template and a legacy meeting uses the generic template', async t => {
+  const db = DatabaseManager.getInstance();
+  const { TEMPLATE_NOTE_SECTIONS } = cjsRequire(mmPath);
+  const section = TEMPLATE_NOTE_SECTIONS.fde[0].title;
+  const requests = [];
+  const persistence = new MeetingPersistence(buildMockSession(), {
+    async generateMeetingSummary(_prompt, context) {
+      if (context.includes('完整会议转录')) requests.push(context);
+      return JSON.stringify({ overview: '摘要', sections: { [section]: ['验证结论'] } });
+    },
+  });
+  for (const [id, inputs] of [
+    ['retry-mode', { mode: { id: 'removed-fde-mode', name: '原 FDE 模式', templateType: 'fde' }, dynamicActionArtifacts: [] }],
+    ['retry-legacy', undefined],
+  ]) {
+    db.saveMeeting({ id, title: id, summary: '', isProcessed: true, transcript: buildMockSession().getFullTranscript(),
+      detailedSummary: { generationStatus: 'failed', actionItems: [], keyPoints: [],
+        sections: [{ title: '旧模板分区', bullets: [] }],
+        acceptedDecisionRecords: [{ actionId: 'd1', decision: '保留已确认决策', sourceActionId: 'd1' }],
+      } }, Date.now(), 5000, inputs);
+    t.after(() => db.deleteMeeting(id));
+    assert.deepEqual(await persistence.retryMeetingSummary(id), { ok: true });
+  }
+  assert.ok(requests[0].includes(section));
+  assert.ok(!requests[1].includes(section));
+  assert.deepEqual(db.getMeetingDetails('retry-mode').detailedSummary.sections[0].bullets, ['验证结论']);
+  const legacy = db.getMeetingDetails('retry-legacy');
+  assert.equal(legacy.detailedSummary.sections.length, 0);
+  assert.equal(legacy.detailedSummary.acceptedDecisionRecords[0].decision, '保留已确认决策');
+});
+
+test('retry rejects missing, unfinished and short meetings before invoking a provider', async t => {
+  const db = DatabaseManager.getInstance();
+  let calls = 0;
+  const persistence = new MeetingPersistence(buildMockSession(), { generateMeetingSummary: async () => { calls++; } });
+  assert.deepEqual(await persistence.retryMeetingSummary('missing-retry-id'), { ok: false, error: 'not_found' });
+  for (const [id, isProcessed, error] of [
+    ['retry-unfinished', false, 'not_retryable'],
+    ['retry-short', true, 'transcript_too_short'],
+  ]) {
+    db.saveMeeting({ id, title: id, summary: '', isProcessed, transcript: buildMockSession().getFullTranscript().slice(0, 2),
+      detailedSummary: { generationStatus: 'failed', actionItems: [], keyPoints: [] } }, Date.now(), 5000);
+    t.after(() => db.deleteMeeting(id));
+    assert.deepEqual(await persistence.retryMeetingSummary(id), { ok: false, error });
+  }
+  assert.equal(calls, 0);
+});
+
+test('retry respects the cloud transcript and post-call summary scope rules', async t => {
+  const db = DatabaseManager.getInstance();
+  const { LLMHelper } = cjsRequire(path.resolve(repoRoot, 'dist-electron/electron/LLMHelper.js'));
+  const id = 'retry-scope';
+  db.saveMeeting({ id, title: '受限会议', summary: '', isProcessed: true, transcript: buildMockSession().getFullTranscript(),
+    detailedSummary: { generationStatus: 'failed', actionItems: [], keyPoints: [] } }, Date.now(), 5000);
+  t.after(() => db.deleteMeeting(id));
+  const before = db.getMeetingDetails(id);
+  for (const deniedScope of ['transcript', 'post_call_summary']) {
+    let cloudChecks = 0;
+    const denied = [];
+    const helper = {
+      useOllama: false,
+      getProviderScopePolicy: () => ({ [deniedScope]: false }),
+      logScopeFallback: (scope, action) => denied.push({ scope, action }),
+      hasNatively: () => { cloudChecks++; return false; },
+      generateMeetingSummary: LLMHelper.prototype.generateMeetingSummary,
+    };
+    const persistence = new MeetingPersistence(buildMockSession(), helper);
+    assert.deepEqual(await persistence.retryMeetingSummary(id), { ok: false, error: 'generation_failed' });
+    assert.deepEqual(denied, [{ scope: deniedScope, action: 'omitting' }]);
+    assert.equal(cloudChecks, 0);
+    assert.deepEqual(db.getMeetingDetails(id), before);
+  }
+});
+
 describe('MeetingPersistence.deep — stopMeeting duration branches', () => {
   let restoreRetention;
 

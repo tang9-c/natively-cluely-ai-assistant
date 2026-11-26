@@ -242,6 +242,10 @@ export class IntelligenceManager extends EventEmitter {
         return this.persistence.recoverUnprocessedMeetings();
     }
 
+    retryMeetingSummary(meetingId: string) {
+        return this.persistence.retryMeetingSummary(meetingId);
+    }
+
     // ============================================
     // Mode Context Management
     // ============================================

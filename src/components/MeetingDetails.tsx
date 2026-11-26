@@ -15,7 +15,7 @@ import {
     buildVisibleTranscriptRows,
     type MeetingTranscriptEntry,
 } from '../../shared/transcriptVirtualization';
-import type { Meeting } from '../../shared/meetingEdits';
+import type { Meeting, MeetingSummaryRetryResult } from '../../shared/meetingEdits';
 import { formatMeetingActionItem, hasManuallyEditedActions } from '../../shared/meetingActionItems';
 import { useMeetingAutosave } from '../hooks/useMeetingAutosave';
 import type { IdentityChoice } from './meeting/SpeakerIdentityMenu';
@@ -76,11 +76,41 @@ const getVisibleFollowUpDraft = (summary?: Meeting['detailedSummary']) => {
     return LEGACY_ENGLISH_FOLLOW_UP_PATTERN.test(draft) ? '' : draft;
 };
 
+const SUMMARY_RETRY_ERRORS: Record<Extract<MeetingSummaryRetryResult, { ok: false }>['error'], string> = {
+    invalid_input: '无法识别这场会议。',
+    not_found: '找不到这场会议。',
+    not_retryable: '摘要状态已变化，请重新打开会议详情。',
+    transcript_too_short: '已保存的转录内容不足，无法生成摘要。',
+    in_progress: '这场会议的摘要正在重新生成。',
+    transcript_changed: '转录已修改，请使用最新转录重新生成。',
+    generation_failed: '摘要仍未生成，请稍后重试。',
+    save_failed: '摘要未能保存，请重试。',
+};
+
 export interface MeetingDetailsHandle { flush: () => Promise<boolean> }
 const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProps>(({ meeting: initialMeeting }, ref) => {
     const isLight = useResolvedTheme() === 'light';
     const { meeting, status: saveStatus, controller } = useMeetingAutosave(initialMeeting);
     useImperativeHandle(ref, () => ({ flush: controller.flush }), [controller]);
+    const [summaryRetryPending, setSummaryRetryPending] = useState(false);
+    const [summaryRetryError, setSummaryRetryError] = useState('');
+    const summaryRetryBusy = useRef(false);
+    const retrySummary = async () => {
+        if (summaryRetryBusy.current) return;
+        summaryRetryBusy.current = true;
+        setSummaryRetryError('');
+        try {
+            if (!await controller.flush()) return;
+            setSummaryRetryPending(true);
+            const result = await window.electronAPI.retryMeetingSummary(controller.snapshot().meeting.id);
+            if (!result.ok) setSummaryRetryError(SUMMARY_RETRY_ERRORS[result.error]);
+        } catch {
+            setSummaryRetryError('暂时无法重新生成摘要，请稍后重试。');
+        } finally {
+            summaryRetryBusy.current = false;
+            setSummaryRetryPending(false);
+        }
+    };
     const [identitySaving, setIdentitySaving] = useState(false);
     const [identityStatus, setIdentityStatus] = useState('');
     const identitySavePending = useRef(false);
@@ -514,9 +544,20 @@ const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProp
                         {activeTab === 'summary' && (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                                 {meeting.detailedSummary?.generationStatus === 'failed' && (
-                                    <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-                                        云端摘要暂时生成失败，会议转录已保存。
-                                    </p>
+                                    <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-4 py-3 text-sm text-status-warning">
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                            <p>云端摘要暂时生成失败，会议转录已保存。</p>
+                                            {meeting.isProcessed && (
+                                                <button type="button" onClick={() => void retrySummary()} disabled={summaryRetryPending}
+                                                    className="rounded-md border border-status-warning-border px-2 py-1 font-medium hover:underline disabled:opacity-60">
+                                                    {summaryRetryPending ? '正在重新生成…' : '重新生成摘要'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        <p role="status" className={summaryRetryError ? 'mt-2' : 'sr-only'}>
+                                            {summaryRetryPending ? '正在重新生成摘要' : summaryRetryError}
+                                        </p>
+                                    </div>
                                 )}
 
                                 <div className="mb-6 pb-6 border-b border-border-subtle prose prose-sm max-w-none">

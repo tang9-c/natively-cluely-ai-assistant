@@ -1,6 +1,6 @@
 import type { OnboardingAPI, MeetingStartResult } from '../shared/onboarding';
 import type { AudioTestResult, AudioTestState } from '../shared/onboarding';
-import type { MeetingEditRequest, MeetingEditResult } from '../shared/meetingEdits';
+import type { MeetingEditRequest, MeetingEditResult, MeetingSummaryRetryResult } from '../shared/meetingEdits';
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ModeEventContext } from './llm';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
@@ -519,6 +519,7 @@ interface ElectronAPI extends OnboardingAPI {
     Array<{ id: string; title: string; date: string; duration: string; summary: string }>
   >;
   getMeetingDetails: (id: string) => Promise<any>;
+  retryMeetingSummary: (id: string) => Promise<MeetingSummaryRetryResult>;
   exportMeetingDocx: (
     meetingId: string,
     includeTranscript: boolean | { profile: 'minutes' | 'archive'; expectedRevision: number },
@@ -1748,6 +1749,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
+  retryMeetingSummary: (id: string) => ipcRenderer.invoke('retry-meeting-summary', id),
   exportMeetingDocx: (meetingId: string, includeTranscript: boolean | { profile: 'minutes' | 'archive'; expectedRevision: number }) =>
     ipcRenderer.invoke('export-meeting-docx', meetingId, includeTranscript),
   copyMeetingMinutes: (meetingId: string, expectedRevision: number) => ipcRenderer.invoke('copy-meeting-minutes', meetingId, expectedRevision),

@@ -64,6 +64,49 @@ async function database(electronApp: any, sql: string) {
  },sql);
 }
 async function readMeeting(page: any) {return page.evaluate(()=>window.electronAPI.getMeetingDetails('editing-fixture'));}
+
+test('failed summary can be retried from meeting details and survives reopening', async ({ electronApp, page }) => {
+ await seed(electronApp, 3);
+ await database(electronApp, "UPDATE meetings SET summary_json=json_set(summary_json,'$.detailedSummary.generationStatus','failed') WHERE id='editing-fixture'");
+ await electronApp.evaluate(({ app }) => {
+  const require = process.getBuiltinModule('node:module').createRequire(app.getAppPath() + '/package.json');
+  const manager = require(app.getAppPath() + '/dist-electron/electron/main.js').AppState
+   .getInstance().getIntelligenceManager();
+  const fixture = { online: false, finish: undefined as undefined | (() => void) };
+  (globalThis as any).summaryRetryFixture = fixture;
+  manager.persistence.llmHelper.generateMeetingSummary = async () => {
+   if (!fixture.online) throw new Error('offline fixture');
+   if (!fixture.finish) await new Promise<void>(resolve => { fixture.finish = resolve; });
+   return JSON.stringify({ overview: '恢复后的会议摘要', actionItems: [], keyPoints: ['恢复后的要点'] });
+  };
+ });
+ await open(page);
+ const before = await readMeeting(page);
+ expect(await page.evaluate(() => window.electronAPI.retryMeetingSummary(''))).toEqual({ ok: false, error: 'invalid_input' });
+ const retry = page.getByRole('button', { name: '重新生成摘要', exact: true });
+ await expect(retry).toBeVisible();
+ await retry.click();
+ await expect(page.getByText('摘要仍未生成，请稍后重试。')).toBeVisible();
+ expect(await readMeeting(page)).toEqual(before);
+
+ await electronApp.evaluate(() => { (globalThis as any).summaryRetryFixture.online = true; });
+ await edit(page, '会议标题', '保留人工标题');
+ await retry.click();
+ await expect(page.getByRole('button', { name: '正在重新生成…', exact: true })).toBeDisabled();
+ expect((await readMeeting(page)).title).toBe('保留人工标题');
+ const concurrent = await page.evaluate(() => window.electronAPI.retryMeetingSummary('editing-fixture'));
+ expect(concurrent).toEqual({ ok: false, error: 'in_progress' });
+ await expect.poll(() => electronApp.evaluate(() => !!(globalThis as any).summaryRetryFixture.finish)).toBe(true);
+ await electronApp.evaluate(() => { (globalThis as any).summaryRetryFixture.finish(); });
+ await expect(page.getByLabel('摘要正文', { exact: true })).toHaveText('恢复后的会议摘要');
+ await expect(retry).toHaveCount(0);
+ await expect(page.getByText('云端摘要暂时生成失败，会议转录已保存。')).toHaveCount(0);
+ expect((await readMeeting(page)).transcript).toEqual(before.transcript);
+ await page.reload();
+ await page.getByText('保留人工标题', { exact: true }).click();
+ await expect(page.getByLabel('摘要正文', { exact: true })).toHaveText('恢复后的会议摘要');
+});
+
 async function fakeClipboard(page: any) {
  await page.evaluate(()=>{(window as any).__copied=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(text: string)=>{(window as any).__copied.push(text);}}});});
 }

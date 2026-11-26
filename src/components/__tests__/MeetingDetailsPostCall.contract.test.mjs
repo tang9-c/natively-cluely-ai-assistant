@@ -9,8 +9,7 @@ const transcriptRowSource = fs.readFileSync(
   path.resolve(process.cwd(), 'src/components/meeting/TranscriptRow.tsx'),
   'utf8',
 );
-const databaseSourcePath = path.resolve(process.cwd(), 'electron/db/DatabaseManager.ts');
-const databaseSource = fs.readFileSync(databaseSourcePath, 'utf8');
+const meetingTypes = fs.readFileSync(path.resolve(process.cwd(), 'shared/meetingEdits.ts'), 'utf8');
 
 test('MeetingDetails renders FDE decisions and open questions separately', () => {
   assert.match(source, /决策项/);
@@ -70,8 +69,7 @@ test('MeetingDetails shows the exact failed cloud summary notice only in the sum
 test('Meeting detailed summary types include the cloud summary generation status', () => {
   const generationStatusType = /generationStatus\?:\s*'success'\s*\|\s*'failed'/;
 
-  assert.match(source, generationStatusType);
-  assert.match(databaseSource, generationStatusType);
+  assert.match(meetingTypes, generationStatusType);
 });
 
 test('MeetingDetails delegates transcript DOM rendering without truncating full-data consumers', () => {

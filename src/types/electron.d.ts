@@ -1,6 +1,6 @@
 import type { OnboardingAPI, MeetingStartResult } from '../../shared/onboarding';
 import type { AudioTestResult, AudioTestState } from '../../shared/onboarding';
-import type { MeetingEditRequest, MeetingEditResult } from '../../shared/meetingEdits';
+import type { MeetingEditRequest, MeetingEditResult, MeetingSummaryRetryResult } from '../../shared/meetingEdits';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 import type { DynamicActionAvailabilityEvent } from '../../shared/dynamicActionAvailability'
 import type { DynamicActionUiStageReport } from '../../shared/dynamicActionUiStage'
@@ -942,6 +942,7 @@ export interface ElectronAPI extends OnboardingAPI {
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   // @ipc-channel get-meeting-details
   getMeetingDetails: (id: string) => Promise<any>
+  retryMeetingSummary: (id: string) => Promise<MeetingSummaryRetryResult>;
   // @ipc-channel copy-meeting-minutes
   copyMeetingMinutes: (meetingId: string, expectedRevision: number) => Promise<{ success: boolean; error?: string }>;
   // @ipc-channel export-meeting-docx

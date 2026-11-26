@@ -5,15 +5,17 @@ import { normalizeMeetingActionItems } from '../shared/meetingActionItems';
 
 import { SessionTracker, TranscriptSegment } from './SessionTracker';
 import { LLMHelper } from './LLMHelper';
-import { DatabaseManager, Meeting } from './db/DatabaseManager';
+import { DatabaseManager, Meeting, type PostCallInputs } from './db/DatabaseManager';
+import type { MeetingSummaryRetryResult } from '../shared/meetingEdits';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { QCLOUD_MEETING_TITLE_OUTPUT_TOKENS } from './llm/QCloudLlmConstants';
-import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
+import { buildPostCallEnhancements, type PostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { generateFullTranscriptSummary, type PostCallSummaryData } from './services/post-call/PostCallSummaryGenerator';
 import { generatePostCallLlmEnhancements } from './services/post-call/PostCallLlmEnhancements';
 import { buildDynamicActionArtifacts } from './services/dynamic-actions/DynamicActionArtifacts';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
+import { redactForLog } from './utils/redactForLog';
 import { resolveEffectiveSpeaker, speakerIdentityPromptLabel } from '../shared/speakerIdentity';
 const crypto = require('crypto');
 
@@ -64,6 +66,7 @@ function sanitizeGeneratedMeetingTitle(rawTitle: string | null | undefined, cont
 export class MeetingPersistence {
     private session: SessionTracker;
     private llmHelper: LLMHelper;
+    private readonly summaryRetries = new Set<string>();
 
     constructor(session: SessionTracker, llmHelper: LLMHelper) {
         this.session = session;
@@ -119,11 +122,9 @@ export class MeetingPersistence {
 
         const snapshot = {
             transcript: [...this.session.getFullTranscript()],
-            effectiveTranscript: [...this.session.getEffectiveFullTranscript()],
             usage: [...this.session.getFullUsage()],
             startTime: this.session.getSessionStartTime(),
             durationMs: durationMs,
-            context: this.session.getFullSessionContext()
         };
 
         // BUG-04 fix: snapshot metadata BEFORE reset() clears it so the
@@ -133,7 +134,7 @@ export class MeetingPersistence {
         // BUG-MODE-BLEEDING fix: snapshot the active mode BEFORE reset() so the
         // background processAndSaveMeeting worker uses the correct mode's note
         // sections even if the user switches modes before async processing completes.
-        let modeSnapshot: { id: string; name: string; templateType: string } | null = null;
+        let modeSnapshot: PostCallInputs['mode'] = null;
         try {
             const { ModesManager } = require('./services/ModesManager');
             const activeMode = ModesManager.getInstance().getActiveMode();
@@ -168,7 +169,13 @@ export class MeetingPersistence {
 
         // The placeholder is the durable recovery copy. Never clear the only
         // in-memory transcript or start remote processing before this commits.
-        DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, durationMs);
+        DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, durationMs, {
+            mode: modeSnapshot,
+            dynamicActionArtifacts: buildDynamicActionArtifacts({
+                actions: buildDynamicActionArtifactActionsFromUsage(snapshot.usage),
+                usage: snapshot.usage,
+            }),
+        });
         this.session.reset();
 
         try {
@@ -188,37 +195,50 @@ export class MeetingPersistence {
     /**
      * Heavy lifting: LLM Title, Summary, and DB Write
      */
+    public async retryMeetingSummary(meetingId: string): Promise<MeetingSummaryRetryResult> {
+        if (this.summaryRetries.has(meetingId)) return { ok: false, error: 'in_progress' };
+        this.summaryRetries.add(meetingId);
+        try {
+            return await this.processAndSaveMeeting(null, meetingId);
+        } catch (error) {
+            console.error('[MeetingPersistence] Failed to retry summary:', redactForLog([error]));
+            return { ok: false, error: 'save_failed' };
+        } finally {
+            this.summaryRetries.delete(meetingId);
+        }
+    }
+
     private async processAndSaveMeeting(
-        data: {
-            transcript: TranscriptSegment[],
-            effectiveTranscript?: TranscriptSegment[],
-            usage: any[],
-            startTime: number,
-            durationMs: number,
-            context: string,
-        },
+        data: { usage: any[]; durationMs: number } | null,
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
         metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null,
         // BUG-MODE-BLEEDING fix: accept mode snapshot so async summary uses the mode that was
         // active when meeting stopped, not whatever mode is active when async processing runs.
-        modeSnapshot?: { id: string; name: string; templateType: string } | null
-    ): Promise<void> {
-        const saved = DatabaseManager.getInstance().getMeetingDetails(meetingId);
-        if (!saved) return;
+        modeSnapshot?: PostCallInputs['mode']
+    ): Promise<MeetingSummaryRetryResult> {
+        const retry = data === null;
+        const db = DatabaseManager.getInstance();
+        const saved = db.getMeetingDetails(meetingId, { includePostCallInputs: true });
+        if (!saved) return { ok: false, error: 'not_found' };
+        if (retry && (!saved.isProcessed || saved.detailedSummary?.generationStatus !== 'failed')) {
+            return { ok: false, error: 'not_retryable' };
+        }
+        if (saved.postCallInputs) modeSnapshot = saved.postCallInputs.mode;
         const sourceRevision = saved.editState?.transcriptRevision ?? 0;
         const latestTranscript = (saved.transcript ?? []) as TranscriptSegment[];
-        const latestEffective = latestTranscript.map(segment => ({ ...segment, speaker: resolveEffectiveSpeaker(segment) }));
-        data = { ...data, transcript: latestTranscript, effectiveTranscript: latestEffective,
-            context: latestEffective.map(segment => {
-                const label = speakerIdentityPromptLabel(segment);
-                return `[${label}]: ${segment.text}`;
-            }).join('\n') };
-        let title = "Untitled Session";
+        const analysisTranscript = latestTranscript.map(segment => ({ ...segment, speaker: resolveEffectiveSpeaker(segment) }));
+        const hasSummarizableTranscript = analysisTranscript.length > 2;
+        if (retry && (!hasSummarizableTranscript || !analysisTranscript.some(segment => segment.text.trim()))) {
+            return { ok: false, error: 'transcript_too_short' };
+        }
+        const context = analysisTranscript.map(segment => `[${speakerIdentityPromptLabel(segment)}]: ${segment.text}`).join('\n');
+        const [savedMinutes, savedSeconds] = saved.duration.split(':').map(Number);
+        const durationMs = data?.durationMs ?? ((savedMinutes || 0) * 60 + (savedSeconds || 0)) * 1000;
+        const usage = data?.usage ?? saved.usage ?? [];
+        let title = retry ? saved.title : "Untitled Session";
         let titleGeneration: Promise<string> | null = null;
         let summaryData: PostCallSummaryData = { actionItems: [], keyPoints: [], decisions: [], openQuestions: [] };
-        const analysisTranscript = data.effectiveTranscript ?? data.transcript;
-        const hasSummarizableTranscript = analysisTranscript.length > 2;
         // Phase 6 — post_call_summary lifecycle telemetry. Wrapped in try/catch
         // around track calls so a telemetry sink fault never breaks persistence.
         const _postCallStart = Date.now();
@@ -229,7 +249,7 @@ export class MeetingPersistence {
                 properties: {
                     modeTemplateType: modeSnapshot?.templateType,
                     transcriptSegmentCount: analysisTranscript.length,
-                    durationMs: data.durationMs,
+                    durationMs,
                 },
             });
         } catch { /* non-fatal */ }
@@ -246,17 +266,17 @@ export class MeetingPersistence {
 
         try {
             // Generate Title (only if not set by calendar)
-            if (hasSummarizableTranscript && (!metadata || !metadata.title)) {
+            if (!retry && hasSummarizableTranscript && !metadata?.title) {
                 const titlePrompt = `为这次会议生成一个简洁的中文标题，长度为 3 到 8 个中文词。只输出标题文本，不要解释，不要引号，不要 markdown，不要包含任何中英文标点符号。`;
                 const groqTitlePrompt = GROQ_TITLE_PROMPT;
 
                 titleGeneration = this.llmHelper.generateMeetingSummary(
                         titlePrompt,
-                        data.context.substring(0, 5000),
+                        context.substring(0, 5000),
                         groqTitlePrompt,
                         { maxOutputTokens: QCLOUD_MEETING_TITLE_OUTPUT_TOKENS },
                     )
-                    .then((generatedTitle) => sanitizeGeneratedMeetingTitle(generatedTitle, data.context))
+                    .then((generatedTitle) => sanitizeGeneratedMeetingTitle(generatedTitle, context))
                     .catch((error) => {
                         console.warn('[MeetingPersistence] Title generation failed; continuing with fallback title', {
                             errorName: error instanceof Error ? error.name : 'UnknownError',
@@ -274,8 +294,8 @@ export class MeetingPersistence {
                 const { ModesManager, TEMPLATE_NOTE_SECTIONS } = require('./services/ModesManager');
                 const modesMgr = ModesManager.getInstance();
 
-                // Use snapshot mode if available, otherwise fall back to current active mode (for recovery scenarios)
-                const targetModeId = modeSnapshot?.id ?? modesMgr.getActiveMode()?.id;
+                const targetModeId = modeSnapshot?.id
+                    ?? (retry || saved.postCallInputs ? undefined : modesMgr.getActiveMode()?.id);
                 if (!targetModeId) {
                     console.log('[MeetingPersistence] No mode active — using generic summary.');
                 } else {
@@ -307,7 +327,7 @@ export class MeetingPersistence {
                         const referenceSnippetsAllowed = scopePolicy?.reference_files !== false;
 
                         if (summaryAllowed) {
-                            const transcriptHint = data.context.substring(0, 4000);
+                            const transcriptHint = context.substring(0, 4000);
                             modeContextBlock = modesMgr.buildSummarySafeModeContextBlock(modeSnapshot.id, {
                                 query: 'meeting summary',
                                 transcript: transcriptHint,
@@ -365,7 +385,7 @@ export class MeetingPersistence {
                 summaryData = await generateFullTranscriptSummary({
                     llmHelper: this.llmHelper,
                     transcript: analysisTranscript,
-                    context: data.context,
+                    context,
                     modeTemplateType: modeSnapshot?.templateType,
                     modeNoteSections,
                     modeContextBlock,
@@ -376,9 +396,10 @@ export class MeetingPersistence {
                 console.log("Transcript too short for summary generation.");
             }
 
-            const dynamicActionArtifacts = buildDynamicActionArtifacts({
-                actions: buildDynamicActionArtifactActionsFromUsage(data.usage),
-                usage: data.usage,
+            if (retry && summaryData.generationStatus !== 'success') return { ok: false, error: 'generation_failed' };
+            const dynamicActionArtifacts = saved.postCallInputs?.dynamicActionArtifacts ?? buildDynamicActionArtifacts({
+                actions: buildDynamicActionArtifactActionsFromUsage(usage),
+                usage,
             });
 
             const deterministicPostCall = buildPostCallEnhancements({
@@ -387,6 +408,17 @@ export class MeetingPersistence {
                 summaryData,
                 dynamicActionArtifacts,
             });
+            if (retry && !saved.postCallInputs) {
+                const previous = saved.detailedSummary as Partial<PostCallEnhancements> | undefined;
+                for (const field of [
+                    'acceptedActionItems', 'acceptedDecisionRecords', 'acceptedBlockerRecords',
+                    'acceptedCapabilityFitRecords', 'acceptedFdeRecords', 'acceptedRecruitingRecords',
+                ] as const) {
+                    if (Array.isArray(previous?.[field])) {
+                        Object.assign(deterministicPostCall, { [field]: previous[field] });
+                    }
+                }
+            }
             const llmEnhancements = hasSummarizableTranscript
                 ? await generatePostCallLlmEnhancements({
                     llmHelper: this.llmHelper,
@@ -404,13 +436,14 @@ export class MeetingPersistence {
             };
             if (titleGeneration) title = await titleGeneration;
         } catch (e) {
-            console.error("Error generating meeting metadata", e);
+            console.error('[MeetingPersistence] Error generating meeting metadata:', redactForLog([e]));
+            if (retry) return { ok: false, error: 'generation_failed' };
             if (titleGeneration) title = await titleGeneration;
         }
 
         try {
-            const minutes = Math.floor(data.durationMs / 60000);
-            const seconds = ((data.durationMs % 60000) / 1000).toFixed(0);
+            const minutes = Math.floor(durationMs / 60000);
+            const seconds = ((durationMs % 60000) / 1000).toFixed(0);
             const durationStr = `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
 
             const meetingData: Meeting = {
@@ -418,22 +451,36 @@ export class MeetingPersistence {
                 title: title,
                 date: new Date().toISOString(),
                 duration: durationStr,
-                summary: "See detailed summary",
-                detailedSummary: normalizeMeetingActionItems(summaryData),
-                transcript: data.transcript,
-                usage: data.usage,
+                summary: retry ? saved.summary : "See detailed summary",
+                detailedSummary: normalizeMeetingActionItems(retry ? { ...summaryData, sections: summaryData.sections ?? [] } : summaryData),
+                transcript: latestTranscript,
+                usage,
                 calendarEventId: calendarEventId,
                 source: source,
                 isProcessed: true
             };
 
-            if (!DatabaseManager.getInstance().mergeGeneratedMeetingResult(meetingData, sourceRevision)) return;
+            if (!db.mergeGeneratedMeetingResult(meetingData, sourceRevision, retry)) {
+                if (retry) {
+                    const latest = db.getMeetingDetails(meetingId);
+                    if (!latest) return { ok: false, error: 'not_found' };
+                    if ((latest.editState?.transcriptRevision ?? 0) !== sourceRevision) {
+                        return { ok: false, error: 'transcript_changed' };
+                    }
+                    if (latest.detailedSummary?.generationStatus !== 'failed') return { ok: false, error: 'not_retryable' };
+                }
+                return { ok: false, error: 'save_failed' };
+            }
 
             // Metadata was already snapshotted before session.reset() — nothing to clear here.
 
             // Notify Frontend to refresh list
-            const wins = require('electron').BrowserWindow.getAllWindows();
-            wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            try {
+                const wins = require('electron').BrowserWindow.getAllWindows();
+                wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            } catch {
+                console.error('[MeetingPersistence] Failed to notify windows after updating summary');
+            }
 
             // Phase 6 — post_call_summary lifecycle (no transcript / no summary text).
             try {
@@ -456,9 +503,10 @@ export class MeetingPersistence {
                         },
                 });
             } catch { /* non-fatal */ }
+            return { ok: true };
 
         } catch (error) {
-            console.error('[MeetingPersistence] Failed to save meeting:', error);
+            console.error('[MeetingPersistence] Failed to save meeting:', redactForLog([error]));
             try {
                 telemetryService.track({
                     name: 'post_call_summary_failed',
@@ -470,6 +518,7 @@ export class MeetingPersistence {
                     },
                 });
             } catch { /* non-fatal */ }
+            return { ok: false, error: 'save_failed' };
         }
     }
 
@@ -495,32 +544,12 @@ export class MeetingPersistence {
 
                 console.log(`[MeetingPersistence] Recovering meeting ${m.id}...`);
 
-                const effectiveTranscript = details.transcript?.map(t => ({
-                    ...t,
-                    speaker: resolveEffectiveSpeaker(t),
-                })) as TranscriptSegment[] | undefined;
-                const context = effectiveTranscript?.map(t => {
-                    const label = speakerIdentityPromptLabel(t);
-                    return `[${label}]: ${t.text}`;
-                }).join('\n') || "";
-
                 const parts = (details.duration || '0:00').split(':');
                 // EC-07 fix: guard against malformed duration strings (e.g. corrupted DB row)
                 const mins = parseInt(parts[0]) || 0;
                 const secs = parseInt(parts[1]) || 0;
                 const durationMs = ((mins * 60) + secs) * 1000;
-                const startTime = new Date(details.date).getTime();
-
-                const snapshot = {
-                    transcript: details.transcript as TranscriptSegment[],
-                    effectiveTranscript,
-                    usage: details.usage,
-                    startTime: startTime,
-                    durationMs: durationMs,
-                    context: context
-                };
-
-                await this.processAndSaveMeeting(snapshot, m.id);
+                await this.processAndSaveMeeting({ usage: details.usage ?? [], durationMs }, m.id);
                 console.log(`[MeetingPersistence] Recovered meeting ${m.id}`);
 
             } catch (e) {

@@ -71,6 +71,11 @@ export interface MeetingEditRequest {
 }
 export type MeetingEditResult = { ok: true; revision: number; meeting: Meeting }
   | { ok: false; error: 'not_found' | 'conflict' | 'invalid_input' | 'save_failed' };
+export type MeetingSummaryRetryResult = { ok: true } | {
+  ok: false;
+  error: 'invalid_input' | 'not_found' | 'not_retryable' | 'transcript_too_short'
+    | 'in_progress' | 'transcript_changed' | 'generation_failed' | 'save_failed';
+};
 export function readMeetingEditState(value?: string | null): MeetingEditState {
   const state = value ? JSON.parse(value) : {};
   return {

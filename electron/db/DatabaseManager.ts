@@ -1,6 +1,7 @@
 import { normalizeMeetingActionItems, replaceLegacyActionItems } from '../../shared/meetingActionItems';
 import { readMeetingEditState, type Meeting, type MeetingEditRequest, type MeetingEditResult } from '../../shared/meetingEdits';
 import { redactForLog } from '../utils/redactForLog';
+import type { ActionArtifact } from '../services/dynamic-actions/DynamicActionArtifacts';
 
 import Database from 'better-sqlite3';
 import path from 'path';
@@ -42,6 +43,10 @@ export interface CompanyResearchCacheRow {
 }
 
 export type { Meeting } from '../../shared/meetingEdits';
+export interface PostCallInputs {
+    mode: { id: string; name: string; templateType: string } | null;
+    dynamicActionArtifacts: ActionArtifact[];
+}
 
 export type AnswerQualityEventType = 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated';
 
@@ -3388,7 +3393,7 @@ export class DatabaseManager {
         return this.resolvedExtPath;
     }
 
-    public saveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number) {
+    public saveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number, postCallInputs?: PostCallInputs) {
         if (!this.db) {
             throw new Error('[DatabaseManager] DB not initialized');
         }
@@ -3414,7 +3419,8 @@ export class DatabaseManager {
 
         const summaryJson = JSON.stringify({
             legacySummary: meeting.summary,
-            detailedSummary: meeting.detailedSummary
+            detailedSummary: meeting.detailedSummary,
+            postCallInputs,
         });
 
         const runTransaction = this.db.transaction(() => {
@@ -3591,13 +3597,15 @@ export class DatabaseManager {
             operation: { type: 'summary', patch: updates } }, true).ok;
     }
 
-    public mergeGeneratedMeetingResult(meeting: Meeting, sourceRevision: number): boolean {
+    public mergeGeneratedMeetingResult(meeting: Meeting, sourceRevision: number, retry = false): boolean {
         if (!this.db) return false;
         return this.db.transaction(() => {
             const row = this.db!.prepare('SELECT * FROM meetings WHERE id = ?').get(meeting.id) as any;
             if (!row) return false;
             const state = readMeetingEditState(row.edit_state_json);
             const summary = JSON.parse(row.summary_json || '{}');
+            if (retry && (!row.is_processed || summary.detailedSummary?.generationStatus !== 'failed'
+                || state.transcriptRevision !== sourceRevision || meeting.detailedSummary?.generationStatus !== 'success')) return false;
             const detailed = normalizeMeetingActionItems(summary.detailedSummary || {});
             for (const [key, value] of Object.entries(normalizeMeetingActionItems(meeting.detailedSummary || {}))) {
                 if (state.editedSummaryFields.includes(key)) continue;
@@ -3608,7 +3616,7 @@ export class DatabaseManager {
             state.summarySourceRevision = sourceRevision;
             state.meetingRevision++;
             const updated = this.db!.prepare('UPDATE meetings SET title = ?, summary_json = ?, edit_state_json = ?, is_processed = 1 WHERE id = ?')
-                .run(state.editedSummaryFields.includes('title') ? row.title : meeting.title,
+                .run(retry || state.editedSummaryFields.includes('title') ? row.title : meeting.title,
                     JSON.stringify({ ...summary, legacySummary: meeting.summary, detailedSummary: normalizeMeetingActionItems(detailed) }), JSON.stringify(state), meeting.id);
             return updated.changes === 1;
         })();
@@ -3832,7 +3840,7 @@ export class DatabaseManager {
         });
     }
 
-    public getMeetingDetails(id: string, options?: { summaryFormat: 'stored' }): Meeting | null {
+    public getMeetingDetails(id: string, options?: { summaryFormat?: 'stored'; includePostCallInputs?: boolean }): (Meeting & { postCallInputs?: PostCallInputs }) | null {
         if (!this.db) return null;
 
         const meetingStmt = this.db.prepare('SELECT * FROM meetings WHERE id = ?');
@@ -3901,6 +3909,7 @@ export class DatabaseManager {
         });
 
         return {
+            ...(options?.includePostCallInputs ? { postCallInputs: summaryData.postCallInputs } : {}),
             editState: readMeetingEditState(meetingRow.edit_state_json),
             isProcessed: Boolean(meetingRow.is_processed),
             id: meetingRow.id,
